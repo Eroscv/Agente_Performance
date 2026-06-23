@@ -22,7 +22,6 @@ from agent import queries
 from agent.nlp import interpretar, fuzzy_match_campaign
 from agent.context_store import get_history, build_context_summary
 from agent.cache import get as cache_get, set as cache_set
-from agent.conversation_log import registrar as log_registrar
 from agent.comparatives import (
     comparar_periodos,
     comparar_campanhas_detalhado,
@@ -273,9 +272,6 @@ def consultar(
     # 1. Verifica cache
     cached = cache_get(pergunta)
     if cached:
-        log_registrar(pergunta, cached.get("_resposta_cache", ""), cached.get("meta", {}),
-                      user_id=user_id, channel=channel, thread_ts=thread_ts,
-                      latencia_ms=0, cache_hit=True)
         return cached
 
     campanhas_disponiveis = _get_available_campaigns()
@@ -313,9 +309,6 @@ def consultar(
                             "data_fim": data_fim, "limit": limit},
             "erro":        erro_campanha,
         }
-        log_registrar(pergunta, erro_campanha, resultado["meta"],
-                      user_id=user_id, channel=channel, thread_ts=thread_ts,
-                      latencia_ms=int((time.time()-t_inicio)*1000), erro=erro_campanha)
         return resultado
 
     campanha_valida, erro_campanha = _validar_campanha(campanha, campanhas_disponiveis)
@@ -330,9 +323,6 @@ def consultar(
                              "data_fim": data_fim, "limit": limit},
             "erro":         erro_campanha,
         }
-        log_registrar(pergunta, erro_campanha, resultado["meta"],
-                      user_id=user_id, channel=channel, thread_ts=thread_ts,
-                      latencia_ms=int((time.time()-t_inicio)*1000), erro=erro_campanha)
         return resultado
 
     campanha = campanha_valida
@@ -377,11 +367,7 @@ def consultar(
     if not dados_principais_vazios:
         cache_set(pergunta, resultado)
 
-    latencia = int((time.time() - t_inicio) * 1000)
-    log_registrar(pergunta, "", meta,
-                  user_id=user_id, channel=channel, thread_ts=thread_ts,
-                  latencia_ms=latencia)
-
+    # Log centralizado no handler Slack (tem resposta completa + latência ponta-a-ponta)
     return resultado
 
 

@@ -16,6 +16,7 @@ Fluxo:
 import logging
 import os
 import re
+import time
 
 from slack_bolt.async_app import AsyncApp
 from dotenv import load_dotenv
@@ -23,6 +24,8 @@ from dotenv import load_dotenv
 from agent.engine import consultar
 from agent.claude_client import gerar_resposta
 from agent.context_store import append_history, build_context_summary
+from agent.conversation_log import registrar as log_registrar
+from agent.cache import get as cache_get
 from slack.formatter import markdown_to_blocks, truncar_blocos
 
 AJUDA_TEXTO = """*⚙️ Agente de Performance Guará — Como consultar*
@@ -95,8 +98,16 @@ async def _processar_e_responder(
     user_id:   str = None,
     formato_export: str = None,  # "excel" | "pdf" | None
 ):
-    """Núcleo: NLP → query banco → Claude → posta no Slack → salva histórico."""
+    """Núcleo: NLP → query banco → Claude → posta no Slack → salva histórico + log."""
+    t_inicio = time.time()
+    resposta_final = ""
+    erro_final = None
+    cache_hit = False
+
     try:
+        # Verifica cache antes de tudo (para marcar cache_hit no log)
+        cache_hit = cache_get(text) is not None
+
         append_history(thread_ts, channel, "user", text)
         contexto = build_context_summary(thread_ts)
 
@@ -110,6 +121,8 @@ async def _processar_e_responder(
 
         # Campanha não encontrada — responde diretamente sem chamar Claude
         if erro:
+            resposta_final = erro
+            erro_final = erro
             await client.chat_postMessage(
                 channel=channel, thread_ts=thread_ts,
                 text=erro, mrkdwn=True,
@@ -118,6 +131,7 @@ async def _processar_e_responder(
 
         # Dados vazios com sugestão de período
         if aviso_vazio:
+            resposta_final = aviso_vazio
             await client.chat_postMessage(
                 channel=channel, thread_ts=thread_ts,
                 text=aviso_vazio, mrkdwn=True,
@@ -135,6 +149,7 @@ async def _processar_e_responder(
                 filename=filename,
                 title=f"Relatório — {intent}",
             )
+            resposta_final = f"Arquivo {filename} gerado"
             await client.chat_postMessage(
                 channel=channel, thread_ts=thread_ts,
                 text=f"✅ Arquivo *{filename}* gerado com sucesso!",
@@ -143,25 +158,50 @@ async def _processar_e_responder(
             return
 
         # Gera resposta conversacional com Claude
-        resposta = gerar_resposta(
+        resposta_final = gerar_resposta(
             pergunta=text, dados=dados, intent=intent, meta=meta,
             dados_extra=dados_extra, contexto=contexto,
         )
 
-        append_history(thread_ts, channel, "agent", resposta[:500], meta)
+        append_history(thread_ts, channel, "agent", resposta_final[:500], meta)
 
-        blocks = truncar_blocos(markdown_to_blocks(resposta))
+        blocks = truncar_blocos(markdown_to_blocks(resposta_final))
         await client.chat_postMessage(
             channel=channel, thread_ts=thread_ts,
-            text=resposta[:150], blocks=blocks,
+            text=resposta_final[:150], blocks=blocks,
         )
 
     except Exception as e:
+        erro_final = str(e)
         logger.exception("Erro ao processar mensagem: %s", e)
         await client.chat_postMessage(
             channel=channel, thread_ts=thread_ts,
             text=f"⚠️ Ocorreu um erro: `{e}`\nTente novamente.",
             mrkdwn=True,
+        )
+
+    finally:
+        # Registra SEMPRE no log — mesmo em caso de erro ou cache hit
+        latencia_ms = int((time.time() - t_inicio) * 1000)
+        try:
+            meta_log = resultado["meta"]  # type: ignore[name-defined]
+        except (NameError, KeyError):
+            meta_log = {}
+        log_registrar(
+            pergunta=text,
+            resposta=resposta_final,
+            meta=meta_log,
+            user_id=user_id,
+            channel=channel,
+            thread_ts=thread_ts,
+            latencia_ms=latencia_ms,
+            cache_hit=cache_hit,
+            erro=erro_final,
+        )
+        logger.info(
+            "[LOG] user=%s intent=%s latencia=%dms cache=%s erro=%s",
+            user_id, meta_log.get("intent", "?"), latencia_ms,
+            cache_hit, erro_final is not None,
         )
 
 
