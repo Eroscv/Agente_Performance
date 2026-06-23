@@ -24,6 +24,48 @@ from agent.engine import consultar
 from agent.claude_client import gerar_resposta
 from agent.context_store import append_history, build_context_summary
 
+AJUDA_TEXTO = """*⚙️ Agente de Performance Guará — Como consultar*
+
+Me pergunte em linguagem natural, diretamente no chat ou me mencionando com @. Você pode incluir o nome da campanha, uma métrica e/ou um período.
+
+*📅 Períodos que entendo*
+> `essa semana` · `semana passada` · `esse mês` · `mês passado`
+> `últimos 7 dias` · `últimos 30 dias` · `últimos 90 dias`
+> `em maio` · `em novembro` · `em 2025` · `black friday`
+> `ontem` · `hoje` · `segundo trimestre` · `janeiro a março`
+> Datas diretas: `01/05/2026` ou `2026-05-01`
+
+*💬 Exemplos de perguntas*
+
+*1. Ranking de eficiência*
+> _qual campanha teve melhor ROAS nos últimos 30 dias?_
+> _top 5 campanhas mais eficientes esse mês_
+
+*2. Performance de uma campanha*
+> _como foi a ABO em maio?_
+> _tá valendo a pena a campanha do hidratante?_
+> _mostre o desempenho da Advantage de junho_
+
+*3. Vendas e receita*
+> _qual campanha gerou mais vendas na black friday?_
+> _quanto faturamos com a ABO nos últimos 7 dias?_
+> _top 3 campanhas por compras esse mês_
+
+*4. Funil de conversão*
+> _mostre o funil da campanha do hidratante_
+> _qual a taxa de conversão geral em maio?_
+> _quantos carrinhos abandonados na ABO essa semana?_
+
+*5. Comparação e histórico*
+> _compare o ROAS de novembro vs maio_
+> _como evoluiu o gasto da ABO dia a dia em junho?_
+> _resuma tudo que aconteceu no segundo trimestre_
+
+*💡 Dica:* você pode combinar campanha + métrica + período na mesma frase:
+> _qual o gasto e retorno da ABO essa semana?_
+
+Qualquer dúvida é só perguntar! 🚀"""
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -96,6 +138,14 @@ async def _processar_e_responder(
         )
 
 
+# ── Comando /ajuda ───────────────────────────────────────────────────────────
+
+@app.command("/ajuda")
+async def handle_ajuda_command(ack, respond):
+    await ack()
+    await respond(text=AJUDA_TEXTO, response_type="ephemeral")
+
+
 # ── Evento: menção ao bot (@agente) ──────────────────────────────────────────
 
 @app.event("app_mention")
@@ -110,7 +160,17 @@ async def handle_mention(event, say, client, ack):
         await client.chat_postMessage(
             channel=channel,
             thread_ts=thread_ts,
-            text="Olá! 👋 Me pergunte algo sobre as campanhas.\nEx: _qual campanha tem melhor ROAS essa semana?_",
+            text="Olá! 👋 Me pergunte algo sobre as campanhas.\nEx: _qual campanha tem melhor ROAS essa semana?_\n\nDigite `/ajuda` para ver exemplos de consultas.",
+        )
+        return
+
+    # Detecta pedido de ajuda na menção
+    if re.search(r"\bajuda\b|\bhelp\b|como\s+us[ao]r|como\s+consult|o\s+que\s+(voc[eê]|tu)\s+faz", text, re.I):
+        await client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=AJUDA_TEXTO,
+            mrkdwn=True,
         )
         return
 
@@ -143,6 +203,16 @@ async def handle_dm(event, client, ack):
     thread_ts = event.get("thread_ts") or event["ts"]
 
     if not text:
+        return
+
+    # Detecta pedido de ajuda na DM
+    if re.search(r"\bajuda\b|\bhelp\b|como\s+us[ao]r|como\s+consult|o\s+que\s+(voc[eê]|tu)\s+faz", text, re.I):
+        await client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=AJUDA_TEXTO,
+            mrkdwn=True,
+        )
         return
 
     try:
