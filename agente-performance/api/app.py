@@ -186,6 +186,110 @@ def reload_db():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── Notion ──────────────────────────────────────────────────────────────────────
+
+@app.get("/notion/status")
+def notion_status():
+    """Verifica conexão com o Notion e retorna info do workspace."""
+    try:
+        from notion.client import testar_conexao, listar_databases_disponiveis
+        bot = testar_conexao()
+        databases = listar_databases_disponiveis()
+        return {
+            "status":         "ok",
+            "bot_name":       bot["name"],
+            "workspace":      bot["bot"]["workspace_name"],
+            "databases":      databases,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/notion/databases")
+def notion_databases():
+    """Lista todos os databases configurados."""
+    from notion.client import listar_databases_disponiveis
+    return listar_databases_disponiveis()
+
+
+@app.get("/notion/relatorios/{cliente}")
+def notion_relatorios(
+    cliente:     str,
+    limit:       int          = Query(20, description="Número de registros"),
+    data_inicio: Optional[str] = Query(None, description="Data inicial ISO (2026-06-01)"),
+    data_fim:    Optional[str] = Query(None, description="Data final ISO (2026-06-30)"),
+):
+    """
+    Retorna relatórios de um cliente do Notion.
+    
+    Clientes disponíveis: consorcio_sorteado, source_of, maximo_servico, be_mushin, bazar_precatorio
+    """
+    try:
+        from notion.client import get_relatorios_cliente
+        return get_relatorios_cliente(cliente, limit=limit, data_inicio=data_inicio, data_fim=data_fim)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Erro ao buscar relatórios Notion")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/notion/publicar")
+def notion_publicar(body: dict):
+    """
+    Publica um relatório no Notion.
+    
+    Body: {
+        "cliente_key": "consorcio_sorteado",
+        "titulo": "Consórcio Sorteado · meta · Ontem · 23/06/2026",
+        "plataforma": "meta",
+        "data": "2026-06-23",
+        "investimento": 1234.56,
+        "roas": 3.5,
+        "conversoes": 42,
+        "cliente_nome": "Consórcio Sorteado"
+    }
+    """
+    try:
+        from notion.client import publicar_relatorio
+        page = publicar_relatorio(
+            cliente_key  = body["cliente_key"],
+            titulo       = body["titulo"],
+            plataforma   = body["plataforma"],
+            data         = body["data"],
+            investimento = float(body["investimento"]),
+            roas         = float(body["roas"]) if body.get("roas") is not None else None,
+            conversoes   = int(body.get("conversoes", 0)),
+            cliente_nome = body.get("cliente_nome"),
+        )
+        return {"status": "ok", "page_id": page["id"], "url": page.get("url")}
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f"Campo obrigatório ausente: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Erro ao publicar relatório no Notion")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/notion/buscar")
+def notion_buscar(body: dict = None):
+    """Busca páginas e databases no workspace Notion."""
+    try:
+        from notion.client import buscar
+        query = (body or {}).get("query", "")
+        tipo  = (body or {}).get("tipo")
+        limit = (body or {}).get("limit", 20)
+        results = buscar(query=query, tipo=tipo, limit=limit)
+        from notion.client import pagina_para_dict
+        return [
+            {"id": r["id"], "object": r["object"], **pagina_para_dict(r)}
+            for r in results
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── Entry ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
