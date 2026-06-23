@@ -1,0 +1,30 @@
+# Secrets & credentials
+.ssh/
+.env
+*.pem
+cacert.pem
+
+# OpenClaw internal state
+.clawhub/
+.openclaw/
+memory/.dreams/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
+# Bancos e dados grandes
+*.db
+*.db-shm
+*.db-wal
+agente-performance/data/campanhas.csv
+agente-performance/data/campanhas.db*
+
+# Docs gerados
+relatorio_*.docx
+relatorio_*.pdf
+
+# macOS
+.DS_Store
