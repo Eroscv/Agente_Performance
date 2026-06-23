@@ -28,9 +28,24 @@ from agent.conversation_log import registrar as log_registrar
 from agent.cache import get as cache_get
 from slack.formatter import markdown_to_blocks, truncar_blocos
 
-AJUDA_TEXTO = """*⚙️ Agente de Performance Guará — Como consultar*
+AJUDA_TEXTO = """*⚙️ Agente de Performance Guará — Guia Rápido*
 
-Me pergunte em linguagem natural, diretamente no chat ou me mencionando com @. Você pode incluir o nome da campanha, uma métrica e/ou um período.
+*⚡ Atalhos (slash commands)*
+
+> `/hoje` — resumo do dia atual
+> `/semana` — resumo dos últimos 7 dias
+> `/mes` — mês atual · `/mes junho` — mês específico
+> `/top` — top 5 campanhas por ROAS · `/top compras` · `/top 10`
+> `/campanha ABO` — performance da campanha · `/campanha` (lista todas)
+> `/campanhas` — lista completa de campanhas no banco
+> `/alertas` — campanhas com ROAS ruim ou sem conversão
+> `/funil` — funil geral · `/funil ABO` — funil de uma campanha
+> `/compare ABO vs Advantage` — compara 2 campanhas lado a lado
+> `/relatorio` — exporta Excel do mês · `/relatorio pdf` — em PDF
+> `/ajuda` — este menu
+
+*💬 Perguntas em linguagem natural*
+Me mencione com @ ou mande uma DM:
 
 *📅 Períodos que entendo*
 > `essa semana` · `semana passada` · `esse mês` · `mês passado`
@@ -58,14 +73,13 @@ Me pergunte em linguagem natural, diretamente no chat ou me mencionando com @. V
 *4. Funil de conversão*
 > _mostre o funil da campanha do hidratante_
 > _qual a taxa de conversão geral em maio?_
-> _quantos carrinhos abandonados na ABO essa semana?_
 
 *5. Comparação e histórico*
 > _compare o ROAS de novembro vs maio_
 > _como evoluiu o gasto da ABO dia a dia em junho?_
 > _resuma tudo que aconteceu no segundo trimestre_
 
-*💡 Dica:* você pode combinar campanha + métrica + período na mesma frase:
+*💡 Dica:* combine campanha + métrica + período:
 > _qual o gasto e retorno da ABO essa semana?_
 
 Qualquer dúvida é só perguntar! 🚀"""
@@ -211,6 +225,222 @@ async def _processar_e_responder(
 async def handle_ajuda_command(ack, respond):
     await ack()
     await respond(text=AJUDA_TEXTO, response_type="ephemeral")
+
+
+# ── /hoje — resumo do dia atual ───────────────────────────────────────────────
+
+@app.command("/hoje")
+async def handle_hoje(ack, respond, command, client):
+    await ack()
+    channel  = command["channel_id"]
+    user_id  = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    await respond(text="⏳ Buscando dados de hoje...", response_type="ephemeral")
+    await _processar_e_responder(
+        text="resumo geral de hoje",
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
+
+
+# ── /semana — resumo dos últimos 7 dias ───────────────────────────────────────
+
+@app.command("/semana")
+async def handle_semana(ack, respond, command, client):
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    await respond(text="⏳ Buscando dados da semana...", response_type="ephemeral")
+    await _processar_e_responder(
+        text="resumo geral dos últimos 7 dias",
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
+
+
+# ── /mes — resumo do mês atual ────────────────────────────────────────────────
+
+@app.command("/mes")
+async def handle_mes(ack, respond, command, client):
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    texto_arg = command.get("text", "").strip()
+    # Aceita argumento: /mes junho ou /mes 2026-05
+    if texto_arg:
+        pergunta = f"resumo geral de {texto_arg}"
+    else:
+        pergunta = "resumo geral desse mês"
+    await respond(text=f"⏳ Buscando dados: _{pergunta}_...", response_type="ephemeral")
+    await _processar_e_responder(
+        text=pergunta,
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
+
+
+# ── /top — top campanhas por ROAS ─────────────────────────────────────────────
+
+@app.command("/top")
+async def handle_top(ack, respond, command, client):
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    arg = command.get("text", "").strip().lower()
+
+    # Exemplos: /top roas · /top compras · /top 5 roas · /top
+    import re as _re
+    n_match = _re.search(r"(\d+)", arg)
+    n       = n_match.group(1) if n_match else "5"
+
+    if "compra" in arg or "venda" in arg:
+        metrica  = "compras"
+        pergunta = f"top {n} campanhas por compras esse mês"
+    else:
+        metrica  = "ROAS"
+        pergunta = f"top {n} campanhas por ROAS esse mês"
+
+    await respond(text=f"⏳ Buscando top {n} por {metrica}...", response_type="ephemeral")
+    await _processar_e_responder(
+        text=pergunta,
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
+
+
+# ── /campanha <nome> — performance da campanha ────────────────────────────────
+
+@app.command("/campanha")
+async def handle_campanha(ack, respond, command, client):
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    nome = command.get("text", "").strip()
+
+    if not nome:
+        from agent.queries import listar_campanhas
+        campanhas = listar_campanhas()
+        lista = "\n".join(
+            f"  • `{c['campanha']}` — R$ {c['investimento_total']:,.0f}"
+            for c in campanhas[:15]
+        )
+        await respond(
+            text=f"*Campanhas disponíveis (top 15 por investimento):*\n{lista}\n\n_Use `/campanha <nome>` para ver a performance._",
+            response_type="ephemeral",
+        )
+        return
+
+    await respond(text=f"⏳ Buscando performance de *{nome}*...", response_type="ephemeral")
+    await _processar_e_responder(
+        text=f"performance da campanha {nome} esse mês",
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
+
+
+# ── /alertas — campanhas com ROAS ruim ────────────────────────────────────────
+
+@app.command("/alertas")
+async def handle_alertas(ack, respond, command, client):
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    await respond(text="⏳ Verificando alertas de performance...", response_type="ephemeral")
+    await _processar_e_responder(
+        text="quais campanhas estão com ROAS ruim ou sem conversão nos últimos 30 dias?",
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
+
+
+# ── /funil [campanha] — métricas de funil ────────────────────────────────────
+
+@app.command("/funil")
+async def handle_funil(ack, respond, command, client):
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    nome = command.get("text", "").strip()
+
+    if nome:
+        pergunta = f"funil de conversão da campanha {nome} esse mês"
+    else:
+        pergunta = "funil de conversão geral esse mês"
+
+    await respond(text=f"⏳ Montando funil: _{pergunta}_...", response_type="ephemeral")
+    await _processar_e_responder(
+        text=pergunta,
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
+
+
+# ── /compare <campA> vs <campB> — comparação direta ──────────────────────────
+
+@app.command("/compare")
+async def handle_compare(ack, respond, command, client):
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    arg = command.get("text", "").strip()
+
+    if not arg:
+        await respond(
+            text="💡 Use: `/compare ABO vs Advantage` ou `/compare ABO Advantage`",
+            response_type="ephemeral",
+        )
+        return
+
+    await respond(text=f"⏳ Comparando: _{arg}_...", response_type="ephemeral")
+    await _processar_e_responder(
+        text=f"compare {arg} esse mês",
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
+
+
+# ── /relatorio [excel|pdf] — exporta relatório ───────────────────────────────
+
+@app.command("/relatorio")
+async def handle_relatorio(ack, respond, command, client):
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    thread_ts = str(__import__("time").time())
+    arg = command.get("text", "").strip().lower()
+
+    if "pdf" in arg:
+        formato = "pdf"
+    else:
+        formato = "excel"  # padrão
+
+    await respond(
+        text=f"⏳ Gerando relatório {formato.upper()} do mês atual...",
+        response_type="ephemeral",
+    )
+    await _processar_e_responder(
+        text=f"resumo geral desse mês em {formato}",
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+        formato_export=formato,
+    )
+
+
+# ── /campanhas — lista todas as campanhas ─────────────────────────────────────
+
+@app.command("/campanhas")
+async def handle_campanhas(ack, respond):
+    await ack()
+    from agent.queries import listar_campanhas
+    campanhas = listar_campanhas()
+    linhas = ["*📂 Campanhas cadastradas no banco de dados:*\n"]
+    for i, c in enumerate(campanhas, 1):
+        invest = f"R$ {c['investimento_total']:,.0f}" if c['investimento_total'] else "—"
+        linhas.append(
+            f"{i}. *{c['campanha']}*"
+            f" | invest: {invest}"
+            f" | ativo: {c['primeira_data']} → {c['ultima_data']}"
+        )
+    texto = "\n".join(linhas)
+    await respond(text=texto, response_type="ephemeral")
 
 
 # ── Evento: menção ao bot (@agente) ──────────────────────────────────────────
