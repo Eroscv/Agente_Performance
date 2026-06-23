@@ -55,7 +55,7 @@ def gerar_excel(dados: list[dict], titulo: str = "Relatório") -> bytes:
 
     # Linha de data
     ws.merge_cells(f"A2:{get_column_letter(len(colunas))}2")
-    ws["A2"] = f"Gerado em {date.today().strftime('%d/%m/%Y')} — Agente de Performance Guará"
+    ws["A2"] = f"Gerado em {date.today().strftime("%d/%m/%Y")} — Source OF · Meta Ads · Agente de Performance Guará"
     ws["A2"].font      = Font(italic=True, size=9, color="666666")
     ws["A2"].alignment = Alignment(horizontal="center")
     ws.row_dimensions[2].height = 14
@@ -134,7 +134,7 @@ def gerar_pdf(dados: list[dict], titulo: str = "Relatório") -> bytes:
 
     # Subtítulo
     story.append(Paragraph(
-        f"Gerado em {date.today().strftime('%d/%m/%Y')} — Agente de Performance Guará",
+        f"Gerado em {date.today().strftime("%d/%m/%Y")} — Source OF · Meta Ads · Agente de Performance Guará",
         ParagraphStyle("sub", parent=styles["Normal"], textColor=colors.grey, fontSize=9),
     ))
     story.append(Spacer(1, 0.4*cm))
@@ -225,7 +225,7 @@ def gerar_relatorio(
     campanha = meta.get("campanha", "")
     d_ini    = meta.get("data_inicio", "")
     d_fim    = meta.get("data_fim", "")
-    partes   = ["Agente de Performance Guará"]
+    partes   = ["Source OF — Meta Ads"]
     if campanha:
         partes.append(campanha)
     if d_ini and d_fim:
@@ -238,11 +238,11 @@ def gerar_relatorio(
 
     if formato == "pdf":
         conteudo = gerar_pdf(dados, titulo)
-        filename = f"guara_{intent}_{hoje_str}.pdf"
+        filename = f"source_of_{intent}_{hoje_str}.pdf"
         mimetype = "application/pdf"
     else:
         conteudo = gerar_excel(dados, titulo)
-        filename = f"guara_{intent}_{hoje_str}.xlsx"
+        filename = f"source_of_{intent}_{hoje_str}.xlsx"
         mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     logger.info("Relatório gerado: %s (%d bytes, %d linhas)", filename, len(conteudo), len(dados))

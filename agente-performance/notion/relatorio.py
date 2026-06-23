@@ -318,7 +318,7 @@ def publicar_relatorio_campanha(
     hoje   = date.today().strftime("%d/%m/%Y")
 
     # Título da página
-    partes = ["📊 Relatório Guará"]
+    partes = ["📊 Source OF — Meta Ads"]
     if meta.get("campanha"):
         partes.append(meta["campanha"])
     periodo = f"{di} → {df}" if di and df else hoje
@@ -329,6 +329,7 @@ def publicar_relatorio_campanha(
     blocos: list[dict] = []
     blocos.append(bloco_callout(
         f"Gerado automaticamente pelo Agente de Performance Guará\n"
+        f"Cliente: Source OF · Plataforma: Meta Ads\n"
         f"Pergunta: \"{pergunta}\"\n"
         f"Data de geração: {date.today().isoformat()}",
         emoji="⚙️",
@@ -364,11 +365,15 @@ def publicar_relatorio_campanha(
 
     blocos.append(bloco_divisor())
     blocos.append(bloco_paragrafo(
-        f"Fonte: banco de dados Meta Ads · Agente de Performance Guará · {date.today().isoformat()}"
+        f"Fonte: Source OF · Meta Ads · Agente de Performance Guará · {date.today().isoformat()}"
     ))
 
     # Decide onde criar a página
-    if cliente_key and cliente_key in DATABASES:
+    # Padrão: source_of (todos os dados do banco são Source OF)
+    if not cliente_key:
+        cliente_key = "source_of"
+
+    if cliente_key in DATABASES:
         db_info = DATABASES[cliente_key]
         db_id   = db_info.get("database_id")
 
@@ -385,7 +390,6 @@ def publicar_relatorio_campanha(
             properties = {
                 "Título": prop_titulo(titulo_pagina),
             }
-            # Adiciona campos opcionais se disponíveis
             if di:
                 properties["Data"] = prop_data(di, df or None)
 
@@ -401,7 +405,8 @@ def publicar_relatorio_campanha(
             if isinstance(dados, dict):
                 roas_val = dados.get("roas_medio")
             elif isinstance(dados, list) and dados:
-                roas_vals = [float(r.get("roas_medio") or r.get("roas") or 0) for r in dados if r.get("roas_medio") or r.get("roas")]
+                roas_vals = [float(r.get("roas_medio") or r.get("roas") or 0)
+                             for r in dados if r.get("roas_medio") or r.get("roas")]
                 roas_val = sum(roas_vals) / len(roas_vals) if roas_vals else None
             if roas_val:
                 properties["ROAS"] = prop_numero(round(float(roas_val), 2))
@@ -426,15 +431,14 @@ def publicar_relatorio_campanha(
 
 def _criar_pagina_standalone(titulo: str) -> dict:
     """
-    Cria página standalone quando não há database de destino.
-    Usa o primeiro database de relatórios disponível como fallback.
+    Cria página standalone quando não há database de destino especificado.
+    Usa o database Source OF como destino padrão (todos os dados são Source OF).
     """
-    # Fallback: usa Consórcio Sorteado como container temporário
     from notion.client import query_database, criar_pagina
-    db_info = DATABASES.get("consorcio_sorteado", {})
+    db_info = DATABASES.get("source_of", {})
     pages   = query_database(db_info["data_source_id"], limit=1)
     if pages:
         db_id = pages[0].get("parent", {}).get("database_id")
         if db_id:
             return criar_pagina(db_id, {"Título": prop_titulo(titulo)})
-    raise RuntimeError("Não foi possível encontrar um database de destino no Notion.")
+    raise RuntimeError("Não foi possível encontrar o database Source OF no Notion.")
