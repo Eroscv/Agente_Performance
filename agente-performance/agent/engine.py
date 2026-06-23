@@ -21,6 +21,8 @@ from typing import Any, Optional
 from agent import queries
 from agent.nlp import interpretar, fuzzy_match_campaign
 from agent.context_store import get_history, build_context_summary
+from agent.cache import get as cache_get, set as cache_set
+from agent.conversation_log import registrar as log_registrar
 from db.connection import query as raw_query, get_conn
 
 logger = logging.getLogger(__name__)
@@ -105,6 +107,56 @@ def _extract_campaign(text: str, available: list[str]) -> Optional[str]:
 
 # ── helpers internos ──────────────────────────────────────────────────────────
 
+def _validar_campanha(campanha: Optional[str], disponiveis: list[str]) -> tuple[Optional[str], Optional[str]]:
+    """
+    Valida se a campanha existe. Retorna (campanha_valida, mensagem_erro).
+    mensagem_erro é None se tudo OK.
+    """
+    if not campanha:
+        return None, None
+    if campanha in disponiveis:
+        return campanha, None
+    # Campanha não está na lista — fuzzy matching já falhou
+    sugestoes = disponiveis[:5]
+    lista = "\n".join(f"  • {c}" for c in sugestoes)
+    msg = (
+        f"⚠️ Não encontrei a campanha *{campanha}* no banco de dados.\n\n"
+        f"Campanhas disponíveis (principais):\n{lista}\n\n"
+        f"_Digite `/campanhas` para ver a lista completa._"
+    )
+    return None, msg
+
+
+def _dados_vazios_sugestao(intent: str, campanha: Optional[str], data_inicio: Optional[str], data_fim: Optional[str]) -> Optional[str]:
+    """
+    Quando uma query retorna vazio, sugere o período mais próximo com dados.
+    Retorna mensagem de sugestão ou None se houver dados.
+    """
+    try:
+        # Verifica se há dados sem filtro de período
+        if data_inicio or data_fim:
+            sem_filtro = raw_query(
+                "SELECT MIN(data_inicio) AS ini, MAX(data_fim) AS fim, COUNT(*) AS n "
+                "FROM campanhas WHERE campanha IS NOT NULL AND campanha != ''"
+                + (f" AND campanha = '{campanha}'" if campanha else "")
+            )
+            if sem_filtro and sem_filtro[0].get("n", 0) > 0:
+                row = sem_filtro[0]
+                return (
+                    f"⚠️ Nenhum dado encontrado para o período *{data_inicio} → {data_fim}*."
+                    + (f" (campanha: *{campanha}*)" if campanha else "")
+                    + f"\n\n📅 Dados disponíveis de *{row['ini']}* a *{row['fim']}* "
+                    f"({row['n']} registros). Tente perguntar por esse período!"
+                )
+        return None
+    except Exception:
+        return None
+
+
+    rows = raw_query("SELECT DISTINCT campanha FROM campanhas WHERE campanha != '' ORDER BY campanha")
+    return [r["campanha"] for r in rows]
+
+
 def _get_available_campaigns() -> list[str]:
     rows = raw_query("SELECT DISTINCT campanha FROM campanhas WHERE campanha != '' ORDER BY campanha")
     return [r["campanha"] for r in rows]
@@ -168,29 +220,27 @@ def consultar(
     pergunta:  str,
     thread_ts: Optional[str] = None,
     channel:   Optional[str] = None,
+    user_id:   Optional[str] = None,
 ) -> dict[str, Any]:
     """
     Processa uma pergunta em linguagem natural.
-
-    Args:
-        pergunta:  texto do usuário
-        thread_ts: ID da thread Slack (para memória de contexto)
-        channel:   canal Slack (para memória de contexto)
-
-    Returns:
-        {
-            "intents":     list[str],
-            "dados":       dict | list,       # resultado principal
-            "dados_extra": dict[str, Any],    # resultados adicionais se múltiplas intenções
-            "meta":        dict,
-        }
+    Usa cache, log, validação de campanha e sugestão de vazio.
     """
-    campanhas_disponiveis = _get_available_campaigns()
+    import time
+    t_inicio = time.time()
 
-    # Histórico da thread para perguntas de acompanhamento
+    # 1. Verifica cache
+    cached = cache_get(pergunta)
+    if cached:
+        log_registrar(pergunta, cached.get("_resposta_cache", ""), cached.get("meta", {}),
+                      user_id=user_id, channel=channel, thread_ts=thread_ts,
+                      latencia_ms=0, cache_hit=True)
+        return cached
+
+    campanhas_disponiveis = _get_available_campaigns()
     contexto = build_context_summary(thread_ts) if thread_ts else ""
 
-    # NLP com Claude
+    # 2. NLP com Claude
     params = interpretar(pergunta, campanhas_disponiveis, contexto)
 
     intents     = params["intents"]
@@ -199,6 +249,25 @@ def consultar(
     data_fim    = params["data_fim"]
     limit       = params["limit"]
 
+    # 3. Valida campanha
+    campanha_valida, erro_campanha = _validar_campanha(campanha, campanhas_disponiveis)
+    if erro_campanha:
+        resultado = {
+            "intent":       intents[0],
+            "intents":      intents,
+            "dados":        [],
+            "dados_extra":  {},
+            "meta":         {"intent": intents[0], "intents": intents,
+                             "campanha": campanha, "data_inicio": data_inicio,
+                             "data_fim": data_fim, "limit": limit},
+            "erro":         erro_campanha,
+        }
+        log_registrar(pergunta, erro_campanha, resultado["meta"],
+                      user_id=user_id, channel=channel, thread_ts=thread_ts,
+                      latencia_ms=int((time.time()-t_inicio)*1000), erro=erro_campanha)
+        return resultado
+
+    campanha = campanha_valida
     meta = {
         "intents":     intents,
         "campanha":    campanha,
@@ -206,28 +275,46 @@ def consultar(
         "data_fim":    data_fim,
         "limit":       limit,
         "nlp_raw":     params.get("raw", {}),
+        "intent":      intents[0],
     }
 
-    # Executa primeira intenção como resultado principal
+    # 4. Executa queries
     dados = _executar_intent(intents[0], campanha, data_inicio, data_fim, limit)
 
-    # Executa intenções adicionais se houver
     dados_extra = {}
     for intent_extra in intents[1:]:
         dados_extra[intent_extra] = _executar_intent(
             intent_extra, campanha, data_inicio, data_fim, limit
         )
 
-    # Compatibilidade retroativa: expõe "intent" (singular)
-    meta["intent"] = intents[0]
+    # 5. Verifica dados vazios e sugere alternativa
+    dados_vazios_msg = None
+    dados_principais_vazios = (
+        (isinstance(dados, list) and len(dados) == 0) or
+        (isinstance(dados, dict) and not dados)
+    )
+    if dados_principais_vazios:
+        dados_vazios_msg = _dados_vazios_sugestao(intents[0], campanha, data_inicio, data_fim)
 
-    return {
-        "intent":      intents[0],
-        "intents":     intents,
-        "dados":       dados,
-        "dados_extra": dados_extra,
-        "meta":        meta,
+    resultado = {
+        "intent":          intents[0],
+        "intents":         intents,
+        "dados":           dados,
+        "dados_extra":     dados_extra,
+        "meta":            meta,
+        "aviso_vazio":     dados_vazios_msg,
     }
+
+    # 6. Salva no cache (não cacheia resultados vazios)
+    if not dados_principais_vazios:
+        cache_set(pergunta, resultado)
+
+    latencia = int((time.time() - t_inicio) * 1000)
+    log_registrar(pergunta, "", meta,
+                  user_id=user_id, channel=channel, thread_ts=thread_ts,
+                  latencia_ms=latencia)
+
+    return resultado
 
 
 def consultar_sql(sql: str) -> list[dict]:

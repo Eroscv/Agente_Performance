@@ -92,52 +92,75 @@ async def _processar_e_responder(
     channel:   str,
     thread_ts: str,
     client,
+    user_id:   str = None,
+    formato_export: str = None,  # "excel" | "pdf" | None
 ):
     """Núcleo: NLP → query banco → Claude → posta no Slack → salva histórico."""
     try:
-        # Salva pergunta no histórico da thread
         append_history(thread_ts, channel, "user", text)
-
-        # Busca contexto da thread para perguntas de acompanhamento
         contexto = build_context_summary(thread_ts)
 
-        # Consulta com NLP + contexto
-        resultado   = consultar(text, thread_ts=thread_ts, channel=channel)
+        resultado   = consultar(text, thread_ts=thread_ts, channel=channel, user_id=user_id)
         dados       = resultado["dados"]
         intent      = resultado["intent"]
         meta        = resultado["meta"]
         dados_extra = resultado.get("dados_extra", {})
+        erro        = resultado.get("erro")
+        aviso_vazio = resultado.get("aviso_vazio")
+
+        # Campanha não encontrada — responde diretamente sem chamar Claude
+        if erro:
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=erro, mrkdwn=True,
+            )
+            return
+
+        # Dados vazios com sugestão de período
+        if aviso_vazio:
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=aviso_vazio, mrkdwn=True,
+            )
+            return
+
+        # Exportação de arquivo
+        if formato_export in ("excel", "pdf"):
+            from reports.exporter import gerar_relatorio
+            conteudo, filename, mimetype = gerar_relatorio(resultado, text, formato_export)
+            await client.files_upload_v2(
+                channel=channel,
+                thread_ts=thread_ts,
+                content=conteudo,
+                filename=filename,
+                title=f"Relatório — {intent}",
+            )
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=f"✅ Arquivo *{filename}* gerado com sucesso!",
+                mrkdwn=True,
+            )
+            return
 
         # Gera resposta conversacional com Claude
         resposta = gerar_resposta(
-            pergunta=text,
-            dados=dados,
-            intent=intent,
-            meta=meta,
-            dados_extra=dados_extra,
-            contexto=contexto,
+            pergunta=text, dados=dados, intent=intent, meta=meta,
+            dados_extra=dados_extra, contexto=contexto,
         )
 
-        # Salva resposta no histórico
         append_history(thread_ts, channel, "agent", resposta[:500], meta)
 
-        # Converte markdown → Slack Block Kit
         blocks = truncar_blocos(markdown_to_blocks(resposta))
-
-        # Posta no thread com blocks + fallback text
         await client.chat_postMessage(
-            channel=channel,
-            thread_ts=thread_ts,
-            text=resposta[:150],  # fallback para notificação push
-            blocks=blocks,
+            channel=channel, thread_ts=thread_ts,
+            text=resposta[:150], blocks=blocks,
         )
 
     except Exception as e:
         logger.exception("Erro ao processar mensagem: %s", e)
         await client.chat_postMessage(
-            channel=channel,
-            thread_ts=thread_ts,
-            text=f"⚠️ Ocorreu um erro ao processar sua consulta: `{e}`\nTente novamente.",
+            channel=channel, thread_ts=thread_ts,
+            text=f"⚠️ Ocorreu um erro: `{e}`\nTente novamente.",
             mrkdwn=True,
         )
 
@@ -178,12 +201,20 @@ async def handle_mention(event, say, client, ack):
         )
         return
 
+    # Detecta pedido de exportação
+    formato_export = None
+    if re.search(r"\bexcel\b|\bplanilha\b|\bxlsx\b", text, re.I):
+        formato_export = "excel"
+    elif re.search(r"\bpdf\b|\brelatório\b|\brelatorio\b", text, re.I):
+        formato_export = "pdf"
+
     try:
         await client.reactions_add(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
     except Exception:
         pass
 
-    await _processar_e_responder(text, channel, thread_ts, client)
+    await _processar_e_responder(text, channel, thread_ts, client,
+                                  user_id=event.get("user"), formato_export=formato_export)
 
     try:
         await client.reactions_remove(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
@@ -219,12 +250,20 @@ async def handle_dm(event, client, ack):
         )
         return
 
+    # Detecta pedido de exportação
+    formato_export = None
+    if re.search(r"\bexcel\b|\bplanilha\b|\bxlsx\b", text, re.I):
+        formato_export = "excel"
+    elif re.search(r"\bpdf\b|\brelatório\b|\brelatorio\b", text, re.I):
+        formato_export = "pdf"
+
     try:
         await client.reactions_add(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
     except Exception:
         pass
 
-    await _processar_e_responder(text, channel, thread_ts, client)
+    await _processar_e_responder(text, channel, thread_ts, client,
+                                  user_id=event.get("user"), formato_export=formato_export)
 
     try:
         await client.reactions_remove(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")

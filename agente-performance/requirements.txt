@@ -6,3 +6,5 @@ slack-bolt>=1.18.0
 anthropic>=0.25.0
 aiohttp>=3.9.0
 rapidfuzz>=3.0.0
+openpyxl>=3.1.0
+reportlab>=4.0.0
