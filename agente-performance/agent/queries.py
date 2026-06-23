@@ -74,12 +74,18 @@ def performance_campanha(
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
 ) -> list[dict]:
-    """Série temporal diária de uma campanha específica."""
+    """Série temporal diária de uma campanha específica.
+    
+    Aceita nome exato OU nome parcial — usa LIKE para tolerância a variações.
+    Se múltiplos matches, retorna todos agrupados.
+    """
     filters, params = _build_date_filter(data_inicio, data_fim)
-    params_full = [campanha] + params
-    return query(f"""
+    # Tenta match exato primeiro; se não encontrar, usa LIKE
+    params_exato = [campanha] + params
+    resultado_exato = query(f"""
         SELECT
             data_inicio                           AS data,
+            campanha,
             ROUND(investimento, 2)                AS investimento,
             ROUND(valor_compras, 2)               AS receita,
             compras,
@@ -97,7 +103,35 @@ def performance_campanha(
         WHERE campanha = ?
         {filters}
         ORDER BY data_inicio ASC
-    """, tuple(params_full))
+    """, tuple(params_exato))
+    if resultado_exato:
+        return resultado_exato
+    # Fallback: LIKE com tokens (ex: 'Advantage' encontra 'Advantage_TodosProdutos_05/2026')
+    like_pattern = f"%{campanha}%"
+    params_like = [like_pattern] + params
+    return query(f"""
+        SELECT
+            data_inicio                           AS data,
+            campanha,
+            ROUND(SUM(investimento), 2)           AS investimento,
+            ROUND(SUM(valor_compras), 2)          AS receita,
+            ROUND(SUM(compras), 0)                AS compras,
+            ROUND(AVG(roas_compras), 2)           AS roas,
+            ROUND(SUM(impressoes), 0)             AS impressoes,
+            ROUND(SUM(alcance), 0)                AS alcance,
+            ROUND(SUM(cliques_link), 0)           AS cliques_link,
+            ROUND(AVG(ctr_link), 4)               AS ctr,
+            ROUND(AVG(cpc_link), 2)               AS cpc,
+            ROUND(AVG(custo_por_compra), 2)       AS custo_por_compra,
+            ROUND(AVG(frequencia), 2)             AS frequencia,
+            ROUND(SUM(adicoes_carrinho), 0)       AS adicoes_carrinho,
+            ROUND(SUM(checkout_iniciado), 0)      AS checkout_iniciado
+        FROM campanhas
+        WHERE campanha LIKE ?
+        {filters}
+        GROUP BY data_inicio, campanha
+        ORDER BY data_inicio ASC
+    """, tuple(params_like))
 
 
 def top_campanhas_roas(
@@ -210,21 +244,40 @@ def resumo_periodo(data_inicio: str, data_fim: str) -> dict:
 
 
 def alertas_roas_baixo(threshold: float = 1.0) -> list[dict]:
-    """Campanhas com ROAS abaixo do threshold nos últimos 30 dias."""
+    """Campanhas com ROAS preocupante nos últimos 30 dias.
+    
+    Inclui:
+    - Campanhas com ROAS < threshold (baixo retorno)
+    - Campanhas com investimento >= R$100 mas ROAS NULL (sem conversão registrada)
+    Exclui campanhas de engajamento/tráfego que por natureza não têm ROAS.
+    """
     return query("""
         SELECT
             campanha,
             ROUND(AVG(roas_compras), 2)     AS roas_medio,
             ROUND(SUM(investimento), 2)     AS investimento,
             ROUND(SUM(valor_compras), 2)    AS receita,
-            MAX(data_fim)                   AS ultima_data
+            ROUND(SUM(compras), 0)          AS compras,
+            MAX(data_fim)                   AS ultima_data,
+            CASE
+                WHEN AVG(roas_compras) IS NULL THEN 'sem_conversao'
+                WHEN AVG(roas_compras) < ? THEN 'roas_baixo'
+                ELSE 'ok'
+            END AS tipo_alerta
         FROM campanhas
         WHERE data_inicio >= DATE('now', '-30 days')
           AND campanha IS NOT NULL AND campanha != ''
+          -- Exclui campanhas de engajamento/tráfego puro (case-insensitive via LOWER)
+          AND LOWER(campanha) NOT LIKE '%engajamento%'
+          AND LOWER(campanha) NOT LIKE '%tr_fego%'
+          AND LOWER(campanha) NOT LIKE '%trafego%'
         GROUP BY campanha
-        HAVING roas_medio IS NOT NULL AND roas_medio < ?
-        ORDER BY roas_medio ASC
-    """, (threshold,))
+        HAVING SUM(investimento) >= 100
+           AND (AVG(roas_compras) IS NULL OR AVG(roas_compras) < ?)
+        ORDER BY
+            CASE WHEN AVG(roas_compras) IS NULL THEN 0 ELSE 1 END ASC,
+            AVG(roas_compras) ASC
+    """, (threshold, threshold))
 
 
 def comparar_campanhas(

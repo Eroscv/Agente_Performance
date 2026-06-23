@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "updatedAt": "2026-06-23T14:10:57.638Z",
+  "entries": {
+    "memory:memory/2026-06-22.md:1:30": {
+      "key": "memory:memory/2026-06-22.md:1:30",
+      "path": "memory/2026-06-22.md",
+      "startLine": 1,
+      "endLine": 30,
+      "source": "memory",
+      "snippet": "# Memory — 2026-06-22 ## Flora-Agente: Deploy & Melhorias (sessão principal do dia) ### Estado atual do sistema - **Serviço:** `flora-agente.service` rodando em `/home/ubuntu/.openclaw/workspace/Flora-Agente-repo`, porta 5000 - **Webhook ativo:** `https://44.204.251.251/webhook` via Apache2 proxy reverso (cert autoassinado snakeoil) - **Cloudflare Tunnel:** `flora-tunnel.service` + `flora-tunnel-watchdog.service` ativos - **Whitelist:** `ALLOWED_PHONES=5519995994481` (apenas Eros pode testar) - **Modelo principal:** `claude-haiku-4-5`; `ProdutoAgent` usa `claude-sonnet-4-5` ### Parser webhook corrigido (formato Meta WhatsApp Cloud API) - Payload real da Meta tem estrutura aninhada: `entry",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-06-23T14:10:57.638Z",
+      "lastRecalledAt": "2026-06-23T14:10:57.638Z",
+      "queryHashes": [
+        "e64824be9630"
+      ],
+      "recallDays": [
+        "2026-06-23"
+      ],
+      "conceptTags": [
+        "flora-agente",
+        "flora-agente.service",
+        "home/ubuntu",
+        "44.204.251.251/webhook",
+        "flora-tunnel.service",
+        "flora-tunnel-watchdog.service",
+        "allowed-phones",
+        "claude-haiku-4-5"
+      ]
+    }
+  }
+}

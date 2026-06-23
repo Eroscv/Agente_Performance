@@ -161,12 +161,14 @@ def _dados_vazios_sugestao(intent: str, campanha: Optional[str], data_inicio: Op
         return None
 
 
-    rows = raw_query("SELECT DISTINCT campanha FROM campanhas WHERE campanha != '' ORDER BY campanha")
-    return [r["campanha"] for r in rows]
-
-
 def _get_available_campaigns() -> list[str]:
-    rows = raw_query("SELECT DISTINCT campanha FROM campanhas WHERE campanha != '' ORDER BY campanha")
+    """Retorna campanhas ordenadas por investimento total (mais relevantes primeiro)."""
+    rows = raw_query("""
+        SELECT campanha FROM campanhas
+        WHERE campanha IS NOT NULL AND campanha != ''
+        GROUP BY campanha
+        ORDER BY SUM(investimento) DESC
+    """)
     return [r["campanha"] for r in rows]
 
 
@@ -191,6 +193,8 @@ def _executar_intent(
     elif intent == "performance_campanha":
         if campanha:
             return queries.performance_campanha(campanha, data_inicio, data_fim)
+        # Usuário pediu performance de campanha específica mas não foi possível identificar qual
+        # Retornar lista das principais para orientar o usuário
         return queries.resumo_por_campanha(data_inicio, data_fim)
 
     elif intent == "top_roas":
@@ -285,8 +289,35 @@ def consultar(
     data_inicio = params["data_inicio"]
     data_fim    = params["data_fim"]
     limit       = params["limit"]
+    campanha_raw = params.get("raw", {}).get("campanha")  # nome original antes do fuzzy
 
     # 3. Valida campanha
+    # Se NLP extraiu um nome de campanha (raw) mas fuzzy não encontrou match,
+    # retorna erro com sugestões em vez de silenciosamente mostrar resumo geral
+    if campanha is None and campanha_raw and "performance" in " ".join(intents):
+        sugestoes = campanhas_disponiveis[:8]
+        lista = "\n".join(f"  • {c}" for c in sugestoes)
+        erro_campanha = (
+            f"⚠️ Não encontrei nenhuma campanha com o nome *{campanha_raw}*.\n\n"
+            f"*Campanhas disponíveis (por investimento):*\n{lista}\n"
+            f"...e mais {max(0, len(campanhas_disponiveis) - 8)} outras.\n\n"
+            f"_Tente usar parte do nome, ex: `performance Advantage` ou `performance ABO`_"
+        )
+        resultado = {
+            "intent":      intents[0],
+            "intents":     intents,
+            "dados":       [],
+            "dados_extra": {},
+            "meta":        {"intent": intents[0], "intents": intents,
+                            "campanha": campanha_raw, "data_inicio": data_inicio,
+                            "data_fim": data_fim, "limit": limit},
+            "erro":        erro_campanha,
+        }
+        log_registrar(pergunta, erro_campanha, resultado["meta"],
+                      user_id=user_id, channel=channel, thread_ts=thread_ts,
+                      latencia_ms=int((time.time()-t_inicio)*1000), erro=erro_campanha)
+        return resultado
+
     campanha_valida, erro_campanha = _validar_campanha(campanha, campanhas_disponiveis)
     if erro_campanha:
         resultado = {
