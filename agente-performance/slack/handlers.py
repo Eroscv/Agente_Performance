@@ -23,6 +23,7 @@ from dotenv import load_dotenv
 from agent.engine import consultar
 from agent.claude_client import gerar_resposta
 from agent.context_store import append_history, build_context_summary
+from slack.formatter import markdown_to_blocks, truncar_blocos
 
 AJUDA_TEXTO = """*⚙️ Agente de Performance Guará — Como consultar*
 
@@ -120,12 +121,15 @@ async def _processar_e_responder(
         # Salva resposta no histórico
         append_history(thread_ts, channel, "agent", resposta[:500], meta)
 
-        # Posta no thread
+        # Converte markdown → Slack Block Kit
+        blocks = truncar_blocos(markdown_to_blocks(resposta))
+
+        # Posta no thread com blocks + fallback text
         await client.chat_postMessage(
             channel=channel,
             thread_ts=thread_ts,
-            text=resposta,
-            mrkdwn=True,
+            text=resposta[:150],  # fallback para notificação push
+            blocks=blocks,
         )
 
     except Exception as e:
