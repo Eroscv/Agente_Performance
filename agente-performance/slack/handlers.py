@@ -41,7 +41,7 @@ AJUDA_TEXTO = """*⚙️ Agente de Performance Guará — Guia Rápido*
 > `/alertas` — campanhas com ROAS ruim ou sem conversão
 > `/funil` — funil geral · `/funil ABO` — funil de uma campanha
 > `/compare ABO vs Advantage` — compara 2 campanhas lado a lado
-> `/relatorio` — exporta Excel do mês · `/relatorio pdf` — em PDF
+> `/relatorio` — exporta Excel do mês · `/relatorio pdf` · `/relatorio notion` · `/relatorio tudo`
 > `/ajuda` — este menu
 
 *💬 Perguntas em linguagem natural*
@@ -84,9 +84,56 @@ Me mencione com @ ou mande uma DM:
 
 Qualquer dúvida é só perguntar! 🚀"""
 
-load_dotenv()
+def _detectar_formato_export(text: str) -> tuple[str | None, str | None]:
+    """
+    Detecta se o usuário quer exportar dados e para qual formato.
+    Retorna (formato_export, cliente_notion).
+    
+    Formatos:
+      'excel'        — gera planilha .xlsx
+      'pdf'          — gera PDF
+      'notion'       — publica página no Notion
+      'excel+notion' — envia o .xlsx E publica no Notion
+    """
+    tem_excel  = bool(re.search(r"\bexcel\b|\bplanilha\b|\bxlsx\b", text, re.I))
+    tem_pdf    = bool(re.search(r"\bpdf\b", text, re.I))
+    tem_notion = bool(re.search(r"\bnotion\b|\bpubli[cq]|\bpublic[ae]\.?\b|salvar no notion|enviar (para|pro) notion", text, re.I))
 
-logger = logging.getLogger(__name__)
+    formato = None
+    if tem_excel and tem_notion:
+        formato = "excel+notion"
+    elif tem_notion:
+        formato = "notion"
+    elif tem_excel:
+        formato = "excel"
+    elif tem_pdf:
+        formato = "pdf"
+
+    # Detecta cliente do Notion no texto
+    cliente = None
+    _CLIENTES_NOTION = {
+        "consorcio":         "consorcio_sorteado",
+        "consórcio":         "consorcio_sorteado",
+        "sorteado":          "consorcio_sorteado",
+        "source":            "source_of",
+        "source of":         "source_of",
+        "máximo":            "maximo_servico",
+        "maximo":            "maximo_servico",
+        "serviço":           "maximo_servico",
+        "mushin":            "be_mushin",
+        "be mushin":         "be_mushin",
+        "bazar":             "bazar_precatorio",
+        "precatório":        "bazar_precatorio",
+        "precatorio":        "bazar_precatorio",
+    }
+    t = text.lower()
+    for token, key in _CLIENTES_NOTION.items():
+        if token in t:
+            cliente = key
+            break
+
+    return formato, cliente
+
 
 app = AsyncApp(
     token=os.getenv("SLACK_BOT_TOKEN", ""),
@@ -110,7 +157,8 @@ async def _processar_e_responder(
     thread_ts: str,
     client,
     user_id:   str = None,
-    formato_export: str = None,  # "excel" | "pdf" | None
+    formato_export: str = None,  # "excel" | "pdf" | "notion" | "excel+notion" | None
+    cliente_notion: str = None,  # chave do DATABASES do Notion (ex: 'source_of')
 ):
     """Núcleo: NLP → query banco → Claude → posta no Slack → salva histórico + log."""
     t_inicio = time.time()
@@ -152,10 +200,13 @@ async def _processar_e_responder(
             )
             return
 
-        # Exportação de arquivo
-        if formato_export in ("excel", "pdf"):
+        # ── Exportação de arquivo (excel / pdf) ────────────────────────────────
+        fmt_arquivo = formato_export if formato_export in ("excel", "pdf") else None
+        if fmt_arquivo == "excel+notion":
+            fmt_arquivo = "excel"
+        if fmt_arquivo:
             from reports.exporter import gerar_relatorio
-            conteudo, filename, mimetype = gerar_relatorio(resultado, text, formato_export)
+            conteudo, filename, mimetype = gerar_relatorio(resultado, text, fmt_arquivo)
             await client.files_upload_v2(
                 channel=channel,
                 thread_ts=thread_ts,
@@ -169,6 +220,40 @@ async def _processar_e_responder(
                 text=f"✅ Arquivo *{filename}* gerado com sucesso!",
                 mrkdwn=True,
             )
+            # Se for só arquivo, retorna (Notion será tratado abaixo se solicitado)
+            if formato_export not in ("notion", "excel+notion"):
+                return
+
+        # ── Exportação para Notion ────────────────────────────────────────────
+        if formato_export in ("notion", "excel+notion"):
+            try:
+                from notion.relatorio import publicar_relatorio_campanha
+                await client.chat_postMessage(
+                    channel=channel, thread_ts=thread_ts,
+                    text="⏳ Publicando relatório no Notion...",
+                    mrkdwn=True,
+                )
+                page_id, url = publicar_relatorio_campanha(
+                    resultado=resultado,
+                    pergunta=text,
+                    cliente_key=cliente_notion,
+                )
+                resposta_final = f"Relatório publicado no Notion: {url}"
+                await client.chat_postMessage(
+                    channel=channel, thread_ts=thread_ts,
+                    text=(
+                        f"✅ *Relatório publicado no Notion!*\n"
+                        f"📎 <{url}|Abrir no Notion>"
+                    ),
+                    mrkdwn=True,
+                )
+            except Exception as e_notion:
+                logger.exception("Erro ao publicar no Notion: %s", e_notion)
+                await client.chat_postMessage(
+                    channel=channel, thread_ts=thread_ts,
+                    text=f"⚠️ Não foi possível publicar no Notion: `{e_notion}`",
+                    mrkdwn=True,
+                )
             return
 
         # Gera resposta conversacional com Claude
@@ -398,7 +483,7 @@ async def handle_compare(ack, respond, command, client):
     )
 
 
-# ── /relatorio [excel|pdf] — exporta relatório ───────────────────────────────
+# ── /relatorio [excel|pdf|notion|tudo] — exporta relatório ──────────────────────────────
 
 @app.command("/relatorio")
 async def handle_relatorio(ack, respond, command, client):
@@ -408,19 +493,35 @@ async def handle_relatorio(ack, respond, command, client):
     thread_ts = str(__import__("time").time())
     arg = command.get("text", "").strip().lower()
 
-    if "pdf" in arg:
+    # Detecta formato do argumento
+    if "tudo" in arg or ("excel" in arg and "notion" in arg):
+        formato = "excel+notion"
+    elif "notion" in arg:
+        formato = "notion"
+    elif "pdf" in arg:
         formato = "pdf"
     else:
         formato = "excel"  # padrão
 
+    # Detecta cliente Notion se mencionado
+    _, cliente_notion = _detectar_formato_export(command.get("text", ""))
+
+    descricao = {
+        "excel":        "planilha Excel (.xlsx)",
+        "pdf":          "PDF",
+        "notion":       "página no Notion",
+        "excel+notion": "Excel + Notion",
+    }.get(formato, formato)
+
     await respond(
-        text=f"⏳ Gerando relatório {formato.upper()} do mês atual...",
+        text=f"⏳ Gerando relatório ({descricao}) do mês atual...",
         response_type="ephemeral",
     )
     await _processar_e_responder(
         text=f"resumo geral desse mês em {formato}",
         channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
         formato_export=formato,
+        cliente_notion=cliente_notion,
     )
 
 
@@ -471,12 +572,8 @@ async def handle_mention(event, say, client, ack):
         )
         return
 
-    # Detecta pedido de exportação
-    formato_export = None
-    if re.search(r"\bexcel\b|\bplanilha\b|\bxlsx\b", text, re.I):
-        formato_export = "excel"
-    elif re.search(r"\bpdf\b|\brelatório\b|\brelatorio\b", text, re.I):
-        formato_export = "pdf"
+    # Detecta pedido de exportação (excel / pdf / notion / excel+notion)
+    formato_export, cliente_notion = _detectar_formato_export(text)
 
     try:
         await client.reactions_add(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
@@ -484,7 +581,7 @@ async def handle_mention(event, say, client, ack):
         pass
 
     await _processar_e_responder(text, channel, thread_ts, client,
-                                  user_id=event.get("user"), formato_export=formato_export)
+                                  user_id=event.get("user"), formato_export=formato_export, cliente_notion=cliente_notion)
 
     try:
         await client.reactions_remove(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
@@ -520,12 +617,8 @@ async def handle_dm(event, client, ack):
         )
         return
 
-    # Detecta pedido de exportação
-    formato_export = None
-    if re.search(r"\bexcel\b|\bplanilha\b|\bxlsx\b", text, re.I):
-        formato_export = "excel"
-    elif re.search(r"\bpdf\b|\brelatório\b|\brelatorio\b", text, re.I):
-        formato_export = "pdf"
+    # Detecta pedido de exportação (excel / pdf / notion / excel+notion)
+    formato_export, cliente_notion = _detectar_formato_export(text)
 
     try:
         await client.reactions_add(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
@@ -533,7 +626,7 @@ async def handle_dm(event, client, ack):
         pass
 
     await _processar_e_responder(text, channel, thread_ts, client,
-                                  user_id=event.get("user"), formato_export=formato_export)
+                                  user_id=event.get("user"), formato_export=formato_export, cliente_notion=cliente_notion)
 
     try:
         await client.reactions_remove(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
