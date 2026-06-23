@@ -265,10 +265,27 @@ async def _processar_e_responder(
         append_history(thread_ts, channel, "agent", resposta_final[:500], meta)
 
         blocks = truncar_blocos(markdown_to_blocks(resposta_final))
-        await client.chat_postMessage(
+        msg = await client.chat_postMessage(
             channel=channel, thread_ts=thread_ts,
             text=resposta_final[:150], blocks=blocks,
         )
+
+        # Salva na Base de Conhecimento (não aprovado até receber 👍)
+        if not cache_hit and resposta_final and not erro_final:
+            try:
+                from notion.knowledge_base import salvar_entrada
+                resp_msg_ts = msg.get("ts") if msg else None
+                salvar_entrada(
+                    pergunta=text,
+                    resposta=resposta_final,
+                    intent=intent,
+                    campanha=meta.get("campanha"),
+                    data_ini=meta.get("data_inicio"),
+                    data_fim=meta.get("data_fim"),
+                    slack_msg_ts=resp_msg_ts,
+                )
+            except Exception as e_kb:
+                logger.debug("KB: erro ao salvar (não crítico): %s", e_kb)
 
     except Exception as e:
         erro_final = str(e)
@@ -632,3 +649,72 @@ async def handle_dm(event, client, ack):
         await client.reactions_remove(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
     except Exception:
         pass
+
+
+# ── Evento: reação 👍 — aprovação na Base de Conhecimento ───────────────────
+
+@app.event("reaction_added")
+async def handle_reaction(event, client):
+    """
+    Quando alguém dá 👍 (+1) em uma resposta do bot:
+    - Encontra a entrada correspondente na Base de Conhecimento do Notion
+    - Marca como aprovada e incrementa frequência
+    - Reage com ✅ para confirmar
+    """
+    reaction = event.get("reaction", "")
+    if reaction not in ("+1", "thumbsup", "white_check_mark"):
+        return  # Ignora outras reações
+
+    item = event.get("item", {})
+    if item.get("type") != "message":
+        return
+
+    msg_ts      = item.get("ts")
+    channel     = item.get("channel")
+    reactor_id  = event.get("user")
+
+    try:
+        # Busca a mensagem original para confirmar que é do bot
+        result = await client.conversations_history(
+            channel=channel,
+            oldest=msg_ts,
+            latest=msg_ts,
+            inclusive=True,
+            limit=1,
+        )
+        messages = result.get("messages", [])
+        if not messages:
+            return
+
+        msg      = messages[0]
+        bot_id   = msg.get("bot_id")
+        if not bot_id:
+            return  # Reação não é em mensagem do bot
+
+        # Busca no KB pelo ts da mensagem
+        from notion.knowledge_base import buscar_por_slack_ts, aprovar_entrada
+        page_id = buscar_por_slack_ts(msg_ts)
+
+        if page_id:
+            # Busca nome do usuário para registrar quem aprovou
+            try:
+                user_info  = await client.users_info(user=reactor_id)
+                nome       = user_info["user"]["real_name"] or user_info["user"]["name"]
+            except Exception:
+                nome = reactor_id or "Slack"
+
+            ok = aprovar_entrada(page_id, aprovado_por=nome)
+            if ok:
+                logger.info("KB: resposta aprovada por %s (ts=%s)", nome, msg_ts)
+                # Confirma com ✅ na mensagem
+                try:
+                    await client.reactions_add(
+                        channel=channel, timestamp=msg_ts, name="white_check_mark"
+                    )
+                except Exception:
+                    pass
+        else:
+            logger.debug("KB: nenhuma entrada encontrada para ts=%s", msg_ts)
+
+    except Exception as e:
+        logger.debug("KB reaction handler erro (não crítico): %s", e)

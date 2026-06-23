@@ -63,6 +63,7 @@ def gerar_resposta(
     meta:        dict,
     dados_extra: dict = None,
     contexto:    str  = "",
+    usar_kb:     bool = True,
 ) -> str:
     """
     Gera resposta conversacional com Claude a partir dos dados das queries.
@@ -95,6 +96,19 @@ def gerar_resposta(
     # Contexto de thread anterior
     contexto_str = f"\n{contexto}\n" if contexto else ""
 
+    # Memória de longo prazo — injeta exemplos aprovados do Notion KB
+    kb_contexto = ""
+    if usar_kb:
+        try:
+            from notion.knowledge_base import buscar_contexto, formatar_contexto_para_prompt
+            campanha = meta.get("campanha")
+            entradas = buscar_contexto(intent=intent, campanha=campanha)
+            if entradas:
+                kb_contexto = formatar_contexto_para_prompt(entradas)
+                logger.debug("KB: injetando %d entradas no prompt", len(entradas))
+        except Exception as e:
+            logger.debug("KB: falha ao buscar contexto (não crítico): %s", e)
+
     user_message = f"""Pergunta do usuário: {pergunta}
 {contexto_str}
 Intenção detectada: {intent}
@@ -105,12 +119,15 @@ Dados retornados do banco:
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto."""
 
+    # Monta system prompt com memória KB (se disponível)
+    system = SYSTEM_PROMPT + ("\n\n" + kb_contexto if kb_contexto else "")
+
     try:
         model = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
         response = client.messages.create(
             model=model,
             max_tokens=1024,
-            system=SYSTEM_PROMPT,
+            system=system,
             messages=[{"role": "user", "content": user_message}],
         )
         return response.content[0].text

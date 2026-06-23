@@ -295,3 +295,45 @@ def notion_buscar(body: dict = None):
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "8001"))
     uvicorn.run("api.app:app", host="0.0.0.0", port=port, reload=False)
+
+
+# ── Endpoints Base de Conhecimento (Notion KB) ────────────────────────────────
+
+@app.get("/kb/entradas")
+def get_kb_entradas(
+    apenas_aprovadas: bool = Query(False, description="Filtrar apenas aprovadas"),
+    limit: int = Query(20, description="Máximo de entradas"),
+):
+    """Lista entradas da Base de Conhecimento no Notion."""
+    try:
+        from notion.knowledge_base import listar_entradas
+        return {"entradas": listar_entradas(apenas_aprovadas=apenas_aprovadas, limit=limit)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/kb/aprovar/{page_id}")
+def post_kb_aprovar(page_id: str, aprovado_por: str = Query("", description="Nome de quem aprovou")):
+    """Aprova manualmente uma entrada da Base de Conhecimento."""
+    try:
+        from notion.knowledge_base import aprovar_entrada
+        ok = aprovar_entrada(page_id, aprovado_por=aprovado_por)
+        return {"ok": ok, "page_id": page_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/kb/contexto")
+def get_kb_contexto(
+    intent: Optional[str] = Query(None, description="Intent para filtrar"),
+    campanha: Optional[str] = Query(None, description="Campanha para filtrar"),
+    limit: int = Query(5, description="Número máximo de entradas"),
+):
+    """Retorna o contexto KB que seria injetado no prompt do Claude."""
+    try:
+        from notion.knowledge_base import buscar_contexto, formatar_contexto_para_prompt
+        entradas  = buscar_contexto(intent=intent, campanha=campanha, limit=limit)
+        formatado = formatar_contexto_para_prompt(entradas)
+        return {"entradas": entradas, "prompt_preview": formatado}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
