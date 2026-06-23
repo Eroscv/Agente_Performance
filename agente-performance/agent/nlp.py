@@ -46,6 +46,11 @@ INTENTS_DISPONIVEIS = [
     "funil",
     "alertas_roas",
     "comparar",
+    "comparar_periodos",
+    "comparar_wow",
+    "comparar_mom",
+    "comparar_antes_depois",
+    "ranking_metrica",
     "periodo",
 ]
 
@@ -62,7 +67,12 @@ Sua tarefa: analisar a pergunta do usuário e retornar um JSON estruturado com o
 - evolucao_diaria: evolução dia a dia de métricas
 - funil: métricas de funil (impressões → cliques → carrinho → checkout → compra)
 - alertas_roas: campanhas com ROAS abaixo do esperado, com problemas
-- comparar: comparação lado a lado entre campanhas
+- comparar: comparação lado a lado entre campanhas específicas mencionadas
+- comparar_periodos: comparar dois períodos (ex: maio vs junho, semana passada vs essa semana, 2025 vs 2026)
+- comparar_wow: evolução semana a semana com variação % (week over week)
+- comparar_mom: evolução mês a mês com variação % (month over month)
+- comparar_antes_depois: comparar antes e depois de uma data específica
+- ranking_metrica: ranking de todas as campanhas por uma métrica (roas, cpc, ctr, cpm, compras, receita, investimento, frequencia, cliques, carrinho, checkout, custo_por_compra)
 - periodo: resumo consolidado de um período específico
 
 ## Regras
@@ -80,6 +90,9 @@ Sua tarefa: analisar a pergunta do usuário e retornar um JSON estruturado com o
    - "segundo trimestre" → 2026-04-01 a 2026-06-30
 4. Se não houver data mencionada, retorne null para ambas
 5. Para limit: extraia número se mencionado (ex: "top 5"), senão use 10
+6. Para comparar_periodos: extraia periodo_a_inicio, periodo_a_fim, periodo_b_inicio, periodo_b_fim
+7. Para ranking_metrica: campo "metrica" com nome canônico
+8. Para comparar_antes_depois: campo "data_virada" (YYYY-MM-DD)
 
 ## Formato de resposta (JSON puro, sem markdown)
 {
@@ -87,6 +100,12 @@ Sua tarefa: analisar a pergunta do usuário e retornar um JSON estruturado com o
   "campanha": "fragmento mencionado ou null",
   "data_inicio": "YYYY-MM-DD ou null",
   "data_fim": "YYYY-MM-DD ou null",
+  "periodo_a_inicio": "YYYY-MM-DD ou null",
+  "periodo_a_fim": "YYYY-MM-DD ou null",
+  "periodo_b_inicio": "YYYY-MM-DD ou null",
+  "periodo_b_fim": "YYYY-MM-DD ou null",
+  "data_virada": "YYYY-MM-DD ou null",
+  "metrica": "roas ou null",
   "limit": 10
 }"""
 

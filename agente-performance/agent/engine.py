@@ -23,6 +23,14 @@ from agent.nlp import interpretar, fuzzy_match_campaign
 from agent.context_store import get_history, build_context_summary
 from agent.cache import get as cache_get, set as cache_set
 from agent.conversation_log import registrar as log_registrar
+from agent.comparatives import (
+    comparar_periodos,
+    comparar_campanhas_detalhado,
+    comparar_semana_a_semana,
+    comparar_mes_a_mes,
+    comparar_antes_depois,
+    ranking_comparativo,
+)
 from db.connection import query as raw_query, get_conn
 
 logger = logging.getLogger(__name__)
@@ -168,6 +176,7 @@ def _executar_intent(
     data_inicio: Optional[str],
     data_fim:    Optional[str],
     limit:       int,
+    meta_extra:  dict = None,
 ) -> Any:
     """Executa uma única intenção e retorna os dados."""
 
@@ -205,11 +214,39 @@ def _executar_intent(
         return queries.alertas_roas_baixo()
 
     elif intent == "comparar":
-        campanhas_disponiveis = _get_available_campaigns()
-        encontradas = [c for c in campanhas_disponiveis if c.lower() in (campanha or "").lower()]
+        campanhas_todas = _get_available_campaigns()
+        encontradas = [c for c in campanhas_todas if c.lower() in (campanha or "").lower()]
         if not encontradas and campanha:
             encontradas = [campanha]
-        return queries.comparar_campanhas(encontradas, data_inicio, data_fim)
+        return comparar_campanhas_detalhado(encontradas, data_inicio, data_fim)
+
+    elif intent == "comparar_periodos":
+        nlp_raw     = meta_extra.get("nlp_raw", {}) if meta_extra else {}
+        ini_a = nlp_raw.get("periodo_a_inicio") or data_inicio
+        fim_a = nlp_raw.get("periodo_a_fim")    or data_fim
+        ini_b = nlp_raw.get("periodo_b_inicio")
+        fim_b = nlp_raw.get("periodo_b_fim")
+        if ini_a and fim_a and ini_b and fim_b:
+            return comparar_periodos(ini_a, fim_a, ini_b, fim_b, campanha)
+        return comparar_mes_a_mes(campanha)
+
+    elif intent == "comparar_wow":
+        return comparar_semana_a_semana(campanha)
+
+    elif intent == "comparar_mom":
+        return comparar_mes_a_mes(campanha)
+
+    elif intent == "comparar_antes_depois":
+        nlp_raw    = meta_extra.get("nlp_raw", {}) if meta_extra else {}
+        data_virada = nlp_raw.get("data_virada") or data_inicio
+        if data_virada:
+            return comparar_antes_depois(data_virada, campanha)
+        return queries.resumo_por_campanha(data_inicio, data_fim)
+
+    elif intent == "ranking_metrica":
+        nlp_raw = meta_extra.get("nlp_raw", {}) if meta_extra else {}
+        metrica = nlp_raw.get("metrica") or "roas"
+        return ranking_comparativo(metrica, data_inicio, data_fim)
 
     return queries.resumo_por_campanha(data_inicio, data_fim)
 
@@ -279,12 +316,12 @@ def consultar(
     }
 
     # 4. Executa queries
-    dados = _executar_intent(intents[0], campanha, data_inicio, data_fim, limit)
+    dados = _executar_intent(intents[0], campanha, data_inicio, data_fim, limit, meta)
 
     dados_extra = {}
     for intent_extra in intents[1:]:
         dados_extra[intent_extra] = _executar_intent(
-            intent_extra, campanha, data_inicio, data_fim, limit
+            intent_extra, campanha, data_inicio, data_fim, limit, meta
         )
 
     # 5. Verifica dados vazios e sugere alternativa
