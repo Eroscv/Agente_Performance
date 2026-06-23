@@ -54,15 +54,24 @@ def get_client() -> anthropic.Anthropic:
     return _client
 
 
-def gerar_resposta(pergunta: str, dados: Any, intent: str, meta: dict) -> str:
+def gerar_resposta(
+    pergunta:    str,
+    dados:       Any,
+    intent:      str,
+    meta:        dict,
+    dados_extra: dict = None,
+    contexto:    str  = "",
+) -> str:
     """
     Gera resposta conversacional com Claude a partir dos dados das queries.
 
     Args:
-        pergunta: Pergunta original do usuário
-        dados: Resultado da query (list[dict] ou dict)
-        intent: Intenção detectada pelo engine
-        meta: Metadados da consulta (datas, campanha, etc.)
+        pergunta:    Pergunta original do usuário
+        dados:       Resultado da query principal (list[dict] ou dict)
+        intent:      Intenção principal detectada
+        meta:        Metadados da consulta (datas, campanha, etc.)
+        dados_extra: Resultados de intenções adicionais (múltiplas intenções)
+        contexto:    Histórico da thread para perguntas de acompanhamento
 
     Returns:
         Texto formatado para Slack
@@ -70,16 +79,27 @@ def gerar_resposta(pergunta: str, dados: Any, intent: str, meta: dict) -> str:
     client = get_client()
 
     # Monta contexto dos dados
-    dados_str = _formatar_dados(dados, intent)
+    dados_str   = _formatar_dados(dados, intent)
     periodo_str = _formatar_periodo(meta)
 
-    user_message = f"""Pergunta do usuário: {pergunta}
+    # Dados extras de múltiplas intenções
+    extras_str = ""
+    if dados_extra:
+        partes = []
+        for intent_extra, dados_e in dados_extra.items():
+            partes.append(f"\n[Dados adicionais — {intent_extra}]:\n{_formatar_dados(dados_e, intent_extra)}")
+        extras_str = "".join(partes)
 
+    # Contexto de thread anterior
+    contexto_str = f"\n{contexto}\n" if contexto else ""
+
+    user_message = f"""Pergunta do usuário: {pergunta}
+{contexto_str}
 Intenção detectada: {intent}
 {periodo_str}
 
 Dados retornados do banco:
-{dados_str}
+{dados_str}{extras_str}
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto."""
 
