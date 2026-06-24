@@ -718,3 +718,164 @@ async def handle_reaction(event, client):
 
     except Exception as e:
         logger.debug("KB reaction handler erro (não crítico): %s", e)
+
+
+# ── Comandos auxiliares ────────────────────────────────────────────────────────
+
+@app.command("/status")
+async def handle_status(ack, respond):
+    """Status rápido do sistema — banco, cache, KB."""
+    await ack()
+    import sqlite3
+    from agent.cache import _cache  # type: ignore
+    from db.connection import DB_PATH
+
+    # Banco
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        row  = conn.execute("SELECT COUNT(*), MIN(data_inicio), MAX(data_fim) FROM campanhas").fetchone()
+        conn.close()
+        db_info = f"*{row[0]:,}* registros | {row[1]} → {row[2]}"
+    except Exception:
+        db_info = "⚠️ erro ao consultar"
+
+    # Cache
+    cache_size = len(_cache) if hasattr(_cache, '__len__') else "?"
+
+    # KB Notion
+    try:
+        from notion.knowledge_base import listar_entradas
+        kb = listar_entradas(limit=100)
+        aprovadas = sum(1 for e in kb if e["aprovado"])
+        kb_info = f"*{len(kb)}* entradas | *{aprovadas}* aprovadas"
+    except Exception:
+        kb_info = "⚠️ erro ao consultar"
+
+    texto = f"""\
+*⚙️ Status — Agente de Performance Source OF*
+
+• 🗄️ *Banco:* {db_info}
+• ⚡ *Cache:* {cache_size} entradas ativas
+• 🧠 *Base de Conhecimento:* {kb_info}
+• 🤖 *Modelo:* `{os.getenv('CLAUDE_MODEL', 'claude-haiku-4-5-20251001')}`
+• ✅ *Serviço:* online | porta 8001
+"""
+    await respond(text=texto, response_type="ephemeral")
+
+
+@app.command("/exemplos")
+async def handle_exemplos(ack, respond):
+    """Mostra exemplos práticos de perguntas em linguagem natural."""
+    await ack()
+    texto = """\
+*💡 Exemplos de perguntas — Agente de Performance Source OF*
+
+*📊 Resumos por período*
+• `resumo de junho`
+• `como foi a semana passada?`
+• `dados dos últimos 30 dias`
+• `resultado de maio vs junho`
+
+*🎯 Por campanha*
+• `como está a ABO esse mês?`
+• `performance da Advantage em junho`
+• `compare ABO vs Advantage`
+• `qual campanha teve melhor ROAS?`
+
+*🏆 Rankings*
+• `top 5 campanhas por ROAS`
+• `quais geraram mais compras em 2026?`
+• `ranking de eficiência das campanhas`
+
+*🔍 Funil & Conversão*
+• `mostre o funil geral`
+• `qual a taxa de conversão da ABO?`
+• `quantos carrinhos abandonados essa semana?`
+
+*🚨 Alertas*
+• `tem alguma campanha com ROAS ruim?`
+• `alguma campanha sem conversão nos últimos 7 dias?`
+
+*📁 Exportação*
+• `gera planilha Excel do mês`
+• `exportar no Notion`
+• `relatório de junho em PDF`
+
+*💬 Dica:* Use `/ajuda` para ver todos os slash commands disponíveis.
+"""
+    await respond(text=texto, response_type="ephemeral")
+
+
+@app.command("/metricas")
+async def handle_metricas(ack, respond):
+    """Lista todas as métricas disponíveis para consulta."""
+    await ack()
+    texto = """\
+*📐 Métricas disponíveis — Source OF Meta Ads*
+
+*💰 Investimento & Receita*
+• `investimento` — valor gasto (R$)
+• `receita` / `valor_compras` — receita gerada (R$)
+• `roas` — retorno sobre investimento (receita ÷ investimento)
+• `custo_por_compra` — CPO (R$ por compra)
+
+*🛒 Conversões*
+• `compras` — número de compras
+• `adicoes_carrinho` — adds ao carrinho
+• `checkout_iniciado` — checkouts iniciados
+• `taxa_conversao` — % de cliques → compra
+
+*👁️ Alcance & Visibilidade*
+• `impressoes` — impressões totais
+• `alcance` — pessoas únicas alcançadas
+• `frequencia` — média de vezes que a mesma pessoa viu (> 4 = fadiga)
+• `cpm` — custo por mil impressões (R$)
+
+*🖱️ Engajamento*
+• `cliques_link` — cliques no link
+• `ctr` — taxa de cliques (%)
+• `cpc` — custo por clique (R$)
+• `visualizacoes_pagina` — visualizações da landing page
+
+*📅 Filtros temporais*
+• `hoje` · `ontem` · `essa semana` · `semana passada`
+• `esse mês` · `mês passado` · `últimos 7/30/90 dias`
+• `em junho` · `em 2025` · `01/06/2026`
+"""
+    await respond(text=texto, response_type="ephemeral")
+
+
+@app.command("/kb")
+async def handle_kb(ack, respond):
+    """Lista as últimas entradas aprovadas na Base de Conhecimento."""
+    await ack()
+    try:
+        from notion.knowledge_base import listar_entradas
+        entradas = listar_entradas(apenas_aprovadas=False, limit=10)
+        if not entradas:
+            await respond(text="📚 Base de Conhecimento vazia. Dê 👍 em respostas que gostou para aprová-las!", response_type="ephemeral")
+            return
+
+        linhas = ["*🧠 Base de Conhecimento — últimas 10 entradas*\n"]
+        for e in entradas:
+            status = "✅" if e["aprovado"] else "⏳"
+            freq   = f"x{e['frequencia']}" if e["frequencia"] > 1 else ""
+            linhas.append(f"{status} *{e['intent']}* {freq} — _{e['pergunta'][:60]}_")
+
+        linhas.append(f"\n_Dê 👍 em qualquer resposta do bot para aprová-la na base de conhecimento._")
+        await respond(text="\n".join(linhas), response_type="ephemeral")
+    except Exception as e:
+        await respond(text=f"⚠️ Erro ao consultar KB: `{e}`", response_type="ephemeral")
+
+
+@app.command("/cache-limpar")
+async def handle_cache_limpar(ack, respond):
+    """Limpa o cache de consultas (força nova busca no banco)."""
+    await ack()
+    try:
+        from agent.cache import _cache
+        size = len(_cache)
+        _cache.clear()
+        await respond(text=f"🗑️ Cache limpo — {size} entradas removidas. Próximas consultas buscarão dados frescos do banco.", response_type="ephemeral")
+    except Exception as e:
+        await respond(text=f"⚠️ Erro: `{e}`", response_type="ephemeral")
