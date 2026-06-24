@@ -30,74 +30,57 @@ from slack.formatter import markdown_to_blocks, truncar_blocos
 
 AJUDA_TEXTO = """
 *⚙️ Agente de Performance Guará — Source OF*
-_Seu analista de mídia paga sempre disponível no Slack._
+
+Sou seu analista de mídia paga. Me pergunte qualquer coisa sobre as campanhas da Source OF no Meta Ads — ou use os atalhos abaixo.
 
 ──────────────────────────────────────────────────
-⚡ *SLASH COMMANDS — Atalhos rápidos*
+*💬 Como usar*
 
-📅 *Resumos de período*
-`/hoje` — resumo do dia atual
+Mencione `@agente` em qualquer canal ou mande uma DM:
+> _@agente como foi o mês de junho?_
+
+Ou use os slash commands direto:
+> `/hoje` · `/semana` · `/top` · `/alertas` · `/ajuda`
+
+──────────────────────────────────────────────────
+*🟢 10 Exemplos práticos*
+
+*1.* _Qual campanha teve melhor ROAS essa semana?_
+*2.* _Resumo completo de junho — investimento, receita e compras_
+*3.* _Como foi a ABO nos últimos 30 dias?_
+*4.* _Compare a Advantage vs ABO em maio_
+*5.* _Qual campanha está com ROAS abaixo de 1?_ *(alertas)*
+*6.* _Mostre o funil de conversão da ABO em junho_
+*7.* _Qual o custo por compra médio esse mês?_
+*8.* _Top 3 campanhas que geraram mais compras em 2026_
+*9.* _Como evoluiu o investimento da Advantage dia a dia em junho?_
+*10.* _Tem alguma campanha com alta frequência que pode estar saturando?_
+
+──────────────────────────────────────────────────
+*⚡ Slash Commands*
+
+`/hoje` — resumo do dia
 `/semana` — últimos 7 dias
-`/mes` — mês atual · `/mes junho` · `/mes 2026-05`
-
-🏆 *Rankings*
-`/top` — top 5 por ROAS · `/top 10` · `/top compras`
-
-🎯 *Campanhas*
-`/campanha ABO` — performance detalhada
-`/campanha` — lista todas as campanhas
-`/campanhas` — lista completa com investimento
-`/compare ABO vs Advantage` — compara 2 campanhas
-
-📈 *Análise*
-`/funil` — funil geral · `/funil ABO` — funil de campanha
-`/alertas` — ROAS ruim ou sem conversão
-
-📊 *Relatórios*
-`/relatorio` — Excel do mês atual
-`/relatorio pdf` · `/relatorio notion` · `/relatorio tudo`
-
-🔧 *Utilitários*
-`/status` — status do sistema (banco, cache, KB)
-`/metricas` — todas as métricas disponíveis
-`/exemplos` — exemplos de perguntas prontos
-`/kb` — base de conhecimento (respostas aprovadas)
-`/cache-limpar` — força atualização dos dados
+`/mes` — mês atual · `/mes junho` — mês específico
+`/top` — top 5 por ROAS · `/top compras` · `/top 10`
+`/campanha ABO` — detalhe de uma campanha
+`/campanhas` — lista todas as campanhas
+`/compare ABO vs Advantage` — comparação lado a lado
+`/funil` — funil de conversão · `/funil ABO` — de uma campanha
+`/alertas` — campanhas com problema de ROAS ou conversão
+`/relatorio` — Excel do mês · `/relatorio notion` · `/relatorio pdf`
+`/exemplos` — mais exemplos de perguntas
+`/metricas` — lista de todas as métricas disponíveis
+`/status` — status do sistema
 `/ajuda` — este menu
 
 ──────────────────────────────────────────────────
-💬 *LINGUAGEM NATURAL — Pergunte como preferir*
-Mencione `@agente` em qualquer canal ou mande uma DM.
+*📅 Períodos que entendo*
+`hoje` · `essa semana` · `semana passada` · `esse mês` · `mês passado`
+`últimos 7/30/90 dias` · `em junho` · `em 2025` · `black friday`
+`01/06/2026` · `segundo trimestre` · `janeiro a março`
 
-📅 *Por período*
-• _resumo de junho_ · _como foi a semana passada?_
-• _últimos 30 dias_ · _compare maio vs junho_
-• _o que aconteceu na black friday?_
-
-🎯 *Por campanha*
-• _como está a ABO esse mês?_
-• _tá valendo a pena a campanha do hidratante?_
-• _qual campanha teve melhor ROAS nos últimos 30 dias?_
-
-🔍 *Por métrica*
-• _qual o CPC médio da Advantage?_
-• _qual campanha tem maior frequência?_ _(risco de fadiga)_
-• _mostre a evolução do ROAS da ABO dia a dia_
-
-📤 *Exportação*
-• _gera planilha Excel do mês_ · _exportar no Notion_
-• _resumo de junho em PDF_
-
-──────────────────────────────────────────────────
-📅 *Períodos que entendo*
-`hoje` · `ontem` · `essa semana` · `semana passada`
-`esse mês` · `mês passado` · `últimos 7/30/90 dias`
-`em janeiro` · `em 2025` · `black friday` · `01/06/2026`
-
-💡 *Dica:* combine campanha + métrica + período:
-_"qual o ROAS e o funil da ABO em junho?"_
-
-👍 *Dê 👍 nas respostas que gostar — entram para a memória do agente!*
+*👍 Dê 👍 nas respostas que gostar — entram para a memória do agente!*
 """
 
 def _detectar_formato_export(text: str) -> tuple[str | None, str | None]:
