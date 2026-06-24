@@ -28,61 +28,77 @@ from agent.conversation_log import registrar as log_registrar
 from agent.cache import get as cache_get
 from slack.formatter import markdown_to_blocks, truncar_blocos
 
-AJUDA_TEXTO = """*⚙️ Agente de Performance Guará — Guia Rápido*
+AJUDA_TEXTO = """
+*⚙️ Agente de Performance Guará — Source OF*
+_Seu analista de mídia paga sempre disponível no Slack._
 
-*⚡ Atalhos (slash commands)*
+──────────────────────────────────────────────────
+⚡ *SLASH COMMANDS — Atalhos rápidos*
 
-> `/hoje` — resumo do dia atual
-> `/semana` — resumo dos últimos 7 dias
-> `/mes` — mês atual · `/mes junho` — mês específico
-> `/top` — top 5 campanhas por ROAS · `/top compras` · `/top 10`
-> `/campanha ABO` — performance da campanha · `/campanha` (lista todas)
-> `/campanhas` — lista completa de campanhas no banco
-> `/alertas` — campanhas com ROAS ruim ou sem conversão
-> `/funil` — funil geral · `/funil ABO` — funil de uma campanha
-> `/compare ABO vs Advantage` — compara 2 campanhas lado a lado
-> `/relatorio` — exporta Excel do mês · `/relatorio pdf` · `/relatorio notion` · `/relatorio tudo`
-> `/ajuda` — este menu
+📅 *Resumos de período*
+`/hoje` — resumo do dia atual
+`/semana` — últimos 7 dias
+`/mes` — mês atual · `/mes junho` · `/mes 2026-05`
 
-*💬 Perguntas em linguagem natural*
-Me mencione com @ ou mande uma DM:
+🏆 *Rankings*
+`/top` — top 5 por ROAS · `/top 10` · `/top compras`
 
-*📅 Períodos que entendo*
-> `essa semana` · `semana passada` · `esse mês` · `mês passado`
-> `últimos 7 dias` · `últimos 30 dias` · `últimos 90 dias`
-> `em maio` · `em novembro` · `em 2025` · `black friday`
-> `ontem` · `hoje` · `segundo trimestre` · `janeiro a março`
-> Datas diretas: `01/05/2026` ou `2026-05-01`
+🎯 *Campanhas*
+`/campanha ABO` — performance detalhada
+`/campanha` — lista todas as campanhas
+`/campanhas` — lista completa com investimento
+`/compare ABO vs Advantage` — compara 2 campanhas
 
-*💬 Exemplos de perguntas*
+📈 *Análise*
+`/funil` — funil geral · `/funil ABO` — funil de campanha
+`/alertas` — ROAS ruim ou sem conversão
 
-*1. Ranking de eficiência*
-> _qual campanha teve melhor ROAS nos últimos 30 dias?_
-> _top 5 campanhas mais eficientes esse mês_
+📊 *Relatórios*
+`/relatorio` — Excel do mês atual
+`/relatorio pdf` · `/relatorio notion` · `/relatorio tudo`
 
-*2. Performance de uma campanha*
-> _como foi a ABO em maio?_
-> _tá valendo a pena a campanha do hidratante?_
-> _mostre o desempenho da Advantage de junho_
+🔧 *Utilitários*
+`/status` — status do sistema (banco, cache, KB)
+`/metricas` — todas as métricas disponíveis
+`/exemplos` — exemplos de perguntas prontos
+`/kb` — base de conhecimento (respostas aprovadas)
+`/cache-limpar` — força atualização dos dados
+`/ajuda` — este menu
 
-*3. Vendas e receita*
-> _qual campanha gerou mais vendas na black friday?_
-> _quanto faturamos com a ABO nos últimos 7 dias?_
-> _top 3 campanhas por compras esse mês_
+──────────────────────────────────────────────────
+💬 *LINGUAGEM NATURAL — Pergunte como preferir*
+Mencione `@agente` em qualquer canal ou mande uma DM.
 
-*4. Funil de conversão*
-> _mostre o funil da campanha do hidratante_
-> _qual a taxa de conversão geral em maio?_
+📅 *Por período*
+• _resumo de junho_ · _como foi a semana passada?_
+• _últimos 30 dias_ · _compare maio vs junho_
+• _o que aconteceu na black friday?_
 
-*5. Comparação e histórico*
-> _compare o ROAS de novembro vs maio_
-> _como evoluiu o gasto da ABO dia a dia em junho?_
-> _resuma tudo que aconteceu no segundo trimestre_
+🎯 *Por campanha*
+• _como está a ABO esse mês?_
+• _tá valendo a pena a campanha do hidratante?_
+• _qual campanha teve melhor ROAS nos últimos 30 dias?_
 
-*💡 Dica:* combine campanha + métrica + período:
-> _qual o gasto e retorno da ABO essa semana?_
+🔍 *Por métrica*
+• _qual o CPC médio da Advantage?_
+• _qual campanha tem maior frequência?_ _(risco de fadiga)_
+• _mostre a evolução do ROAS da ABO dia a dia_
 
-Qualquer dúvida é só perguntar! 🚀"""
+📤 *Exportação*
+• _gera planilha Excel do mês_ · _exportar no Notion_
+• _resumo de junho em PDF_
+
+──────────────────────────────────────────────────
+📅 *Períodos que entendo*
+`hoje` · `ontem` · `essa semana` · `semana passada`
+`esse mês` · `mês passado` · `últimos 7/30/90 dias`
+`em janeiro` · `em 2025` · `black friday` · `01/06/2026`
+
+💡 *Dica:* combine campanha + métrica + período:
+_"qual o ROAS e o funil da ABO em junho?"_
+
+👍 *Dê 👍 nas respostas que gostar — entram para a memória do agente!*
+"""
 
 def _detectar_formato_export(text: str) -> tuple[str | None, str | None]:
     """
