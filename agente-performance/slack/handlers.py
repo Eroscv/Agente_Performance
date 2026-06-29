@@ -503,42 +503,110 @@ async def handle_compare(ack, respond, command, client):
 
 @app.command("/relatorio")
 async def handle_relatorio(ack, respond, command, client):
+    """
+    /relatorio                  — relatório semanal padrão (semana passada) no Notion
+    /relatorio semana           — semana passada
+    /relatorio mes              — mês atual
+    /relatorio hoje             — dia de hoje
+    /relatorio 2026-06-01 2026-06-30  — período customizado
+    """
     await ack()
     channel   = command["channel_id"]
     user_id   = command["user_id"]
-    thread_ts = str(__import__("time").time())
-    arg = command.get("text", "").strip().lower()
-
-    # Detecta formato do argumento
-    if "tudo" in arg or ("excel" in arg and "notion" in arg):
-        formato = "excel+notion"
-    elif "notion" in arg:
-        formato = "notion"
-    elif "pdf" in arg:
-        formato = "pdf"
-    else:
-        formato = "excel"  # padrão
-
-    # Detecta cliente Notion se mencionado
-    _, cliente_notion = _detectar_formato_export(command.get("text", ""))
-
-    descricao = {
-        "excel":        "planilha Excel (.xlsx)",
-        "pdf":          "PDF",
-        "notion":       "página no Notion",
-        "excel+notion": "Excel + Notion",
-    }.get(formato, formato)
+    arg       = command.get("text", "").strip().lower()
 
     await respond(
-        text=f"⏳ Gerando relatório ({descricao}) do mês atual...",
+        text="⏳ Gerando relatório e publicando no Notion...",
         response_type="ephemeral",
     )
-    await _processar_e_responder(
-        text=f"resumo geral desse mês em {formato}",
-        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
-        formato_export=formato,
-        cliente_notion=cliente_notion,
-    )
+
+    try:
+        import asyncio
+        from datetime import date, timedelta
+        from relatorio.builder import gerar_relatorio_semanal
+
+        # Resolve período
+        hoje = date.today()
+        data_inicio = data_fim = None
+
+        partes = arg.split()
+        if len(partes) == 2:
+            # Período customizado: 2026-06-01 2026-06-30
+            try:
+                data_inicio = date.fromisoformat(partes[0])
+                data_fim    = date.fromisoformat(partes[1])
+            except ValueError:
+                pass
+
+        if not data_inicio:
+            if "mes" in arg or "mês" in arg:
+                data_inicio = hoje.replace(day=1)
+                data_fim    = hoje
+            elif "hoje" in arg:
+                data_inicio = data_fim = hoje
+            elif "ontem" in arg:
+                data_inicio = data_fim = hoje - timedelta(days=1)
+            else:
+                # padrão: semana passada
+                seg = hoje - timedelta(days=hoje.weekday() + 7)
+                data_inicio = seg
+                data_fim    = seg + timedelta(days=6)
+
+        periodo_str = f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}"
+
+        # Executa em thread separada para não bloquear o event loop
+        loop      = asyncio.get_event_loop()
+        resultado = await loop.run_in_executor(
+            None,
+            lambda: gerar_relatorio_semanal(
+                cliente="source_of",
+                data_inicio=data_inicio,
+                data_fim=data_fim,
+                publicar=True,
+            )
+        )
+
+        if "erro" in resultado:
+            await client.chat_postMessage(
+                channel=channel,
+                text=f"❌ Erro ao gerar relatório: {resultado['erro']}",
+            )
+            return
+
+        r   = resultado.get("resumo", {})
+        url = resultado.get("url") or f"https://notion.so/{resultado.get('page_id','').replace('-','')}"
+
+        def _brl(v):
+            if v is None: return "—"
+            return f"R$ {float(v):,.2f}".replace(",","X").replace(".",",").replace("X",".")
+
+        alertas = resultado.get("alertas", [])
+        alerta_txt = "\n".join(f"  {a}" for a in alertas)
+
+        roas_str = f"{r['roas']:.2f}x" if r.get('roas') else '—'
+        ctr_str  = f"{r['ctr']:.2f}%" if r.get('ctr') else '—'
+
+        msg = (
+            f"✅ *Relatório publicado no Notion!*\n\n"
+            f"📅 *Período:* {periodo_str}\n"
+            f"📊 *Campanhas:* {resultado.get('num_campanhas')}\n"
+            f"💰 *Investimento:* {_brl(r.get('total_invest'))}  (+imposto: {_brl(r.get('invest_imp'))})\n"
+            f"📈 *ROAS:* {roas_str}\n"
+            f"🛒 *Compras:* {r.get('total_compras', '—')}\n"
+            f"💵 *CPA:* {_brl(r.get('cpa'))}\n"
+            f"🎯 *CTR:* {ctr_str}\n\n"
+            f"🚨 *Alertas:*\n{alerta_txt}\n\n"
+            f"📎 <{url}|Abrir relatório no Notion>"
+        )
+
+        await client.chat_postMessage(channel=channel, text=msg, mrkdwn=True)
+
+    except Exception as e:
+        logger.exception("Erro no /relatorio: %s", e)
+        await client.chat_postMessage(
+            channel=channel,
+            text=f"⚠️ Erro ao gerar relatório: `{e}`",
+        )
 
 
 # ── /campanhas — lista todas as campanhas ─────────────────────────────────────
