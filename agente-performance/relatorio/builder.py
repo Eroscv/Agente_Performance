@@ -27,7 +27,7 @@ from relatorio.regras import (
     calcular_pct_budget,
 )
 from relatorio.meta import tabela_principal, alocacao_budget, top_ads
-from notion.relatorio import publicar_relatorio_campanha
+from notion.historico import criar_relatorio_no_historico
 
 logger = logging.getLogger(__name__)
 
@@ -419,12 +419,17 @@ def gerar_relatorio_semanal(
             "blocos": blocos,
         }
 
-    resultado = publicar_relatorio_campanha(
-        cliente_key=cliente,
+    # Detecta tipo (semanal vs mensal) pelo delta de dias
+    delta = (data_fim - data_inicio).days
+    tipo  = "mensal" if delta >= 25 else "semanal"
+
+    resultado = criar_relatorio_no_historico(
         titulo=titulo,
-        periodo_str=periodo_str,
-        resumo=resumo,
         blocos=blocos,
+        periodo_str=periodo_str,
+        tipo=tipo,
+        data_ref=data_fim,
+        cliente_key=cliente,
     )
 
     return {
