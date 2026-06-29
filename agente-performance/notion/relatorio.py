@@ -442,3 +442,79 @@ def _criar_pagina_standalone(titulo: str) -> dict:
         if db_id:
             return criar_pagina(db_id, {"Título": prop_titulo(titulo)})
     raise RuntimeError("Não foi possível encontrar o database Source OF no Notion.")
+
+
+
+# ── Wrapper para o builder.py ─────────────────────────────────────────────────
+
+def publicar_relatorio_campanha(
+    cliente_key: str,
+    titulo: str,
+    periodo_str: str,
+    resumo: dict,
+    blocos: list[dict],
+) -> dict:
+    """
+    Wrapper usado pelo builder.py para publicar o relatório semanal.
+
+    Recebe os blocos já montados e publica diretamente no Notion.
+
+    Returns:
+        dict com page_id e url
+    """
+    from notion.client import DATABASES, criar_pagina, adicionar_blocos, query_database, prop_titulo, prop_data, prop_numero
+    from datetime import date as _date
+
+    db_info = DATABASES.get(cliente_key, {})
+    db_id   = db_info.get("database_id")
+
+    # Resolve database_id dinamicamente se não tiver
+    if not db_id and db_info.get("data_source_id"):
+        pages = query_database(db_info["data_source_id"], limit=1)
+        if pages:
+            parent = pages[0].get("parent", {})
+            db_id  = parent.get("database_id")
+            db_info["database_id"] = db_id
+
+    if not db_id:
+        raise ValueError(f"Não foi possível obter database_id para '{cliente_key}'. Verifique a integração Notion.")
+
+    # Extrai data do período para propriedade Data
+    partes_periodo = periodo_str.split("→")
+    data_inicio_str = None
+    data_fim_str    = None
+    if len(partes_periodo) == 2:
+        def _parse_date(s: str):
+            s = s.strip()
+            try:
+                d, m, a = s.split("/")
+                return f"{a}-{m}-{d}"
+            except Exception:
+                return None
+        data_inicio_str = _parse_date(partes_periodo[0])
+        data_fim_str    = _parse_date(partes_periodo[1])
+
+    properties = {"Título": prop_titulo(titulo)}
+    if data_inicio_str:
+        properties["Data"] = prop_data(data_inicio_str, data_fim_str)
+    invest = resumo.get("total_invest")
+    if invest:
+        properties["Investimento"] = prop_numero(round(float(invest), 2))
+    roas = resumo.get("roas")
+    if roas:
+        properties["ROAS"] = prop_numero(round(float(roas), 2))
+    compras = resumo.get("total_compras")
+    if compras:
+        properties["Conversões"] = prop_numero(int(compras))
+
+    page    = criar_pagina(db_id, properties)
+    page_id = page["id"]
+    url     = page.get("url", f"https://notion.so/{page_id.replace('-', '')}")
+
+    # Publica blocos em lotes de 95 (limite da API Notion)
+    LOTE = 95
+    for i in range(0, len(blocos), LOTE):
+        adicionar_blocos(page_id, blocos[i:i + LOTE])
+
+    logger.info("[Notion] Relatório publicado: %s → %s", titulo, url)
+    return {"page_id": page_id, "url": url}
