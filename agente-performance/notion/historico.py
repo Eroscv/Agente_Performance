@@ -37,6 +37,8 @@ from notion.client import (
     adicionar_blocos,
 )
 
+import requests
+
 logger = logging.getLogger(__name__)
 
 # Arquivo local que persiste os IDs das páginas já criadas
@@ -192,59 +194,164 @@ def _obter_ou_criar_pagina_ano(pagina_mae_id: str, ano: int) -> str:
     return pid
 
 
+# ── Cache por período ───────────────────────────────────────────────────────
+
+def _cache_key_relatorio(cliente_key: str, tipo: str, data_inicio: str, data_fim: str) -> str:
+    """Gera chave de cache única por cliente + tipo + período."""
+    return f"relatorio_{cliente_key}_{tipo}_{data_inicio}_{data_fim}"
+
+
+def _buscar_relatorio_em_cache(
+    cliente_key: str,
+    tipo: str,
+    data_inicio: str,
+    data_fim: str,
+) -> str | None:
+    """Retorna page_id se já existe um relatório para esse período no cache."""
+    cache = _load_cache()
+    key   = _cache_key_relatorio(cliente_key, tipo, data_inicio, data_fim)
+    pid   = cache.get(key)
+    if not pid:
+        return None
+    # Valida que a página ainda existe no Notion
+    try:
+        _get(f"/pages/{pid}")
+        return pid
+    except Exception:
+        logger.info("Relatório em cache não existe mais no Notion: %s", pid)
+        cache.pop(key, None)
+        _save_cache(cache)
+        return None
+
+
+def _salvar_relatorio_em_cache(
+    cliente_key: str,
+    tipo: str,
+    data_inicio: str,
+    data_fim: str,
+    page_id: str,
+):
+    """Salva o page_id do relatório no cache local."""
+    cache = _load_cache()
+    key   = _cache_key_relatorio(cliente_key, tipo, data_inicio, data_fim)
+    cache[key] = page_id
+    _save_cache(cache)
+
+
+# ── Limpeza de blocos de uma página ──────────────────────────────────────────
+
+def _limpar_blocos_pagina(page_id: str):
+    """
+    Remove todos os blocos de uma página existente.
+    Usa DELETE /blocks/{block_id} para cada bloco filho.
+    Necessário para reutilizar a página com conteúdo atualizado.
+    """
+    from notion.client import NOTION_API_KEY, NOTION_VERSION
+    BASE_URL = "https://api.notion.com/v1"
+    headers  = {
+        "Authorization": f"Bearer {NOTION_API_KEY}",
+        "Notion-Version": NOTION_VERSION,
+        "Content-Type":   "application/json",
+    }
+
+    deletados = 0
+    cursor    = None
+
+    while True:
+        url = f"{BASE_URL}/blocks/{page_id}/children?page_size=100"
+        if cursor:
+            url += f"&start_cursor={cursor}"
+
+        resp   = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        data   = resp.json()
+        blocos = data.get("results", [])
+
+        for bloco in blocos:
+            bid = bloco["id"]
+            r   = requests.delete(f"{BASE_URL}/blocks/{bid}", headers=headers, timeout=10)
+            if r.status_code == 200:
+                deletados += 1
+            else:
+                logger.warning("Falha ao deletar bloco %s: %s", bid, r.status_code)
+
+        if not data.get("has_more"):
+            break
+        cursor = data.get("next_cursor")
+
+    logger.info("[Cache] %d blocos removidos da página %s", deletados, page_id)
+
+
 # ── Função principal ──────────────────────────────────────────────────────────
 
 def criar_relatorio_no_historico(
     titulo: str,
     blocos: list[dict],
     periodo_str: str,
-    tipo: str = "semanal",       # "semanal" | "mensal"
+    tipo: str = "semanal",
     data_ref: date = None,
+    data_inicio: date = None,
+    data_fim: date = None,
     cliente_key: str = "source_of",
 ) -> dict:
     """
-    Cria o relatório como subpágina dentro do histórico organizado por ano.
+    Cria (ou atualiza) o relatório como subpágina dentro do histórico.
 
     Estrutura:
       📁 Histórico de Relatórios — Source OF
         └── 📅 2026
-              └── 📊 [titulo]
+              └── 📊 [titulo]  ← reutilizado se mesmo período
 
-    Args:
-        titulo:      título da página do relatório
-        blocos:      blocos de conteúdo Notion já montados
-        periodo_str: string de período para exibição (ex: "22/06/2026 → 28/06/2026")
-        tipo:        "semanal" ou "mensal"
-        data_ref:    data de referência para ano (default: hoje)
-        cliente_key: chave do cliente Notion
+    Comportamento de cache:
+      - Se já existe um relatório para esse período:
+          limpa os blocos antigos e reescreve com dados novos
+      - Se não existe: cria página nova e salva ID no cache
 
     Returns:
-        dict com page_id e url
+        dict com page_id, url e cache_hit (bool)
     """
     if data_ref is None:
-        data_ref = date.today()
+        data_ref = data_fim or date.today()
 
     ano = data_ref.year
 
-    # 1. Garante página-mãe
-    pagina_mae_id = _obter_ou_criar_pagina_mae(cliente_key)
+    # Chaves de período para o cache
+    di_str = data_inicio.isoformat() if data_inicio else ""
+    df_str = data_fim.isoformat()    if data_fim    else ""
 
-    # 2. Garante página do ano
-    pagina_ano_id = _obter_ou_criar_pagina_ano(pagina_mae_id, ano)
+    # 1. Verifica cache: já existe relatório para esse período?
+    pid_existente = _buscar_relatorio_em_cache(cliente_key, tipo, di_str, df_str)
+    cache_hit     = pid_existente is not None
 
-    # 3. Cria o relatório como filho do ano
-    emoji = "📊" if tipo == "semanal" else "📆"
-    page  = _criar_subpagina(pagina_ano_id, titulo, emoji=emoji)
-    pid   = page["id"]
-    url   = page.get("url", f"https://notion.so/{pid.replace('-', '')}")
+    if cache_hit:
+        logger.info("[Cache] Relatório já existe para %s %s→%s — atualizando", tipo, di_str, df_str)
+        pid = pid_existente
 
-    # 4. Adiciona os blocos em lotes de 95
+        # Limpa conteúdo antigo
+        _limpar_blocos_pagina(pid)
+
+        url = f"https://notion.so/{pid.replace('-', '')}"
+
+    else:
+        # 2. Garante página-mãe e página do ano
+        pagina_mae_id = _obter_ou_criar_pagina_mae(cliente_key)
+        pagina_ano_id = _obter_ou_criar_pagina_ano(pagina_mae_id, ano)
+
+        # 3. Cria subpágina nova
+        emoji = "📊" if tipo == "semanal" else "📆"
+        page  = _criar_subpagina(pagina_ano_id, titulo, emoji=emoji)
+        pid   = page["id"]
+        url   = page.get("url", f"https://notion.so/{pid.replace('-', '')}")
+
+        # Salva no cache para próximas execuções
+        _salvar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, pid)
+
+    # 4. Escreve blocos (sempre — seja página nova ou reutilizada)
     LOTE = 95
     for i in range(0, len(blocos), LOTE):
         adicionar_blocos(pid, blocos[i:i + LOTE])
 
-    logger.info(
-        "[Histórico] Relatório %s criado em 📅 %d → %s",
-        tipo, ano, url,
-    )
-    return {"page_id": pid, "url": url}
+    acao = "atualizado" if cache_hit else "criado"
+    logger.info("[Histórico] Relatório %s %s em 📅 %d → %s", tipo, acao, ano, url)
+
+    return {"page_id": pid, "url": url, "cache_hit": cache_hit}

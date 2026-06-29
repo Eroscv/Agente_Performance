@@ -429,6 +429,8 @@ def gerar_relatorio_semanal(
         periodo_str=periodo_str,
         tipo=tipo,
         data_ref=data_fim,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
         cliente_key=cliente,
     )
 
