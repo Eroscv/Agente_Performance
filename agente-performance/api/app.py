@@ -100,13 +100,27 @@ def post_consulta(req: ConsultaRequest):
 @app.post("/sql")
 def post_sql(req: SqlRequest):
     """Executa SQL livre (apenas SELECT)."""
+    import sqlite3 as _sqlite3
     try:
         return consultar_sql(req.sql)
     except ValueError as e:
+        # SELECT não permitido / SQL bloqueado
         raise HTTPException(status_code=400, detail=str(e))
+    except _sqlite3.OperationalError as e:
+        # Erro de sintaxe SQL ou tabela inexistente
+        raise HTTPException(
+            status_code=400,
+            detail=f"Erro de SQL: {e}. Verifique a sintaxe e os nomes das colunas.",
+        )
+    except _sqlite3.DatabaseError as e:
+        # Outros erros do banco (corrupção, lock, etc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro no banco de dados: {e}",
+        )
     except Exception as e:
-        logger.exception("Erro em /sql")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.exception("Erro inesperado em /sql")
+        raise HTTPException(status_code=500, detail=f"Erro inesperado: {e}")
 
 
 @app.get("/resumo")

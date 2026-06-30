@@ -105,7 +105,10 @@ def _resumo_geral(campanhas: list[dict]) -> dict:
         roas = round(sum(r * w for r, w in roas_vals) / sum(w for _, w in roas_vals), 4)
     else:
         roas = None
-    cpa           = calcular_cpa(total_invest, total_compras)
+    # Guard: total_compras pode ser 0 quando nenhuma campanha do período tem compras
+    if total_compras == 0:
+        logger.warning("[_resumo_geral] total_compras=0 no período — CPA será None")
+    cpa       = calcular_cpa(total_invest, total_compras) if total_compras else None
     ctr           = (total_cliques / total_impressoes * 100) if total_impressoes else None
     cpc_medio     = (total_invest / total_cliques) if total_cliques else None
     cpm_medio     = (total_invest / total_impressoes * 1000) if total_impressoes else None

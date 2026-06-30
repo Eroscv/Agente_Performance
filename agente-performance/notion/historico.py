@@ -238,7 +238,29 @@ def _salvar_relatorio_em_cache(
     _save_cache(cache)
 
 
-# ── Limpeza de blocos de uma página ──────────────────────────────────────────
+def _buscar_relatorio_existente_na_api(
+    pagina_ano_id: str,
+    titulo: str,
+) -> str | None:
+    """
+    Busca na API do Notion se já existe uma subpágina com esse título
+    dentro da página do ano.
+
+    Complementa o cache local: cobre o caso onde o cache foi apagado
+    mas a página ainda existe no Notion.
+    """
+    try:
+        result = _get(f"/blocks/{pagina_ano_id}/children?page_size=100")
+        for bloco in result.get("results", []):
+            if bloco.get("type") == "child_page":
+                t = bloco.get("child_page", {}).get("title", "")
+                if t.strip() == titulo.strip():
+                    logger.debug("[Histórico] Página encontrada na API: '%s' → %s", titulo, bloco["id"])
+                    return bloco["id"]
+    except Exception as e:
+        logger.warning("[Histórico] Falha ao buscar páginas existentes na API: %s", e)
+    return None
+
 
 def _limpar_blocos_pagina(page_id: str):
     """
@@ -319,17 +341,14 @@ def criar_relatorio_no_historico(
     di_str = data_inicio.isoformat() if data_inicio else ""
     df_str = data_fim.isoformat()    if data_fim    else ""
 
-    # 1. Verifica cache: já existe relatório para esse período?
+    # 1. Verifica cache local: já existe relatório para esse período?
     pid_existente = _buscar_relatorio_em_cache(cliente_key, tipo, di_str, df_str)
     cache_hit     = pid_existente is not None
 
     if cache_hit:
         logger.info("[Cache] Relatório já existe para %s %s→%s — atualizando", tipo, di_str, df_str)
         pid = pid_existente
-
-        # Limpa conteúdo antigo
         _limpar_blocos_pagina(pid)
-
         url = f"https://notion.so/{pid.replace('-', '')}"
 
     else:
@@ -337,14 +356,22 @@ def criar_relatorio_no_historico(
         pagina_mae_id = _obter_ou_criar_pagina_mae(cliente_key)
         pagina_ano_id = _obter_ou_criar_pagina_ano(pagina_mae_id, ano)
 
-        # 3. Cria subpágina nova
+        # 3. Verifica na API do Notion (cobre caso de cache apagado)
         emoji = "📊" if tipo == "semanal" else "📆"
-        page  = _criar_subpagina(pagina_ano_id, titulo, emoji=emoji)
-        pid   = page["id"]
-        url   = page.get("url", f"https://notion.so/{pid.replace('-', '')}")
-
-        # Salva no cache para próximas execuções
-        _salvar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, pid)
+        pid_api = _buscar_relatorio_existente_na_api(pagina_ano_id, titulo)
+        if pid_api:
+            logger.info("[Histórico] Página encontrada na API (cache miss) — reaproveitando: %s", pid_api)
+            pid       = pid_api
+            cache_hit = True
+            _salvar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, pid)
+            _limpar_blocos_pagina(pid)
+            url = f"https://notion.so/{pid.replace('-', '')}"
+        else:
+            # 4. Cria subpágina nova
+            page = _criar_subpagina(pagina_ano_id, titulo, emoji=emoji)
+            pid  = page["id"]
+            url  = page.get("url", f"https://notion.so/{pid.replace('-', '')}")
+            _salvar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, pid)
 
     # 4. Escreve blocos (sempre — seja página nova ou reutilizada)
     LOTE = 95

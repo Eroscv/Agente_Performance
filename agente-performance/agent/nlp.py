@@ -223,21 +223,42 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
 
     except (json.JSONDecodeError, anthropic.APIError, Exception) as e:
         logger.warning("NLP Claude falhou (%s), usando fallback regex", e)
-        return _fallback_regex(pergunta, campanhas_disponiveis)
+        return _fallback_regex(pergunta, campanhas_disponiveis, contexto=contexto)
 
 
-def _fallback_regex(pergunta: str, campanhas: list[str]) -> dict:
-    """Fallback para regex simples se o Claude NLP falhar."""
+def _fallback_regex(pergunta: str, campanhas: list[str], contexto: str = "") -> dict:
+    """
+    Fallback para regex simples se o Claude NLP falhar.
+
+    Quando há contexto de thread, tenta extrair datas do histórico
+    para perguntas de acompanhamento (ex: "e em maio?") que dependem
+    do período mencionado anteriormente.
+    """
     from agent.engine import _detect_intent, _extract_dates, _extract_limit, _extract_campaign
-    intent     = _detect_intent(pergunta)
+    intent       = _detect_intent(pergunta)
     d_ini, d_fim = _extract_dates(pergunta)
-    campanha   = _extract_campaign(pergunta, campanhas)
-    limit      = _extract_limit(pergunta)
+    campanha     = _extract_campaign(pergunta, campanhas)
+    limit        = _extract_limit(pergunta)
+
+    # Se não encontrou datas na pergunta atual mas há contexto de thread,
+    # tenta extrair datas do histórico como fallback
+    if (d_ini is None or d_fim is None) and contexto:
+        ctx_ini, ctx_fim = _extract_dates(contexto)
+        if d_ini is None:
+            d_ini = ctx_ini
+        if d_fim is None:
+            d_fim = ctx_fim
+        if ctx_ini or ctx_fim:
+            logger.debug(
+                "[fallback_regex] Datas herdadas do contexto de thread: %s → %s",
+                d_ini, d_fim,
+            )
+
     return {
         "intents":     [intent],
         "campanha":    campanha,
         "data_inicio": d_ini,
         "data_fim":    d_fim,
         "limit":       limit,
-        "raw":         {"fallback": True},
+        "raw":         {"fallback": True, "contexto_usado": bool(contexto)},
     }
