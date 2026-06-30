@@ -20,7 +20,6 @@ from typing import Optional
 from relatorio.regras import (
     FATOR_IMPOSTO,
     spend_com_imposto,
-    calcular_roas,
     calcular_cpa,
     calcular_cac,
     calcular_ticket_medio,
@@ -69,7 +68,8 @@ def _buscar_campanhas(
             SUM(checkout_iniciado)     AS checkout_iniciado,
             SUM(alcance)               AS alcance,
             AVG(ctr_link)              AS ctr_link,
-            AVG(frequencia)            AS frequencia
+            AVG(frequencia)            AS frequencia,
+            AVG(roas_compras)          AS roas_compras
         FROM campanhas
         WHERE data_inicio >= ?
           AND data_fim    <= ?
@@ -98,7 +98,13 @@ def _resumo_geral(campanhas: list[dict]) -> dict:
     total_alcance  = sum(int(c.get("alcance") or 0) for c in campanhas)
 
     invest_imp    = spend_com_imposto(total_invest)
-    roas          = calcular_roas(total_receita, total_invest)
+    # ROAS: média ponderada pelo investimento dos roas_compras do banco — sem recalcular
+    roas_vals = [(float(c.get("roas_compras") or 0), float(c.get("investimento") or 0))
+                 for c in campanhas if c.get("roas_compras") is not None]
+    if roas_vals and total_invest > 0:
+        roas = round(sum(r * w for r, w in roas_vals) / sum(w for _, w in roas_vals), 4)
+    else:
+        roas = None
     cpa           = calcular_cpa(total_invest, total_compras)
     ctr           = (total_cliques / total_impressoes * 100) if total_impressoes else None
     cpc_medio     = (total_invest / total_cliques) if total_cliques else None
@@ -245,7 +251,7 @@ def _blocos_tabela_campanhas(rows: list[dict]) -> list[dict]:
         invest = float(c.get("investimento") or 0)
         compras = int(c.get("compras") or 0)
         invest_imp = spend_com_imposto(invest)
-        roas = calcular_roas(float(c.get("valor_compras") or 0), invest)
+        roas = c.get("roas_compras")   # direto do banco — sem recalcular
         cpa  = calcular_cpa(invest, compras)
         cpc  = c.get("cpc_link")
         ctr  = c.get("ctr_link")
@@ -288,10 +294,9 @@ def _blocos_top_campanhas(campanhas: list[dict]) -> list[dict]:
     rankeadas = []
     for c in campanhas:
         invest  = float(c.get("investimento") or 0)
-        receita = float(c.get("valor_compras") or 0)
-        roas    = calcular_roas(receita, invest)
+        roas    = c.get("roas_compras")   # direto do banco — sem recalcular
         if roas:
-            rankeadas.append((c.get("campanha", ""), roas, invest))
+            rankeadas.append((c.get("campanha", ""), float(roas), invest))
 
     rankeadas.sort(key=lambda x: x[1], reverse=True)
 

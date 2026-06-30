@@ -25,7 +25,6 @@ from typing import Any
 from relatorio.regras import (
     FATOR_IMPOSTO,
     spend_com_imposto,
-    calcular_roas,
     calcular_cac,
     calcular_cpa,
     calcular_ticket_medio,
@@ -96,7 +95,7 @@ def tabela_principal(
         receita    = float(shop.get("receita") or 0)
 
         invest_imp = spend_com_imposto(spend)
-        roas       = calcular_roas(receita, spend)
+        roas       = c.get("roas_compras")          # direto do banco — sem recalcular
         ticket     = calcular_ticket_medio(receita, transacoes)
         cpa        = calcular_cpa(spend, compras)
 
@@ -193,7 +192,7 @@ def top_ads(
 
         cac  = calcular_cac(spend, novos_clientes)
         cpa  = calcular_cpa(spend, pedidos)
-        roas = calcular_roas(receita, spend)
+        roas = c.get("roas_compras")              # direto do banco — sem recalcular
 
         resultado.append({
             "Anúncio":             nome,
