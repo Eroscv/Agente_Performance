@@ -118,6 +118,18 @@ def load_csv(csv_path: Path = CSV_PATH, db_path: Path = DB_PATH) -> int:
     conn.commit()
     conn.close()
     logger.info("Carga concluída: %d linhas inseridas", inserted)
+
+    # Validação automática pós-carga
+    try:
+        from db.validator import validar
+        report = validar(db_path)
+        if not report.ok:
+            logger.error("[loader] Validação pós-carga encontrou ERRORs:\n%s", report.summary())
+        else:
+            logger.info("[loader] Validação pós-carga OK: %d aviso(s)", len(report.warnings))
+    except Exception as e:
+        logger.warning("[loader] Falha ao rodar validação pós-carga: %s", e)
+
     return inserted
 
 
@@ -125,3 +137,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     n = load_csv()
     print(f"✅ {n} linhas carregadas em {DB_PATH}")
+    from db.validator import validar
+    report = validar()
+    print(report.summary())

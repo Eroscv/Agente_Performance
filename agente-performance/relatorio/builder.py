@@ -390,6 +390,18 @@ def gerar_relatorio_semanal(
 
     logger.info("[Builder] Gerando relatório %s · %s", cliente_nome, periodo_str)
 
+    # ── Validação dos dados ──────────────────────────────────────────────────
+    try:
+        from db.validator import validar
+        val_report = validar(db_path)
+        if not val_report.ok:
+            logger.error("[Builder] Dados com ERRORs de validação — relatório pode conter inconsistências")
+        elif val_report.warnings:
+            logger.warning("[Builder] Dados com %d aviso(s) de validação", len(val_report.warnings))
+    except Exception as e:
+        logger.warning("[Builder] Falha na validação pré-relatório: %s", e)
+        val_report = None
+
     # ── Dados ─────────────────────────────────────────────────────────────
     campanhas = _buscar_campanhas(data_inicio, data_fim, db_path)
     if not campanhas:
@@ -407,6 +419,20 @@ def gerar_relatorio_semanal(
 
     blocos = []
     blocos += _blocos_resumo(resumo, periodo_str)
+    # Aviso de qualidade de dados (se houver issues)
+    if val_report and (not val_report.ok or val_report.warnings):
+        issues_txt = "\n".join(
+            f"{'❌' if i.severity == 'ERROR' else '⚠️'} {i.check}: {i.message}"
+            for i in val_report.issues
+        )
+        blocos.append({
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{issues_txt}"}}],
+                "icon": {"type": "emoji", "emoji": "⚠️"},
+                "color": "yellow_background",
+            }
+        })
     blocos += _blocos_tabela_campanhas(campanhas)
     blocos += _blocos_top_campanhas(campanhas)
     blocos += _blocos_alocacao(campanhas)
