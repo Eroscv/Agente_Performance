@@ -130,14 +130,20 @@ def main():
     print(f"  Publicar:  {'NÃO (dry-run)' if args.dry_run else 'SIM → Notion'}")
     print("═" * 60 + "\n")
 
-    from relatorio.builder import gerar_relatorio_semanal
+    from relatorio.builder import gerar_relatorio_semanal, gerar_relatorio_mensal
 
-    resultado = gerar_relatorio_semanal(
-        cliente=args.cliente,
-        data_inicio=data_inicio,
-        data_fim=data_fim,
-        publicar=publicar,
-    )
+    if args.periodo == "mes" and not (args.inicio and args.fim):
+        resultado = gerar_relatorio_mensal(
+            cliente=args.cliente,
+            publicar=publicar,
+        )
+    else:
+        resultado = gerar_relatorio_semanal(
+            cliente=args.cliente,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            publicar=publicar,
+        )
 
     if "erro" in resultado:
         print(f"\n❌ Erro: {resultado['erro']}")

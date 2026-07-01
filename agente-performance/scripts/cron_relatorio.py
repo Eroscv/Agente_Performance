@@ -101,14 +101,20 @@ def main():
 
     logger.info("Cron %s iniciado: %s", tipo, periodo_str)
 
-    from relatorio.builder import gerar_relatorio_semanal
+    from relatorio.builder import gerar_relatorio_semanal, gerar_relatorio_mensal
 
-    resultado = gerar_relatorio_semanal(
-        cliente="source_of",
-        data_inicio=data_inicio,
-        data_fim=data_fim,
-        publicar=True,
-    )
+    if args.periodo == "mes":
+        resultado = gerar_relatorio_mensal(
+            cliente="source_of",
+            publicar=True,
+        )
+    else:
+        resultado = gerar_relatorio_semanal(
+            cliente="source_of",
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            publicar=True,
+        )
 
     if "erro" in resultado:
         msg = f"❌ *Relatório {tipo} — ERRO*\n{resultado['erro']}"

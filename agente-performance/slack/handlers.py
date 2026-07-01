@@ -68,7 +68,7 @@ Ou use os slash commands direto:
 `/compare ABO vs Advantage` — comparação lado a lado
 `/funil` — funil de conversão · `/funil ABO` — de uma campanha
 `/alertas` — campanhas com problema de ROAS ou conversão
-`/relatorio` — Excel do mês · `/relatorio notion` · `/relatorio pdf`
+`/relatorio` — relatório semanal (semana passada) no Notion · `/relatorio mes` · `/relatorio notion`
 `/exemplos` — mais exemplos de perguntas
 `/metricas` — lista de todas as métricas disponíveis
 `/status` — status do sistema
@@ -506,7 +506,7 @@ async def handle_relatorio(ack, respond, command, client):
     """
     /relatorio                  — relatório semanal padrão (semana passada) no Notion
     /relatorio semana           — semana passada
-    /relatorio mes              — mês atual
+    /relatorio mes              — mês passado completo
     /relatorio hoje             — dia de hoje
     /relatorio 2026-06-01 2026-06-30  — período customizado
     """
@@ -523,11 +523,12 @@ async def handle_relatorio(ack, respond, command, client):
     try:
         import asyncio
         from datetime import date, timedelta
-        from relatorio.builder import gerar_relatorio_semanal
+        from relatorio.builder import gerar_relatorio_semanal, gerar_relatorio_mensal
 
         # Resolve período
         hoje = date.today()
         data_inicio = data_fim = None
+        usar_mensal = False
 
         partes = arg.split()
         if len(partes) == 2:
@@ -540,8 +541,8 @@ async def handle_relatorio(ack, respond, command, client):
 
         if not data_inicio:
             if "mes" in arg or "mês" in arg:
-                data_inicio = hoje.replace(day=1)
-                data_fim    = hoje
+                # Mês passado completo
+                usar_mensal = True
             elif "hoje" in arg:
                 data_inicio = data_fim = hoje
             elif "ontem" in arg:
@@ -552,19 +553,26 @@ async def handle_relatorio(ack, respond, command, client):
                 data_inicio = seg
                 data_fim    = seg + timedelta(days=6)
 
-        periodo_str = f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}"
-
         # Executa em thread separada para não bloquear o event loop
-        loop      = asyncio.get_event_loop()
-        resultado = await loop.run_in_executor(
-            None,
-            lambda: gerar_relatorio_semanal(
-                cliente="source_of",
-                data_inicio=data_inicio,
-                data_fim=data_fim,
-                publicar=True,
+        loop = asyncio.get_event_loop()
+        if usar_mensal:
+            resultado = await loop.run_in_executor(
+                None,
+                lambda: gerar_relatorio_mensal(
+                    cliente="source_of",
+                    publicar=True,
+                )
             )
-        )
+        else:
+            resultado = await loop.run_in_executor(
+                None,
+                lambda: gerar_relatorio_semanal(
+                    cliente="source_of",
+                    data_inicio=data_inicio,
+                    data_fim=data_fim,
+                    publicar=True,
+                )
+            )
 
         if "erro" in resultado:
             await client.chat_postMessage(
@@ -573,7 +581,8 @@ async def handle_relatorio(ack, respond, command, client):
             )
             return
 
-        r   = resultado.get("resumo", {})
+        r          = resultado.get("resumo", {})
+        periodo_str = resultado.get("periodo", "")
         url = resultado.get("url") or f"https://notion.so/{resultado.get('page_id','').replace('-','')}"
 
         def _brl(v):

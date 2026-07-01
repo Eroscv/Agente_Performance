@@ -50,4 +50,8 @@ __all__ = [
     "tabela_principal",
     "alocacao_budget",
     "top_ads",
+    # builder
+    "gerar_relatorio_semanal",
+    "gerar_relatorio_mensal",
+    "gerar_relatorio_periodo",
 ]

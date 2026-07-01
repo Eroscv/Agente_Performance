@@ -479,6 +479,50 @@ def gerar_relatorio_semanal(
     }
 
 
+def gerar_relatorio_mensal(
+    cliente: str = "source_of",
+    ano: int = None,
+    mes: int = None,
+    publicar: bool = True,
+    db_path: Path = DB_PATH,
+) -> dict:
+    """
+    Gera e publica o relatório mensal Meta Ads.
+
+    Args:
+        cliente:  chave do cliente (ex: 'source_of')
+        ano:      ano do mês de referência (default: mês passado)
+        mes:      mês de referência, 1–12 (default: mês passado)
+        publicar: se True, publica no Notion
+        db_path:  caminho do SQLite
+
+    Returns:
+        dict com: page_id, url, resumo, num_campanhas, alertas
+    """
+    from calendar import monthrange
+
+    hoje = date.today()
+
+    if ano is None or mes is None:
+        # Padrão: mês passado completo
+        primeiro_este = hoje.replace(day=1)
+        ultimo_mes_passado = primeiro_este - timedelta(days=1)
+        ano = ano or ultimo_mes_passado.year
+        mes = mes or ultimo_mes_passado.month
+
+    _, ultimo_dia = monthrange(ano, mes)
+    data_inicio = date(ano, mes, 1)
+    data_fim    = date(ano, mes, ultimo_dia)
+
+    return gerar_relatorio_semanal(
+        cliente=cliente,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        publicar=publicar,
+        db_path=db_path,
+    )
+
+
 def gerar_relatorio_periodo(
     cliente: str = "source_of",
     data_inicio: date = None,
