@@ -256,101 +256,238 @@ def _fmt_n(v, decimais=0) -> str:
 # ── Builder de blocos Notion ──────────────────────────────────────────────────
 
 def _blocos_resumo(resumo: dict, periodo_str: str) -> list[dict]:
-    """Bloco de resumo executivo."""
+    """Bloco de resumo executivo — 3 seções distintas: KPIs, Investimento, Alcance, Conversão."""
     r = resumo
+
+    # Cor do callout de ROAS baseada na performance
+    roas_val = r.get("roas")
+    if roas_val is None:
+        roas_color = "gray_background"
+    elif roas_val >= 3:
+        roas_color = "green_background"
+    elif roas_val >= 1.5:
+        roas_color = "yellow_background"
+    else:
+        roas_color = "red_background"
+
+    # Taxa clique→compra
+    taxa_clique_compra = (
+        round(r["total_compras"] / r["total_cliques"] * 100, 2)
+        if r.get("total_cliques") and r["total_compras"]
+        else None
+    )
+
+    # Texto KPI principal (ROAS, Receita, Compras, Ticket)
+    kpi_txt = (
+        f"📈 ROAS: {_fmt_x(roas_val)}  |  "
+        f"💰 Receita: {_fmt_brl(r['total_receita'])}  |  "
+        f"🛒 Compras: {r['total_compras']}  |  "
+        f"🎫 Ticket: {_fmt_brl(r.get('ticket_medio'))}"
+    )
+
     blocos = [
+        # Banner do relatório
         {
             "object": "block", "type": "callout",
             "callout": {
-                "rich_text": [{"text": {"content": f"Relatório gerado automaticamente pelo Agente de Performance Guará · {periodo_str}"}}],
+                "rich_text": [{"text": {"content":
+                    f"Relatório gerado automaticamente pelo Agente de Performance Guará · {periodo_str}"
+                }}],
                 "icon": {"type": "emoji", "emoji": "⚙️"},
             }
         },
+
+        # Título da seção
         {"object": "block", "type": "heading_2",
-         "heading_2": {"rich_text": [{"text": {"content": "📊 Resumo Geral da Conta"}}]}},
-        {"object": "block", "type": "paragraph",
-         "paragraph": {"rich_text": [{"text": {"content":
-            f"💰 Investimento Meta Ads: {_fmt_brl(r['total_invest'])}  |  "
-            f"Invest. + Imposto ({FATOR_IMPOSTO}×): {_fmt_brl(r['invest_imp'])}"
+         "heading_2": {"rich_text": [{"text": {"content": "📊 Resumo Executivo"}}]}},
+
+        # Callout colorido com KPIs principais
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": kpi_txt}}],
+                "icon": {"type": "emoji", "emoji": "📈"},
+                "color": roas_color,
+            }
+        },
+
+        # --- Seção: Investimento ---
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "💸 Investimento"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"Meta Ads: {_fmt_brl(r['total_invest'])}"
          }}]}},
-        {"object": "block", "type": "paragraph",
-         "paragraph": {"rich_text": [{"text": {"content":
-            f"👁 Impressões: {_fmt_n(r['total_impressoes'])}  |  "
-            f"🖱 Cliques: {_fmt_n(r['total_cliques'])}  |  "
-            f"📊 CTR: {_fmt_pct(r['ctr'])}  |  "
-            f"💵 CPC médio: {_fmt_brl(r['cpc_medio'])}"
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"+ Imposto ({FATOR_IMPOSTO}×): {_fmt_brl(r['invest_imp'])}"
          }}]}},
-        {"object": "block", "type": "paragraph",
-         "paragraph": {"rich_text": [{"text": {"content":
-            f"🛒 Compras: {r['total_compras']}  |  "
-            f"💰 CPA Meta: {_fmt_brl(r.get('cpa_meta'))}  |  "
-            f"💰 CPA Ajustado (+imp.): {_fmt_brl(r.get('cpa_ajustado'))}  |  "
-            f"📈 ROAS: {_fmt_x(r['roas'])}  |  "
-            f"📦 CPM: {_fmt_brl(r['cpm_medio'])}"
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"CPA Ajustado (c/ imposto): {_fmt_brl(r.get('cpa_ajustado'))}"
          }}]}},
-        {"object": "block", "type": "paragraph",
-         "paragraph": {"rich_text": [{"text": {"content":
-            f"💵 Receita Total: {_fmt_brl(r['total_receita'])}  |  "
-            f"  Própria: {_fmt_brl(r.get('receita_propria'))}  |  "
-            f"  Atribuída (cross): {_fmt_brl(r.get('receita_atribuida'))}  |  "
-            f"🎫 Ticket Médio: {_fmt_brl(r.get('ticket_medio'))}"
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"CPA Meta (plataforma): {_fmt_brl(r.get('cpa_meta'))}"
          }}]}},
-        {"object": "block", "type": "paragraph",
-         "paragraph": {"rich_text": [{"text": {"content":
-            f"🛒 Adições ao Carrinho: {_fmt_n(r['total_carrinho'])}  |  "
-            f"💳 Checkouts Iniciados: {_fmt_n(r['total_checkout'])}  |  "
-            f"🎯 Taxa Conv. (click→compra): {_fmt_pct(r['conv_rate'])}  |  "
-            f"🔄 Frequência Média: {_fmt_n(r.get('frequencia_media'), 2)}"
+
+        # --- Seção: Alcance & Engajamento ---
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "👁 Alcance & Engajamento"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"Impressões: {_fmt_n(r['total_impressoes'])}  |  CPM: {_fmt_brl(r['cpm_medio'])}"
          }}]}},
-        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"Alcance único: {_fmt_n(r.get('total_alcance'))}  |  "
+            f"Frequência média: {_fmt_n(r.get('frequencia_media'), 2)}"
+         }}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"Cliques: {_fmt_n(r['total_cliques'])}  |  "
+            f"CTR: {_fmt_pct(r['ctr'])}  |  "
+            f"CPC: {_fmt_brl(r['cpc_medio'])}"
+         }}]}},
+
+        # --- Seção: Conversão ---
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "🛒 Conversão"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"Adições ao carrinho: {_fmt_n(r['total_carrinho'])}"
+         }}]}},
     ]
+
+    # Checkouts iniciados com % do carrinho
+    if r.get("total_carrinho") and r["total_carrinho"] > 0:
+        pct_checkout = round(r["total_checkout"] / r["total_carrinho"] * 100, 1)
+        blocos.append({"object": "block", "type": "bulleted_list_item",
+            "bulleted_list_item": {"rich_text": [{"text": {"content":
+                f"Checkouts iniciados: {_fmt_n(r['total_checkout'])}  ({pct_checkout}% do carrinho)"
+            }}]}})
+    else:
+        blocos.append({"object": "block", "type": "bulleted_list_item",
+            "bulleted_list_item": {"rich_text": [{"text": {"content":
+                f"Checkouts iniciados: {_fmt_n(r['total_checkout'])}"
+            }}]}})
+
+    # Compras com % do checkout
+    if r.get("total_checkout") and r["total_checkout"] > 0:
+        pct_compra = round(r["total_compras"] / r["total_checkout"] * 100, 1)
+        blocos.append({"object": "block", "type": "bulleted_list_item",
+            "bulleted_list_item": {"rich_text": [{"text": {"content":
+                f"Compras: {r['total_compras']}  ({pct_compra}% do checkout)"
+            }}]}})
+    else:
+        blocos.append({"object": "block", "type": "bulleted_list_item",
+            "bulleted_list_item": {"rich_text": [{"text": {"content":
+                f"Compras: {r['total_compras']}"
+            }}]}})
+
+    blocos.append({"object": "block", "type": "bulleted_list_item",
+        "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"Taxa clique→compra: {_fmt_pct(taxa_clique_compra)}"
+        }}]}})
+
+    # Receita atribuída (cross) se houver
+    if r.get("receita_atribuida") and r["receita_atribuida"] > 0:
+        blocos.append({"object": "block", "type": "bulleted_list_item",
+            "bulleted_list_item": {"rich_text": [{"text": {"content":
+                f"Receita atribuída (cross): {_fmt_brl(r['receita_atribuida'])}"
+            }}]}})
+
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
     return blocos
 
 
 def _blocos_tabela_campanhas(rows: list[dict]) -> list[dict]:
-    """Tabela principal de campanhas."""
+    """Tabela principal de campanhas (8 colunas) + toggle com métricas técnicas (8 col)."""
     if not rows:
         return []
 
-    header = ["Campanha", "Invest.", "Invest.+Imp.", "Compras", "CPA Meta", "CPA Ajust.", "Ticket Médio", "ROAS", "CPC", "CTR", "Impressões"]
-    table_rows = []
+    # ---- Tabela principal: 8 colunas ----
+    header_main = ["Campanha", "Invest.", "ROAS", "Compras", "Receita", "CPA Ajust.", "CTR", "CPM"]
+    main_rows = [
+        {
+            "type": "table_row",
+            "table_row": {"cells": [[{"text": {"content": h}, "annotations": {"bold": True}}] for h in header_main]}
+        }
+    ]
 
-    # Cabeçalho
-    table_rows.append({
-        "type": "table_row",
-        "table_row": {"cells": [[{"text": {"content": h}, "annotations": {"bold": True}}] for h in header]}
-    })
+    # ---- Tabela técnica: 8 colunas (dentro do toggle) ----
+    header_tech = ["Campanha", "CPC", "Frequência", "Impressões", "Cliques", "Carrinho", "Checkout", "Ticket Médio"]
+    tech_rows = [
+        {
+            "type": "table_row",
+            "table_row": {"cells": [[{"text": {"content": h}, "annotations": {"bold": True}}] for h in header_tech]}
+        }
+    ]
 
-    # Dados
     for c in rows:
-        invest  = float(c.get("investimento") or 0)
-        compras = int(c.get("compras") or 0)
-        receita = float(c.get("valor_compras") or 0)
-        invest_imp  = spend_com_imposto(invest)
-        roas        = round(receita / invest, 4) if invest > 0 else None
-        cpa_ajust   = calcular_cpa(invest, compras)
-        cpa_meta_v  = float(c.get("custo_por_compra_meta") or 0) or None
-        ticket      = round(receita / compras, 2) if compras else None
-        cpc  = c.get("cpc_link")
-        ctr  = c.get("ctr_link")
+        invest    = float(c.get("investimento") or 0)
+        compras   = int(c.get("compras") or 0)
+        receita   = float(c.get("valor_compras") or 0)
+        roas      = round(receita / invest, 4) if invest > 0 else None
+        cpa_ajust = calcular_cpa(invest, compras)
+        cpc       = c.get("cpc_link")
+        ctr       = c.get("ctr_link")
+        cpm       = c.get("cpm")
         impressoes = int(c.get("impressoes") or 0)
+        cliques   = int(c.get("cliques_link") or 0)
+        carrinho  = int(c.get("adicoes_carrinho") or 0)
+        checkout  = int(c.get("checkout_iniciado") or 0)
+        freq      = c.get("frequencia")
+        ticket    = round(receita / compras, 2) if compras else None
+        nome      = (c.get("campanha") or "")[:60]
 
-        table_rows.append({
+        main_rows.append({
             "type": "table_row",
             "table_row": {"cells": [
-                [{"text": {"content": (c.get("campanha") or "")[:60]}}],
+                [{"text": {"content": nome}}],
                 [{"text": {"content": _fmt_brl(invest)}}],
-                [{"text": {"content": _fmt_brl(invest_imp)}}],
-                [{"text": {"content": str(compras) if compras else "—"}}],
-                [{"text": {"content": _fmt_brl(cpa_meta_v)}}],
-                [{"text": {"content": _fmt_brl(cpa_ajust)}}],
-                [{"text": {"content": _fmt_brl(ticket)}}],
                 [{"text": {"content": _fmt_x(roas)}}],
-                [{"text": {"content": _fmt_brl(float(cpc)) if cpc else "—"}}],
+                [{"text": {"content": str(compras) if compras else "—"}}],
+                [{"text": {"content": _fmt_brl(receita)}}],
+                [{"text": {"content": _fmt_brl(cpa_ajust)}}],
                 [{"text": {"content": _fmt_pct(float(ctr)) if ctr else "—"}}],
-                [{"text": {"content": _fmt_n(impressoes)}}],
+                [{"text": {"content": _fmt_brl(float(cpm)) if cpm else "—"}}],
             ]}
         })
+
+        tech_rows.append({
+            "type": "table_row",
+            "table_row": {"cells": [
+                [{"text": {"content": nome}}],
+                [{"text": {"content": _fmt_brl(float(cpc)) if cpc else "—"}}],
+                [{"text": {"content": _fmt_n(float(freq), 2) if freq else "—"}}],
+                [{"text": {"content": _fmt_n(impressoes)}}],
+                [{"text": {"content": _fmt_n(cliques)}}],
+                [{"text": {"content": str(carrinho) if carrinho else "—"}}],
+                [{"text": {"content": str(checkout) if checkout else "—"}}],
+                [{"text": {"content": _fmt_brl(ticket)}}],
+            ]}
+        })
+
+    # Toggle encapsulando a tabela técnica
+    tabela_tecnica = {
+        "object": "block",
+        "type": "table",
+        "table": {
+            "table_width": len(header_tech),
+            "has_column_header": True,
+            "has_row_header": False,
+            "children": tech_rows,
+        }
+    }
+    toggle_tecnico = {
+        "object": "block",
+        "type": "toggle",
+        "toggle": {
+            "rich_text": [{"text": {"content": "📐 Métricas técnicas detalhadas"}}],
+            "children": [tabela_tecnica],
+        }
+    }
 
     return [
         {"object": "block", "type": "heading_2",
@@ -359,24 +496,27 @@ def _blocos_tabela_campanhas(rows: list[dict]) -> list[dict]:
             "object": "block",
             "type": "table",
             "table": {
-                "table_width": len(header),
+                "table_width": len(header_main),
                 "has_column_header": True,
                 "has_row_header": False,
-                "children": table_rows,
+                "children": main_rows,
             }
         },
+        toggle_tecnico,
         {"object": "block", "type": "divider", "divider": {}},
     ]
 
 
 def _blocos_top_campanhas(campanhas: list[dict]) -> list[dict]:
-    """Top 5 campanhas por ROAS."""
+    """Top 5 campanhas por ROAS — com receita, compras e investimento."""
     rankeadas = []
     for c in campanhas:
         invest  = float(c.get("investimento") or 0)
-        roas    = round(float(c.get('valor_compras') or 0) / float(c.get('investimento') or 1), 4) if float(c.get('investimento') or 0) > 0 else None
+        receita = float(c.get("valor_compras") or 0)
+        compras = int(c.get("compras") or 0)
+        roas    = round(receita / invest, 4) if invest > 0 else None
         if roas:
-            rankeadas.append((c.get("campanha", ""), float(roas), invest))
+            rankeadas.append((c.get("campanha", ""), roas, invest, receita, compras))
 
     rankeadas.sort(key=lambda x: x[1], reverse=True)
 
@@ -384,12 +524,17 @@ def _blocos_top_campanhas(campanhas: list[dict]) -> list[dict]:
         {"object": "block", "type": "heading_2",
          "heading_2": {"rich_text": [{"text": {"content": "🏆 Top Campanhas por ROAS"}}]}},
     ]
-    for i, (nome, roas, invest) in enumerate(rankeadas[:5], 1):
+    for i, (nome, roas, invest, receita, compras) in enumerate(rankeadas[:5], 1):
+        linha = (
+            f"🏆 {nome}  —  "
+            f"ROAS {roas:.2f}x  ·  "
+            f"Receita {_fmt_brl(receita)}  ·  "
+            f"Compras {compras}  ·  "
+            f"Invest {_fmt_brl(invest)}"
+        )
         blocos.append({
             "object": "block", "type": "numbered_list_item",
-            "numbered_list_item": {"rich_text": [{"text": {"content":
-                f"{nome}  —  ROAS {roas:.2f}x  |  Invest. {_fmt_brl(invest)}"
-            }}]}
+            "numbered_list_item": {"rich_text": [{"text": {"content": linha}}]}
         })
 
     blocos.append({"object": "block", "type": "divider", "divider": {}})
@@ -397,7 +542,7 @@ def _blocos_top_campanhas(campanhas: list[dict]) -> list[dict]:
 
 
 def _blocos_alocacao(campanhas: list[dict]) -> list[dict]:
-    """Budget allocation."""
+    """Budget allocation — com ROAS por campanha."""
     total = sum(float(c.get("investimento") or 0) for c in campanhas)
     if total == 0:
         return []
@@ -407,12 +552,21 @@ def _blocos_alocacao(campanhas: list[dict]) -> list[dict]:
          "heading_2": {"rich_text": [{"text": {"content": "💰 Alocação de Budget"}}]}},
     ]
     for c in sorted(campanhas, key=lambda x: float(x.get("investimento") or 0), reverse=True):
-        invest = float(c.get("investimento") or 0)
-        pct    = calcular_pct_budget(invest, total)
+        invest  = float(c.get("investimento") or 0)
+        receita = float(c.get("valor_compras") or 0)
+        roas    = round(receita / invest, 2) if invest > 0 else None
+        pct     = calcular_pct_budget(invest, total)
+        nome    = c.get("campanha", "")
+
+        if roas and roas > 0:
+            roas_str = f" — ROAS {roas:.2f}x"
+        else:
+            roas_str = " — sem conversão"
+
         blocos.append({
             "object": "block", "type": "bulleted_list_item",
             "bulleted_list_item": {"rich_text": [{"text": {"content":
-                f"{c.get('campanha', '')}:  {_fmt_brl(invest)}  ({_fmt_pct(pct)})"
+                f"{nome}  —  {_fmt_brl(invest)}  ({_fmt_pct(pct)}){roas_str}"
             }}]}
         })
 
@@ -421,17 +575,38 @@ def _blocos_alocacao(campanhas: list[dict]) -> list[dict]:
 
 
 def _blocos_alertas(alertas: list[str]) -> list[dict]:
-    """Bloco de alertas automáticos."""
-    emoji = "✅" if len(alertas) == 1 and alertas[0].startswith("✅") else "🔴"
+    """Bloco de alertas automáticos com callout colorido baseado na severidade."""
+    # Determina cor do callout
+    tem_critico   = any("🔴" in a for a in alertas)
+    tem_atencao   = any(("🟡" in a or "⚠️" in a) for a in alertas)
+    so_ok         = len(alertas) == 1 and alertas[0].startswith("✅")
+
+    if so_ok:
+        callout_color = "green_background"
+        callout_emoji = "✅"
+    elif tem_critico:
+        callout_color = "red_background"
+        callout_emoji = "🚨"
+    elif tem_atencao:
+        callout_color = "yellow_background"
+        callout_emoji = "⚠️"
+    else:
+        callout_color = "gray_background"
+        callout_emoji = "💡"
+
+    alertas_txt = "\n".join(alertas)
     blocos = [
         {"object": "block", "type": "heading_2",
          "heading_2": {"rich_text": [{"text": {"content": "🚨 Alertas Automáticos"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": alertas_txt}}],
+                "icon": {"type": "emoji", "emoji": callout_emoji},
+                "color": callout_color,
+            }
+        },
     ]
-    for a in alertas:
-        blocos.append({
-            "object": "block", "type": "bulleted_list_item",
-            "bulleted_list_item": {"rich_text": [{"text": {"content": a}}]}
-        })
     return blocos
 
 
@@ -441,19 +616,19 @@ def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anter
     """
     Bloco de comparativo entre período atual e anterior.
     Mostra tabela com ROAS, Invest, Receita, Compras, CPA, CTR, CPC
-    + variação % e tendência (↑↓→).
+    + variação % e tendência (seta + texto).
     """
     def _variacao_pct(atual, anterior):
-        """Retorna (variacao_pct, tendencia_emoji)"""
+        """Retorna (variacao_pct, tendencia_str)"""
         if atual is None or anterior is None or anterior == 0:
-            return None, "→"
+            return None, "→ Estável"
         var = (atual - anterior) / abs(anterior) * 100
         if abs(var) < 5:
-            tendencia = "→"
+            tendencia = "→ Estável"
         elif var > 0:
-            tendencia = "↑"
+            tendencia = "↑ Melhora"
         else:
-            tendencia = "↓"
+            tendencia = "↓ Piora"
         return var, tendencia
 
     def _fmt_var(var):
@@ -471,6 +646,16 @@ def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anter
         ("CTR",      resumo_atual.get("ctr"),            resumo_anterior.get("ctr"),           _fmt_pct),
         ("CPC",      resumo_atual.get("cpc_medio"),      resumo_anterior.get("cpc_medio"),     _fmt_brl),
     ]
+
+    # Adiciona Receita Atribuída (cross) se houver no período atual
+    receita_atrib = resumo_atual.get("receita_atribuida", 0) or 0
+    if receita_atrib > 0:
+        metricas.append((
+            "Receita Atribuída (cross)",
+            receita_atrib,
+            resumo_anterior.get("receita_atribuida", 0) or 0,
+            _fmt_brl,
+        ))
 
     header = ["Métrica", "Atual", "Anterior", "Variação", "Tendência"]
     table_rows = [
@@ -508,6 +693,75 @@ def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anter
         },
         {"object": "block", "type": "divider", "divider": {}},
     ]
+
+
+def _blocos_funil(resumo: dict) -> list[dict]:
+    """
+    Funil de conversão visual: Impressões → Cliques → Carrinho → Checkout → Compras.
+    """
+    r = resumo
+    impressoes = r.get("total_impressoes") or 0
+    cliques    = r.get("total_cliques") or 0
+    carrinho   = r.get("total_carrinho") or 0
+    checkout   = r.get("total_checkout") or 0
+    compras    = r.get("total_compras") or 0
+    ctr        = r.get("ctr")
+
+    # Taxas de conversão entre etapas
+    pct_clique_carrinho   = round(carrinho / cliques * 100, 1)  if cliques   else None
+    pct_carrinho_checkout = round(checkout / carrinho * 100, 1) if carrinho  else None
+    pct_checkout_compra   = round(compras  / checkout * 100, 1) if checkout  else None
+    # Eficiência geral: impressões → compras
+    efic_geral = round(compras / impressoes * 100, 3) if impressoes else None
+
+    def _p(txt):
+        return {
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": [{"text": {"content": txt}}]}
+        }
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🔽 Funil de Conversão"}}]}},
+        _p(f"👁 {_fmt_n(impressoes)} impressões"),
+    ]
+
+    if ctr is not None:
+        blocos.append(_p(f"   ↓ CTR {_fmt_pct(ctr)} ({_fmt_n(cliques)} cliques)"))
+    else:
+        blocos.append(_p(f"   ↓ {_fmt_n(cliques)} cliques"))
+
+    if pct_clique_carrinho is not None:
+        blocos.append(_p(f"   ↓ {pct_clique_carrinho}% para carrinho ({_fmt_n(carrinho)} adições)"))
+    else:
+        blocos.append(_p(f"   ↓ {_fmt_n(carrinho)} adições ao carrinho"))
+
+    if pct_carrinho_checkout is not None:
+        blocos.append(_p(f"   ↓ {pct_carrinho_checkout}% para checkout ({_fmt_n(checkout)} checkouts)"))
+    else:
+        blocos.append(_p(f"   ↓ {_fmt_n(checkout)} checkouts iniciados"))
+
+    if pct_checkout_compra is not None:
+        blocos.append(_p(f"   ↓ {pct_checkout_compra}% para compra ({_fmt_n(compras)} compras)"))
+    else:
+        blocos.append(_p(f"   ↓ {_fmt_n(compras)} compras"))
+
+    # Callout com eficiência geral
+    efic_txt = (
+        f"Eficiência geral impressão→compra: {efic_geral:.3f}%"
+        if efic_geral is not None
+        else "Eficiência geral: —"
+    )
+    blocos.append({
+        "object": "block", "type": "callout",
+        "callout": {
+            "rich_text": [{"text": {"content": efic_txt}}],
+            "icon": {"type": "emoji", "emoji": "🔽"},
+        }
+    })
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    return blocos
+
 
 # ── Função principal ──────────────────────────────────────────────────────────
 
@@ -604,6 +858,7 @@ def gerar_relatorio_semanal(
     blocos += _blocos_tabela_campanhas(campanhas)
     blocos += _blocos_top_campanhas(campanhas)
     blocos += _blocos_alocacao(campanhas)
+    blocos += _blocos_funil(resumo)
     blocos += _blocos_alertas(alertas)
 
     # ── Publicação ─────────────────────────────────────────────────────────
