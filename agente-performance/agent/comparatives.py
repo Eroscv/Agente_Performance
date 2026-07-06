@@ -35,17 +35,17 @@ logger = logging.getLogger(__name__)
 # ── Métricas disponíveis para ranking ─────────────────────────────────────────
 
 METRICAS_DISPONIVEIS = {
-    "roas":             ("roas_compras",    "AVG", "ROAS Médio"),
+    "roas":             ("valor_compras",   "SUM_DIV_INVEST", "ROAS"),
     "investimento":     ("investimento",    "SUM", "Investimento Total (R$)"),
     "receita":          ("valor_compras",   "SUM", "Receita Total (R$)"),
     "compras":          ("compras",         "SUM", "Compras"),
-    "cpc":              ("cpc_link",        "AVG", "CPC Médio (R$)"),
-    "ctr":              ("ctr_link",        "AVG", "CTR Médio (%)"),
-    "cpm":              ("cpm",             "AVG", "CPM Médio (R$)"),
+    "cpc":              ("cpc_link",        "DIV_INVEST_CLIQUES", "CPC (R$)"),
+    "ctr":              ("ctr_link",        "DIV_CLIQUES_IMPRESS", "CTR (%)"),
+    "cpm":              ("cpm",             "DIV_INVEST_CPM", "CPM (R$)"),
     "frequencia":       ("frequencia",      "AVG", "Frequência Média"),
     "impressoes":       ("impressoes",      "SUM", "Impressões"),
     "alcance":          ("alcance",         "SUM", "Alcance"),
-    "custo_por_compra": ("custo_por_compra","AVG", "Custo por Compra (R$)"),
+    "custo_por_compra": ("custo_por_compra","CPA_CALC", "Custo por Compra (R$)"),
     "cliques":          ("cliques_link",    "SUM", "Cliques no Link"),
     "carrinho":         ("adicoes_carrinho","SUM", "Adições ao Carrinho"),
     "checkout":         ("checkout_iniciado","SUM","Checkout Iniciado"),
@@ -81,13 +81,13 @@ def comparar_periodos(
                 ROUND(SUM(investimento), 2)            AS investimento,
                 ROUND(SUM(valor_compras), 2)           AS receita,
                 ROUND(SUM(compras), 0)                 AS compras,
-                ROUND(AVG(roas_compras), 2)            AS roas,
+                ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
                 ROUND(SUM(impressoes), 0)              AS impressoes,
                 ROUND(SUM(alcance), 0)                 AS alcance,
                 ROUND(SUM(cliques_link), 0)            AS cliques,
                 ROUND(AVG(ctr_link), 4)                AS ctr,
                 ROUND(AVG(cpc_link), 2)                AS cpc,
-                ROUND(AVG(cpm), 2)                     AS cpm,
+                ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
                 ROUND(AVG(custo_por_compra), 2)        AS custo_por_compra,
                 ROUND(AVG(frequencia), 2)              AS frequencia,
                 ROUND(SUM(adicoes_carrinho), 0)        AS carrinho,
@@ -175,11 +175,11 @@ def comparar_campanhas_detalhado(
             ROUND(SUM(investimento), 2)          AS investimento,
             ROUND(SUM(valor_compras), 2)          AS receita,
             ROUND(SUM(compras), 0)                AS compras,
-            ROUND(AVG(roas_compras), 2)           AS roas,
-            ROUND(AVG(cpc_link), 2)               AS cpc,
-            ROUND(AVG(ctr_link), 4)               AS ctr,
-            ROUND(AVG(cpm), 2)                    AS cpm,
-            ROUND(AVG(custo_por_compra), 2)       AS custo_por_compra,
+            ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
+            ROUND(SUM(investimento) / NULLIF(SUM(cliques_link), 0), 2) AS cpc,
+            ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
+            ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_por_compra,
             ROUND(AVG(frequencia), 2)             AS frequencia,
             ROUND(SUM(impressoes), 0)             AS impressoes,
             ROUND(SUM(alcance), 0)                AS alcance,
@@ -244,7 +244,7 @@ def comparar_semana_a_semana(
                 ROUND(SUM(investimento), 2)     AS investimento,
                 ROUND(SUM(valor_compras), 2)    AS receita,
                 ROUND(SUM(compras), 0)          AS compras,
-                ROUND(AVG(roas_compras), 2)     AS roas,
+                ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
                 ROUND(SUM(cliques_link), 0)     AS cliques,
                 ROUND(AVG(ctr_link), 4)         AS ctr,
                 ROUND(AVG(cpc_link), 2)         AS cpc
@@ -310,12 +310,12 @@ def comparar_mes_a_mes(
                 ROUND(SUM(investimento), 2)     AS investimento,
                 ROUND(SUM(valor_compras), 2)    AS receita,
                 ROUND(SUM(compras), 0)          AS compras,
-                ROUND(AVG(roas_compras), 2)     AS roas,
+                ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
                 ROUND(AVG(cpc_link), 2)         AS cpc,
                 ROUND(AVG(ctr_link), 4)         AS ctr,
-                ROUND(AVG(cpm), 2)              AS cpm,
+                ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
                 ROUND(SUM(impressoes), 0)       AS impressoes,
-                ROUND(AVG(custo_por_compra), 2) AS custo_por_compra
+                ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_por_compra
             FROM campanhas
             WHERE data_inicio >= ? AND data_fim <= ?
             {filtro_camp}
@@ -367,10 +367,10 @@ def comparar_antes_depois(
                 ROUND(SUM(investimento), 2)            AS investimento,
                 ROUND(SUM(valor_compras), 2)           AS receita,
                 ROUND(SUM(compras), 0)                 AS compras,
-                ROUND(AVG(roas_compras), 2)            AS roas,
+                ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
                 ROUND(AVG(cpc_link), 2)                AS cpc,
                 ROUND(AVG(ctr_link), 4)                AS ctr,
-                ROUND(AVG(cpm), 2)                     AS cpm,
+                ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
                 ROUND(AVG(custo_por_compra), 2)        AS custo_por_compra,
                 ROUND(AVG(frequencia), 2)              AS frequencia,
                 ROUND(SUM(impressoes), 0)              AS impressoes,
@@ -434,14 +434,30 @@ def ranking_comparativo(
     menor_melhor = metrica in {"cpc", "cpm", "custo_por_compra", "frequencia"}
     ordem        = "ASC" if menor_melhor else "DESC"
 
+    # ROAS usa fórmula especial: Σ receita / Σ investimento
+    if func == "SUM_DIV_INVEST":
+        expr_metrica = "ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4)"
+    elif func == "DIV_INVEST_CLIQUES":
+        expr_metrica = "ROUND(SUM(investimento) / NULLIF(SUM(cliques_link), 0), 2)"
+    elif func == "DIV_CLIQUES_IMPRESS":
+        expr_metrica = "ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4)"
+    elif func == "DIV_INVEST_CPM":
+        expr_metrica = "ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2)"
+    elif func == "CPA_CALC":
+        expr_metrica = "ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2)"
+    elif func == "AVG":
+        expr_metrica = f"ROUND(AVG({col}), 4)"
+    else:
+        expr_metrica = f"ROUND(SUM({col}), 4)"
+
     rows = query(f"""
         SELECT
             campanha,
-            ROUND({func}({col}), 4)             AS valor_metrica,
+            {expr_metrica}                       AS valor_metrica,
             ROUND(SUM(investimento), 2)          AS investimento,
             ROUND(SUM(valor_compras), 2)         AS receita,
             ROUND(SUM(compras), 0)               AS compras,
-            ROUND(AVG(roas_compras), 2)          AS roas,
+            ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
             COUNT(DISTINCT data_inicio)          AS dias_ativos
         FROM campanhas
         WHERE campanha IS NOT NULL AND campanha != ''

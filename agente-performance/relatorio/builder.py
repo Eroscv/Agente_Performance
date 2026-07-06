@@ -61,19 +61,18 @@ def _buscar_campanhas(
             SUM(impressoes)            AS impressoes,
             SUM(cliques_link)          AS cliques_link,
             SUM(cliques_todos)         AS cliques_todos,
-            AVG(cpc_link)              AS cpc_link,
-            AVG(cpm)                   AS cpm,
+            ROUND(SUM(investimento) / NULLIF(SUM(cliques_link), 0), 2)         AS cpc_link,
+            ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2)    AS cpm,
             SUM(valor_compras)         AS valor_compras,
             SUM(adicoes_carrinho)      AS adicoes_carrinho,
             SUM(checkout_iniciado)     AS checkout_iniciado,
             SUM(alcance)               AS alcance,
-            AVG(ctr_link)              AS ctr_link,
+            ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_link,
             AVG(frequencia)            AS frequencia,
-            AVG(roas_compras)          AS roas_compras
+            ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas_compras
         FROM campanhas
         WHERE data_inicio >= ?
           AND data_fim    <= ?
-          AND investimento > 0
         GROUP BY campanha
         ORDER BY investimento DESC
     """
@@ -98,13 +97,8 @@ def _resumo_geral(campanhas: list[dict]) -> dict:
     total_alcance  = sum(int(c.get("alcance") or 0) for c in campanhas)
 
     invest_imp    = spend_com_imposto(total_invest)
-    # ROAS: média ponderada pelo investimento dos roas_compras do banco — sem recalcular
-    roas_vals = [(float(c.get("roas_compras") or 0), float(c.get("investimento") or 0))
-                 for c in campanhas if c.get("roas_compras") is not None]
-    if roas_vals and total_invest > 0:
-        roas = round(sum(r * w for r, w in roas_vals) / sum(w for _, w in roas_vals), 4)
-    else:
-        roas = None
+    # ROAS = Σ Receita / Σ Investimento (sem imposto)
+    roas = round(total_receita / total_invest, 4) if total_invest > 0 else None
     # Guard: total_compras pode ser 0 quando nenhuma campanha do período tem compras
     if total_compras == 0:
         logger.warning("[_resumo_geral] total_compras=0 no período — CPA será None")
@@ -254,7 +248,7 @@ def _blocos_tabela_campanhas(rows: list[dict]) -> list[dict]:
         invest = float(c.get("investimento") or 0)
         compras = int(c.get("compras") or 0)
         invest_imp = spend_com_imposto(invest)
-        roas = c.get("roas_compras")   # direto do banco — sem recalcular
+        roas = round(float(c.get('valor_compras') or 0) / invest, 4) if invest > 0 else None
         cpa  = calcular_cpa(invest, compras)
         cpc  = c.get("cpc_link")
         ctr  = c.get("ctr_link")
@@ -297,7 +291,7 @@ def _blocos_top_campanhas(campanhas: list[dict]) -> list[dict]:
     rankeadas = []
     for c in campanhas:
         invest  = float(c.get("investimento") or 0)
-        roas    = c.get("roas_compras")   # direto do banco — sem recalcular
+        roas    = round(float(c.get('valor_compras') or 0) / float(c.get('investimento') or 1), 4) if float(c.get('investimento') or 0) > 0 else None
         if roas:
             rankeadas.append((c.get("campanha", ""), float(roas), invest))
 
