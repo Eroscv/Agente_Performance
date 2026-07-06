@@ -193,8 +193,10 @@ def reload_db():
     """Recarrega o CSV no banco (idempotente)."""
     try:
         from db.loader import load_csv
+        from agent.cache import clear as cache_clear
         n = load_csv()
-        return {"status": "ok", "linhas_inseridas": n}
+        cache_clear()
+        return {"status": "ok", "linhas_inseridas": n, "cache_invalidado": True}
     except Exception as e:
         logger.exception("Erro ao recarregar DB")
         raise HTTPException(status_code=500, detail=str(e))

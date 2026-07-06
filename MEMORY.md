@@ -20,6 +20,7 @@ Qualquer trabalho no **Agente de Performance Guará** NUNCA deve afetar:
 
 ### Flora-Agente
 - **Diretório:** `/home/ubuntu/.openclaw/workspace/Flora-Agente-repo/`
+- **Número do agente (WhatsApp):** `554198980030` (+55 41 99898-0030)
 - **Serviço:** `flora-agente.service` (porta 5000)
 - **Webhook:** `https://44.204.251.251/webhook` via Apache (cert snakeoil)
 - **Tunnel:** Cloudflare via `flora-tunnel.service` + `flora-tunnel-watchdog.service`

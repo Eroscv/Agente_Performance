@@ -138,6 +138,11 @@ def set(pergunta: str, resultado: dict) -> None:
 
 # ── Manutenção ────────────────────────────────────────────────────────────────
 
+def clear():
+    """Alias direto para invalidar_tudo() — usado pelo reload do banco na API."""
+    invalidar_tudo()
+
+
 def invalidar_tudo() -> int:
     """Limpa L1 e L2. Usado após recarregar o banco de campanhas."""
     n = len(_store)

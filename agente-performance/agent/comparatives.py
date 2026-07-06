@@ -79,19 +79,19 @@ def comparar_periodos(
             SELECT
                 COUNT(DISTINCT campanha)               AS campanhas,
                 ROUND(SUM(investimento), 2)            AS investimento,
-                ROUND(SUM(valor_compras), 2)           AS receita,
-                ROUND(SUM(compras), 0)                 AS compras,
-                ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
+                ROUND(SUM(COALESCE(valor_compras, 0)), 2)           AS receita,
+                ROUND(SUM(COALESCE(compras, 0)), 0)                 AS compras,
+                ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4) AS roas,
                 ROUND(SUM(impressoes), 0)              AS impressoes,
                 ROUND(SUM(alcance), 0)                 AS alcance,
-                ROUND(SUM(cliques_link), 0)            AS cliques,
+                ROUND(SUM(COALESCE(cliques_link, 0)), 0)            AS cliques,
                 ROUND(AVG(ctr_link), 4)                AS ctr,
-                ROUND(AVG(cpc_link), 2)                AS cpc,
+                ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
                 ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
-                ROUND(AVG(custo_por_compra), 2)        AS custo_por_compra,
-                ROUND(AVG(frequencia), 2)              AS frequencia,
-                ROUND(SUM(adicoes_carrinho), 0)        AS carrinho,
-                ROUND(SUM(checkout_iniciado), 0)       AS checkout
+                ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
+                ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia,
+                ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)        AS carrinho,
+                ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)       AS checkout
             FROM campanhas
             WHERE data_inicio >= ? AND data_fim <= ?
             {filtro_camp}
@@ -173,19 +173,19 @@ def comparar_campanhas_detalhado(
         SELECT
             campanha,
             ROUND(SUM(investimento), 2)          AS investimento,
-            ROUND(SUM(valor_compras), 2)          AS receita,
-            ROUND(SUM(compras), 0)                AS compras,
-            ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
-            ROUND(SUM(investimento) / NULLIF(SUM(cliques_link), 0), 2) AS cpc,
-            ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)          AS receita,
+            ROUND(SUM(COALESCE(compras, 0)), 0)                 AS compras,
+            ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4) AS roas,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
+            ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
             ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_por_compra,
-            ROUND(AVG(frequencia), 2)             AS frequencia,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
+            ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia,
             ROUND(SUM(impressoes), 0)             AS impressoes,
             ROUND(SUM(alcance), 0)                AS alcance,
-            ROUND(SUM(cliques_link), 0)           AS cliques,
-            ROUND(SUM(adicoes_carrinho), 0)       AS carrinho,
-            ROUND(SUM(checkout_iniciado), 0)      AS checkout,
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0)           AS cliques,
+            ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)       AS carrinho,
+            ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)      AS checkout,
             MIN(data_inicio)                      AS periodo_inicio,
             MAX(data_fim)                         AS periodo_fim
         FROM campanhas
@@ -242,12 +242,12 @@ def comparar_semana_a_semana(
         row = query_one(f"""
             SELECT
                 ROUND(SUM(investimento), 2)     AS investimento,
-                ROUND(SUM(valor_compras), 2)    AS receita,
-                ROUND(SUM(compras), 0)          AS compras,
-                ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
-                ROUND(SUM(cliques_link), 0)     AS cliques,
+                ROUND(SUM(COALESCE(valor_compras, 0)), 2)    AS receita,
+                ROUND(SUM(COALESCE(compras, 0)), 0)          AS compras,
+                ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4) AS roas,
+                ROUND(SUM(COALESCE(cliques_link, 0)), 0)     AS cliques,
                 ROUND(AVG(ctr_link), 4)         AS ctr,
-                ROUND(AVG(cpc_link), 2)         AS cpc
+                ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc
             FROM campanhas
             WHERE data_inicio >= ? AND data_fim <= ?
             {filtro_camp}
@@ -308,14 +308,14 @@ def comparar_mes_a_mes(
         row = query_one(f"""
             SELECT
                 ROUND(SUM(investimento), 2)     AS investimento,
-                ROUND(SUM(valor_compras), 2)    AS receita,
-                ROUND(SUM(compras), 0)          AS compras,
-                ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
-                ROUND(AVG(cpc_link), 2)         AS cpc,
+                ROUND(SUM(COALESCE(valor_compras, 0)), 2)    AS receita,
+                ROUND(SUM(COALESCE(compras, 0)), 0)          AS compras,
+                ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4) AS roas,
+                ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
                 ROUND(AVG(ctr_link), 4)         AS ctr,
                 ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
                 ROUND(SUM(impressoes), 0)       AS impressoes,
-                ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_por_compra
+                ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra
             FROM campanhas
             WHERE data_inicio >= ? AND data_fim <= ?
             {filtro_camp}
@@ -365,14 +365,14 @@ def comparar_antes_depois(
             SELECT
                 COUNT(DISTINCT DATE(data_inicio))      AS dias,
                 ROUND(SUM(investimento), 2)            AS investimento,
-                ROUND(SUM(valor_compras), 2)           AS receita,
-                ROUND(SUM(compras), 0)                 AS compras,
-                ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
-                ROUND(AVG(cpc_link), 2)                AS cpc,
+                ROUND(SUM(COALESCE(valor_compras, 0)), 2)           AS receita,
+                ROUND(SUM(COALESCE(compras, 0)), 0)                 AS compras,
+                ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4) AS roas,
+                ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
                 ROUND(AVG(ctr_link), 4)                AS ctr,
                 ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
-                ROUND(AVG(custo_por_compra), 2)        AS custo_por_compra,
-                ROUND(AVG(frequencia), 2)              AS frequencia,
+                ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
+                ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia,
                 ROUND(SUM(impressoes), 0)              AS impressoes,
                 MIN(data_inicio)                       AS data_inicio_real,
                 MAX(data_fim)                          AS data_fim_real

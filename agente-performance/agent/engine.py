@@ -136,10 +136,18 @@ def _validar_campanha(campanha: Optional[str], disponiveis: list[str]) -> tuple[
 
 def _dados_vazios_sugestao(intent: str, campanha: Optional[str], data_inicio: Optional[str], data_fim: Optional[str]) -> Optional[str]:
     """
-    Quando uma query retorna vazio, sugere o período mais próximo com dados.
+    Quando uma query retorna vazio, sugere o período mais recente disponível com dados.
     Retorna mensagem de sugestão ou None se houver dados.
     """
     try:
+        from agent.queries import data_range_disponivel
+        dr = data_range_disponivel()
+        db_min = dr.get("data_minima")
+        db_max = dr.get("data_maxima")
+
+        if not db_max:
+            return None
+
         # Verifica se há dados sem filtro de período
         if data_inicio or data_fim:
             sem_filtro = raw_query(
@@ -149,11 +157,24 @@ def _dados_vazios_sugestao(intent: str, campanha: Optional[str], data_inicio: Op
             )
             if sem_filtro and sem_filtro[0].get("n", 0) > 0:
                 row = sem_filtro[0]
+                # Sugere período mais recente com mesma duração
+                sugestao_periodo = ""
+                if data_inicio and data_fim:
+                    from datetime import date as _date, timedelta as _td
+                    try:
+                        di = _date.fromisoformat(data_inicio)
+                        df = _date.fromisoformat(data_fim)
+                        duracao = (df - di).days
+                        novo_df = _date.fromisoformat(db_max)
+                        novo_di = novo_df - _td(days=duracao)
+                        sugestao_periodo = f" Sugestão: tente *{novo_di.isoformat()} → {db_max}*."
+                    except Exception:
+                        pass
                 return (
                     f"⚠️ Nenhum dado encontrado para o período *{data_inicio} → {data_fim}*."
                     + (f" (campanha: *{campanha}*)" if campanha else "")
                     + f"\n\n📅 Dados disponíveis de *{row['ini']}* a *{row['fim']}* "
-                    f"({row['n']} registros). Tente perguntar por esse período!"
+                    f"({row['n']} registros).{sugestao_periodo}"
                 )
         return None
     except Exception:

@@ -202,4 +202,5 @@ CREATE TABLE IF NOT EXISTS campanhas (
 CREATE INDEX IF NOT EXISTS idx_campanha     ON campanhas(campanha);
 CREATE INDEX IF NOT EXISTS idx_data_inicio  ON campanhas(data_inicio);
 CREATE INDEX IF NOT EXISTS idx_data_fim     ON campanhas(data_fim);
+CREATE INDEX IF NOT EXISTS idx_campanhas_ativo ON campanhas(data_inicio, data_fim, campanha) WHERE investimento > 0;
 """

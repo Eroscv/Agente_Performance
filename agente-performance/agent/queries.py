@@ -34,7 +34,10 @@ logger = logging.getLogger(__name__)
 
 # ROAS como média ponderada: SUM(valor_compras) / NULLIF(SUM(investimento), 0)
 # Isso é matematicamente equivalente ao ROAS real do período — não distorce como AVG simples.
-_ROAS_EXPR = "ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4)"
+_ROAS_EXPR = "ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4)"
+
+# Expressão de frequência correta: ponderada por alcance, não AVG simples.
+_FREQ_EXPR = "ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia_media"
 
 
 # ── Diagnóstico ───────────────────────────────────────────────────────────────
@@ -82,18 +85,18 @@ def resumo_por_campanha(
     return query(f"""
         SELECT
             campanha,
-            ROUND(SUM(investimento), 2)                              AS investimento,
-            ROUND(SUM(valor_compras), 2)                             AS receita,
-            ROUND(SUM(compras), 0)                                   AS compras,
-            {_ROAS_EXPR}                                             AS roas,
-            ROUND(SUM(impressoes), 0)                                AS impressoes,
-            ROUND(SUM(alcance), 0)                                   AS alcance,
-            ROUND(SUM(cliques_link), 0)                              AS cliques,
-            ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_medio,
-            ROUND(SUM(investimento) / NULLIF(SUM(cliques_link), 0), 2) AS cpc_medio,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_por_compra,
-            ROUND(AVG(frequencia), 2)                                AS frequencia_media,
-            COUNT(*)                                                 AS dias
+            ROUND(SUM(investimento), 2)                                       AS investimento,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)                         AS receita,
+            ROUND(SUM(COALESCE(compras, 0)), 0)                               AS compras,
+            {_ROAS_EXPR}                                                      AS roas,
+            ROUND(SUM(impressoes), 0)                                         AS impressoes,
+            ROUND(SUM(alcance), 0)                                            AS alcance,
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0)                          AS cliques,
+            ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_medio,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc_medio,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
+            {_FREQ_EXPR},
+            COUNT(*)                                                          AS dias
         FROM campanhas
         {where}
         GROUP BY campanha
@@ -165,11 +168,11 @@ def performance_campanha(
             ROUND(SUM(alcance), 0)                AS alcance,
             ROUND(SUM(cliques_link), 0)           AS cliques_link,
             ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
-            ROUND(SUM(investimento) / NULLIF(SUM(cliques_link), 0), 2) AS cpc,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_por_compra,
-            ROUND(AVG(frequencia), 2)             AS frequencia,
-            ROUND(SUM(adicoes_carrinho), 0)       AS adicoes_carrinho,
-            ROUND(SUM(checkout_iniciado), 0)      AS checkout_iniciado
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
+            ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia_media,
+            ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0) AS adicoes_carrinho,
+            ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0) AS checkout_iniciado
         FROM campanhas
         {where_like}
         GROUP BY data_inicio, campanha
@@ -177,15 +180,21 @@ def performance_campanha(
     """, tuple(params_like))
 
 
+AWARENESS_PATTERNS = ['tráfego', 'trafego', 'awareness', 'engajamento', 'alcance', 'visitas']
+
+
 def top_campanhas_roas(
-    limit:       int = 10,
-    data_inicio: Optional[str] = None,
-    data_fim:    Optional[str] = None,
+    limit:              int = 10,
+    data_inicio:        Optional[str] = None,
+    data_fim:           Optional[str] = None,
+    excluir_awareness:  bool = True,
 ) -> list[dict]:
     """
     Top N campanhas por ROAS ponderado (mínimo R$100 investidos).
 
     Retorna metadado 'investimento_minimo_filtro' para transparência.
+    Campanhas de awareness/tráfego são excluídas por padrão (excluir_awareness=True)
+    pois não têm objetivo de conversão e distorcem o ranking.
     """
     INVEST_MIN = 100
     where, params = _build_where(
@@ -193,6 +202,15 @@ def top_campanhas_roas(
         data_inicio=data_inicio,
         data_fim=data_fim,
     )
+
+    # Filtro de awareness: exclui campanhas cujo nome contém padrões de awareness/tráfego
+    awareness_filter = ""
+    if excluir_awareness:
+        awareness_clauses = " AND ".join(
+            f"LOWER(campanha) NOT LIKE '%{p}%'" for p in AWARENESS_PATTERNS
+        )
+        awareness_filter = f" AND ({awareness_clauses})"
+
     rows = query(f"""
         SELECT
             campanha,
@@ -201,7 +219,7 @@ def top_campanhas_roas(
             ROUND(SUM(valor_compras), 2)                AS receita,
             ROUND(SUM(compras), 0)                      AS compras
         FROM campanhas
-        {where}
+        {where}{awareness_filter}
         GROUP BY campanha
         HAVING SUM(investimento) >= {INVEST_MIN}
            AND SUM(valor_compras) > 0
@@ -210,8 +228,8 @@ def top_campanhas_roas(
     """, tuple(params + [limit]))
 
     if not rows:
-        logger.warning("[queries] top_campanhas_roas: nenhum resultado (período: %s → %s, invest_min: R$%s)",
-                       data_inicio, data_fim, INVEST_MIN)
+        logger.warning("[queries] top_campanhas_roas: nenhum resultado (período: %s → %s, invest_min: R$%s, excluir_awareness=%s)",
+                       data_inicio, data_fim, INVEST_MIN, excluir_awareness)
     return rows
 
 
@@ -229,11 +247,11 @@ def top_campanhas_compras(
     return query(f"""
         SELECT
             campanha,
-            ROUND(SUM(compras), 0)                      AS compras,
-            ROUND(SUM(valor_compras), 2)                AS receita,
-            ROUND(SUM(investimento), 2)                 AS investimento,
-            {_ROAS_EXPR}                                AS roas,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_por_compra
+            ROUND(SUM(COALESCE(compras, 0)), 0)                AS compras,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)             AS receita,
+            ROUND(SUM(investimento), 2)                          AS investimento,
+            {_ROAS_EXPR}                                         AS roas,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado
         FROM campanhas
         {where}
         GROUP BY campanha
@@ -260,12 +278,12 @@ def evolucao_diaria(
         SELECT
             data_inicio                            AS data,
             ROUND(SUM(investimento), 2)            AS investimento,
-            ROUND(SUM(valor_compras), 2)           AS receita,
-            ROUND(SUM(compras), 0)                 AS compras,
-            {_ROAS_EXPR}                           AS roas,
-            ROUND(SUM(impressoes), 0)              AS impressoes,
-            ROUND(SUM(cliques_link), 0)            AS cliques,
-            ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_medio
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)           AS receita,
+            ROUND(SUM(COALESCE(compras, 0)), 0)                  AS compras,
+            {_ROAS_EXPR}                                         AS roas,
+            ROUND(SUM(impressoes), 0)                            AS impressoes,
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0)             AS cliques,
+            ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_medio
         FROM campanhas
         {where}
         GROUP BY data_inicio
@@ -290,13 +308,13 @@ def resumo_periodo(data_inicio: str, data_fim: str) -> dict:
             ROUND(SUM(impressoes), 0)                        AS impressoes_total,
             ROUND(SUM(alcance), 0)                           AS alcance_total,
             ROUND(SUM(cliques_link), 0)                      AS cliques_total,
-            ROUND(SUM(adicoes_carrinho), 0)                  AS carrinho_total,
-            ROUND(SUM(checkout_iniciado), 0)                 AS checkout_total,
-            ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_medio,
-            ROUND(SUM(investimento) / NULLIF(SUM(cliques_link), 0), 2) AS cpc_medio,
+            ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)     AS carrinho_total,
+            ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)    AS checkout_total,
+            ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_medio,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc_medio,
             ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm_medio,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_medio_por_compra,
-            ROUND(AVG(frequencia), 2)                        AS frequencia_media,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_medio_por_compra,
+            ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia_media,
             MIN(data_inicio)                                 AS data_inicio_real,
             MAX(data_fim)                                    AS data_fim_real
         FROM campanhas
@@ -336,10 +354,10 @@ def alertas_roas_baixo(threshold: float = 1.0) -> list[dict]:
     return query("""
         SELECT
             campanha,
-            ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
+            ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4) AS roas,
             ROUND(SUM(investimento), 2)     AS investimento,
-            ROUND(SUM(valor_compras), 2)    AS receita,
-            ROUND(SUM(compras), 0)          AS compras,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)    AS receita,
+            ROUND(SUM(COALESCE(compras, 0)), 0)          AS compras,
             MAX(data_fim)                   AS ultima_data,
             CASE
                 WHEN SUM(valor_compras) = 0 OR SUM(investimento) = 0 THEN 'sem_conversao'
@@ -386,10 +404,10 @@ def comparar_campanhas(
             ROUND(SUM(valor_compras), 2)          AS receita,
             ROUND(SUM(compras), 0)                AS compras,
             {_ROAS_EXPR}                          AS roas,
-            ROUND(SUM(investimento) / NULLIF(SUM(cliques_link), 0), 2) AS cpc_medio,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc_medio,
             ROUND(AVG(ctr_link), 4)               AS ctr_medio,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS custo_por_compra,
-            ROUND(AVG(frequencia), 2)             AS frequencia_media,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
+            ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia_media,
             ROUND(SUM(impressoes), 0)             AS impressoes,
             ROUND(SUM(alcance), 0)                AS alcance,
             MIN(data_inicio)                      AS data_inicio,
@@ -417,15 +435,15 @@ def metricas_funil(
     )
     return query_one(f"""
         SELECT
-            ROUND(SUM(impressoes), 0)             AS impressoes,
-            ROUND(SUM(cliques_link), 0)           AS cliques,
-            ROUND(SUM(visualizacoes_landing), 0)  AS landing_views,
-            ROUND(SUM(views_conteudo), 0)         AS views_conteudo,
-            ROUND(SUM(adicoes_carrinho), 0)       AS adicoes_carrinho,
-            ROUND(SUM(checkout_iniciado), 0)      AS checkout_iniciado,
-            ROUND(SUM(compras), 0)                AS compras,
-            ROUND(SUM(investimento), 2)           AS investimento,
-            ROUND(SUM(valor_compras), 2)          AS receita
+            ROUND(SUM(impressoes), 0)                        AS impressoes,
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0)         AS cliques,
+            ROUND(SUM(visualizacoes_landing), 0)             AS landing_views,
+            ROUND(SUM(views_conteudo), 0)                    AS views_conteudo,
+            ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)     AS adicoes_carrinho,
+            ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)    AS checkout_iniciado,
+            ROUND(SUM(COALESCE(compras, 0)), 0)              AS compras,
+            ROUND(SUM(investimento), 2)                      AS investimento,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)        AS receita
         FROM campanhas
         {where}
     """, tuple(params)) or {}

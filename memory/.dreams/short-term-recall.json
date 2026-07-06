@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-06-23T14:10:57.638Z",
+  "updatedAt": "2026-07-03T17:51:48.940Z",
   "entries": {
     "memory:memory/2026-06-22.md:1:30": {
       "key": "memory:memory/2026-06-22.md:1:30",
@@ -9,18 +9,20 @@
       "endLine": 30,
       "source": "memory",
       "snippet": "# Memory — 2026-06-22 ## Flora-Agente: Deploy & Melhorias (sessão principal do dia) ### Estado atual do sistema - **Serviço:** `flora-agente.service` rodando em `/home/ubuntu/.openclaw/workspace/Flora-Agente-repo`, porta 5000 - **Webhook ativo:** `https://44.204.251.251/webhook` via Apache2 proxy reverso (cert autoassinado snakeoil) - **Cloudflare Tunnel:** `flora-tunnel.service` + `flora-tunnel-watchdog.service` ativos - **Whitelist:** `ALLOWED_PHONES=5519995994481` (apenas Eros pode testar) - **Modelo principal:** `claude-haiku-4-5`; `ProdutoAgent` usa `claude-sonnet-4-5` ### Parser webhook corrigido (formato Meta WhatsApp Cloud API) - Payload real da Meta tem estrutura aninhada: `entry",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-23T14:10:57.638Z",
-      "lastRecalledAt": "2026-06-23T14:10:57.638Z",
+      "lastRecalledAt": "2026-06-24T14:56:22.945Z",
       "queryHashes": [
-        "e64824be9630"
+        "e64824be9630",
+        "321b95f7dbd5"
       ],
       "recallDays": [
-        "2026-06-23"
+        "2026-06-23",
+        "2026-06-24"
       ],
       "conceptTags": [
         "flora-agente",
@@ -31,6 +33,237 @@
         "flora-tunnel-watchdog.service",
         "allowed-phones",
         "claude-haiku-4-5"
+      ]
+    },
+    "memory:memory/2026-06-24.md:1:37": {
+      "key": "memory:memory/2026-06-24.md:1:37",
+      "path": "memory/2026-06-24.md",
+      "startLine": 1,
+      "endLine": 37,
+      "source": "memory",
+      "snippet": "# Memory — 2026-06-24 ## Projetos ativos: Agente de Performance + Agente de Briefings (Guará Marketing) ### Identidade - Nome: Cesar - Role: Senior Lead Systems Engineer & Automation Architect - Configurado por Eros (Guará Marketing) para os projetos Flora e Agente de Performance ### Infraestrutura - Host: ip-172-26-10-132 (AWS Ubuntu) - Proxy HTTPS: 44.204.251.251 - Porta agente briefings: 8002 - URL externa briefings: https://44.204.251.251/briefings/slack/events - Venv: /home/ubuntu/.openclaw/workspace/Agente_briefing/venv - Serviço: agente-briefings.service (active) ### Agente de Performance - Diretório: /home/ubuntu/.openclaw/workspace/agente-performance/ - GitHub: https://github.co",
+      "recallCount": 4,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 4,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-06-24T11:53:19.976Z",
+      "lastRecalledAt": "2026-07-03T17:51:48.940Z",
+      "queryHashes": [
+        "eb94228f54b4",
+        "6f2eb0360318",
+        "8e44e9147f05",
+        "232d5f91fa66"
+      ],
+      "recallDays": [
+        "2026-06-24",
+        "2026-06-26",
+        "2026-07-01",
+        "2026-07-03"
+      ],
+      "conceptTags": [
+        "ip-172-26-10-132",
+        "44.204.251.251",
+        "home/ubuntu",
+        "agente-briefings.service",
+        "github.co",
+        "projetos",
+        "ativos",
+        "agente"
+      ]
+    },
+    "memory:memory/2026-06-23.md:1:31": {
+      "key": "memory:memory/2026-06-23.md:1:31",
+      "path": "memory/2026-06-23.md",
+      "startLine": 1,
+      "endLine": 31,
+      "source": "memory",
+      "snippet": "# Memória — 2026-06-23 ## Projeto: Agente de Performance Guará ### Localização - Projeto: `/home/ubuntu/.openclaw/workspace/agente-performance` - Banco SQLite campanhas: `data/campanhas.db` (30.905 registros, 93 colunas, mai/2023–jun/2026) - Banco contexto: `data/context.db` (TTL 24h) - Banco logs: `data/logs.db` - Env virtual: `venv/` dentro do projeto - Serviço systemd: `agente-guara.service` (User=ubuntu, porta 8001) - Apache proxy: vhost `flora-webhook.conf`, rotas `/guara/` e `/guara/slack/events` - Repositório GitHub: https://github.com/Eroscv/Flora-Agente (privado) - Último commit pushado: `feat: comparativos WoW/MoM/antes-depois/períodos/ranking` ### Regras absolutas - **Flora é I",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-06-24T11:53:19.976Z",
+      "lastRecalledAt": "2026-06-24T11:53:19.976Z",
+      "queryHashes": [
+        "eb94228f54b4"
+      ],
+      "recallDays": [
+        "2026-06-24"
+      ],
+      "conceptTags": [
+        "home/ubuntu",
+        "data/campanhas.db",
+        "30.905",
+        "mai/2023",
+        "jun/2026",
+        "data/context.db",
+        "data/logs.db",
+        "agente-guara.service"
+      ]
+    },
+    "memory:memory/2026-06-23.md:65:95": {
+      "key": "memory:memory/2026-06-23.md:65:95",
+      "path": "memory/2026-06-23.md",
+      "startLine": 65,
+      "endLine": 95,
+      "source": "memory",
+      "snippet": "- `ranking_comparativo` — ranking de todas as campanhas por qualquer métrica ### Pendências do usuário (Slack app) - Configurar no painel api.slack.com: - Event Subscriptions URL: `https://44.204.251.251/guara/slack/events` - Bot events: `app_mention`, `message.im` - OAuth Scopes: `chat:write`, `reactions:write`, `reactions:read`, `app_mentions:read`, `im:history` - Slash command `/ajuda` → mesma URL ### Pendências técnicas abertas - Integrar `agent/cache.py` e `agent/conversation_log.py` no fluxo principal do `engine.py` - Integrar handler Slack para export (detectar palavras \"excel\"/\"pdf\" e chamar `reports/exporter.py`) - Testar bot com perguntas reais no Slack - Exposição do",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-06-24T11:53:19.976Z",
+      "lastRecalledAt": "2026-06-24T11:53:19.976Z",
+      "queryHashes": [
+        "eb94228f54b4"
+      ],
+      "recallDays": [
+        "2026-06-24"
+      ],
+      "conceptTags": [
+        "ranking-comparativo",
+        "api.slack.com",
+        "app-mention",
+        "message.im",
+        "app-mentions",
+        "agent/cache.py",
+        "agent/conversation-log.py",
+        "engine.py"
+      ]
+    },
+    "memory:memory/2026-06-24.md:55:71": {
+      "key": "memory:memory/2026-06-24.md:55:71",
+      "path": "memory/2026-06-24.md",
+      "startLine": 55,
+      "endLine": 71,
+      "source": "memory",
+      "snippet": "- Prioridade MÉDIA: logs de uso no Briefings (logs.db — espelhar conversation_log.py do Performance) - NÃO fazer agora: PostgreSQL, ORM/SQLAlchemy, banco compartilhado entre agentes - Schema definido e aprovado para sessions.db, briefs.db, logs.db no Briefings - Estratégia cache Performance: memória → SQLite → banco+Claude ### Identifiers críticos - GitHub token: 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 (em TOOLS.md) - Usuário testador Slack: U09CW4QR1DH - DM channel Slack: D0BC6THCESK ### Próximos passos pendentes - [ ] Implementar sessions.db no Agente de Briefings (session.py + novo db/) - [ ] Implementar briefs.db para histórico de briefs gerados - [ ] Implementar cache.db no Agente de",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1.9974759728638634,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-06-24T11:53:19.976Z",
+      "lastRecalledAt": "2026-07-03T17:51:48.940Z",
+      "queryHashes": [
+        "eb94228f54b4",
+        "232d5f91fa66"
+      ],
+      "recallDays": [
+        "2026-06-24",
+        "2026-07-03"
+      ],
+      "conceptTags": [
+        "logs.db",
+        "conversation-log.py",
+        "orm/sqlalchemy",
+        "sessions.db",
+        "briefs.db",
+        "tools.md",
+        "session.py",
+        "cache.db"
+      ]
+    },
+    "memory:memory/2026-06-24.md:30:60": {
+      "key": "memory:memory/2026-06-24.md:30:60",
+      "path": "memory/2026-06-24.md",
+      "startLine": 30,
+      "endLine": 60,
+      "source": "memory",
+      "snippet": "- Bot ID: B0BCQ7LPQ3B, Bot User ID: U0BC6THBV4P - PROBLEMA CONHECIDO: sessões vivem em dict em memória (_sessions em session.py:96) — morrem no restart - Sem banco de dados nenhum — tudo volátil - Commits da sessão: 42d5386, 0395128, d192260 ### Comandos adicionados nesta sessão **Agente de Performance:** - /status — status do sistema (banco, cache, KB Notion) - /exemplos — 20+ exemplos de perguntas em linguagem natural - /metricas — lista métricas disponíveis - /kb — últimas 10 entradas da Base de Conhecimento - /cache-limpar — limpa cache - /ajuda — redesenhado com 10 exemplos práticos reais **Agente de Briefings:** - /brief-status — status do sistema - /brief-exemplos — exemplos de uso",
+      "recallCount": 3,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2.991354549671053,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-06-24T11:53:19.976Z",
+      "lastRecalledAt": "2026-07-03T17:51:48.940Z",
+      "queryHashes": [
+        "eb94228f54b4",
+        "8e44e9147f05",
+        "232d5f91fa66"
+      ],
+      "recallDays": [
+        "2026-06-24",
+        "2026-07-01",
+        "2026-07-03"
+      ],
+      "conceptTags": [
+        "session.py",
+        "cache-limpar",
+        "brief-status",
+        "brief-exemplos",
+        "bot",
+        "b0bcq7lpq3b",
+        "user",
+        "u0bc6thbv4p"
+      ]
+    },
+    "memory:memory/2026-06-22.md:25:54": {
+      "key": "memory:memory/2026-06-22.md:25:54",
+      "path": "memory/2026-06-22.md",
+      "startLine": 25,
+      "endLine": 54,
+      "source": "memory",
+      "snippet": "| Hidratante Corporal 300ml | NV DMAE (10%), Symbiocaps®, Óleo de Semente de Uva, Manteiga de Karité | | Gel Creme Facial 50g | Instensyl® (5%), AH nanoencapsulado, Óleo de Uva + Vit E, Symbiocaps® | | Água Micelar Demaquilante | Ecoskin® (pré+probióticos), Extrato de Chá Verde, Extrato de Camomila | Detecção via regex `_INGREDIENTE_RE` + mapeamento `_PRODUTO_MAP`. ### Humanização dos prompts - Prompts reescritos em todos os 5 agentes especializados + prompt principal - Tom: coloquial leve, reações espontâneas, empatia real, nomes próprios nas transferências - Ex: \"Que bom que você veio 🤎\" em vez de \"Como posso ajudar?\" - Usuário pediu mais humanização às 16:06 — aguarda exemplo concreto",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-02T18:31:23.287Z",
+      "lastRecalledAt": "2026-07-02T18:31:26.171Z",
+      "queryHashes": [
+        "0d0550a70f3b",
+        "f7ca85ea071d"
+      ],
+      "recallDays": [
+        "2026-07-02"
+      ],
+      "conceptTags": [
+        "ingrediente-re",
+        "produto-map",
+        "hidratante",
+        "corporal",
+        "300ml",
+        "dmae",
+        "symbiocaps",
+        "óleo"
+      ]
+    },
+    "memory:memory/2026-07-01.md:19:43": {
+      "key": "memory:memory/2026-07-01.md:19:43",
+      "path": "memory/2026-07-01.md",
+      "startLine": 19,
+      "endLine": 43,
+      "source": "memory",
+      "snippet": "- `scheduler.py` atualizado para usar `notion_builder` - `send_report.py` ganhou `send_notion_notification()` (envia link do Notion via WhatsApp) #### Relatório sob demanda (WhatsApp) - Criado `reports/on_demand.py` - **REGRA ABSOLUTA:** apenas `5519995994481` pode solicitar relatório via WhatsApp - Detecta pedidos com regex (`relatório`, `report`) - Interpreta período: semana N do mês, semana passada, semana atual, mês passado, mensal, mês atual - Fallback automático: se período pedido não tem mensagens (`user_messages == 0`), usa período mais recente disponível e avisa - Integrado em `webhook.py` no `on_message_ready()` antes do orquestrador - Resposta: resumo + link do Notion via WhatsAp",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-02T18:31:23.287Z",
+      "lastRecalledAt": "2026-07-02T18:31:26.171Z",
+      "queryHashes": [
+        "0d0550a70f3b",
+        "f7ca85ea071d"
+      ],
+      "recallDays": [
+        "2026-07-02"
+      ],
+      "conceptTags": [
+        "scheduler.py",
+        "notion-builder",
+        "send-report.py",
+        "send-notion-notification",
+        "reports/on-demand.py",
+        "user-messages",
+        "webhook.py",
+        "on-message-ready"
       ]
     }
   }

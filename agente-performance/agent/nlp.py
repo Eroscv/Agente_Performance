@@ -206,13 +206,53 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
         if campanha_raw:
             campanha = fuzzy_match_campaign(campanha_raw, campanhas_disponiveis)
 
+        data_inicio = parsed.get("data_inicio")
+        data_fim    = parsed.get("data_fim")
+        periodo_nota = None
+
+        # Verifica se o período pedido está dentro do range disponível no banco
+        if data_inicio or data_fim:
+            try:
+                from agent.queries import data_range_disponivel
+                dr = data_range_disponivel()
+                db_min = dr.get("data_minima")
+                db_max = dr.get("data_maxima")
+                if db_min and db_max and data_fim and data_fim > db_max:
+                    logger.warning(
+                        "NLP: período pedido (%s→%s) além do range do banco (%s→%s) — ajustando para período mais recente",
+                        data_inicio, data_fim, db_min, db_max
+                    )
+                    # Ajusta para o período mais recente disponível com mesma duração
+                    from datetime import date as _date, timedelta as _td
+                    try:
+                        di = _date.fromisoformat(data_inicio) if data_inicio else None
+                        df = _date.fromisoformat(data_fim)
+                        db_max_d = _date.fromisoformat(db_max)
+                        if di:
+                            duracao = (df - di).days
+                            new_df = db_max_d
+                            new_di = new_df - _td(days=duracao)
+                            data_inicio = new_di.isoformat()
+                            data_fim    = new_df.isoformat()
+                        else:
+                            data_fim    = db_max
+                        periodo_nota = (
+                            f"⚠️ Período ajustado automaticamente para {data_inicio} → {data_fim} "
+                            f"(dados disponíveis até {db_max})"
+                        )
+                    except Exception as e2:
+                        logger.debug("NLP: falha ao ajustar período: %s", e2)
+            except Exception as e:
+                logger.debug("NLP: falha ao verificar range do banco: %s", e)
+
         result = {
-            "intents":     intents,
-            "campanha":    campanha,
-            "data_inicio": parsed.get("data_inicio"),
-            "data_fim":    parsed.get("data_fim"),
-            "limit":       int(parsed.get("limit", 10)),
-            "raw":         parsed,
+            "intents":      intents,
+            "campanha":     campanha,
+            "data_inicio":  data_inicio,
+            "data_fim":     data_fim,
+            "limit":        int(parsed.get("limit", 10)),
+            "raw":          parsed,
+            "periodo_nota": periodo_nota,
         }
 
         logger.info(

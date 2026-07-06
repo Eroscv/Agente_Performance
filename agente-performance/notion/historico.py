@@ -306,6 +306,70 @@ def _limpar_blocos_pagina(page_id: str):
 
 # ── Função principal ──────────────────────────────────────────────────────────
 
+
+def _buscar_relatorio_periodo_anterior(
+    pagina_ano_id: str,
+    cliente_key: str,
+    tipo: str,
+    data_inicio: str,
+    data_fim: str,
+) -> str | None:
+    """
+    Tenta encontrar o relatório do período anterior ao fornecido.
+    Usa o cache local para localizar page_ids por tipo e período.
+    Retorna page_id se encontrar, None caso contrário.
+    """
+    from datetime import date, timedelta
+    try:
+        di = date.fromisoformat(data_inicio) if data_inicio else None
+        df = date.fromisoformat(data_fim)    if data_fim    else None
+        if not di or not df:
+            return None
+
+        duracao = (df - di).days + 1
+        ant_df  = di - timedelta(days=1)
+        ant_di  = ant_df - timedelta(days=duracao - 1)
+
+        cache = _load_cache()
+        key   = _cache_key_relatorio(cliente_key, tipo, ant_di.isoformat(), ant_df.isoformat())
+        pid   = cache.get(key)
+        if pid:
+            try:
+                _get(f"/pages/{pid}")
+                return pid
+            except Exception:
+                pass
+    except Exception as e:
+        logger.debug("[Histórico] Falha ao buscar relatório anterior: %s", e)
+    return None
+
+
+def _adicionar_link_relatorio(page_id: str, texto: str, url_destino: str, page_id_destino: str):
+    """Adiciona um bloco com link para outro relatório em uma página existente."""
+    try:
+        # Usa mention para criar link interno do Notion
+        bloco = {
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "rich_text": [
+                    {"type": "text", "text": {"content": f"{texto}: "}},
+                    {
+                        "type": "mention",
+                        "mention": {
+                            "type": "page",
+                            "page": {"id": page_id_destino},
+                        },
+                    },
+                ]
+            }
+        }
+        adicionar_blocos(page_id, [bloco])
+        logger.info("[Histórico] Link adicionado em %s → %s", page_id, page_id_destino)
+    except Exception as e:
+        logger.warning("[Histórico] Falha ao adicionar link de relatório: %s", e)
+
+
 def criar_relatorio_no_historico(
     titulo: str,
     blocos: list[dict],
@@ -377,6 +441,24 @@ def criar_relatorio_no_historico(
     LOTE = 95
     for i in range(0, len(blocos), LOTE):
         adicionar_blocos(pid, blocos[i:i + LOTE])
+
+    # 5. Links bidirecionais com relatório anterior (apenas para páginas novas)
+    if not cache_hit and di_str and df_str:
+        try:
+            # Obtém pagina_ano_id caso ainda não definido (path cache_hit=False já tem)
+            _pagina_ano_id = locals().get("pagina_ano_id")
+            pid_anterior = _buscar_relatorio_periodo_anterior(
+                _pagina_ano_id or "", cliente_key, tipo, di_str, df_str
+            )
+            if pid_anterior:
+                # Adiciona link "Ver relatório anterior" na nova página
+                url_anterior = f"https://notion.so/{pid_anterior.replace('-', '')}"
+                _adicionar_link_relatorio(pid, "📌 Ver relatório anterior", url_anterior, pid_anterior)
+                # Adiciona link "Ver relatório seguinte" na página anterior
+                _adicionar_link_relatorio(pid_anterior, "📌 Ver relatório seguinte", url, pid)
+                logger.info("[Histórico] Links bidirecionais criados: %s ↔ %s", pid_anterior, pid)
+        except Exception as e:
+            logger.warning("[Histórico] Falha ao criar links de relatórios: %s", e)
 
     acao = "atualizado" if cache_hit else "criado"
     logger.info("[Histórico] Relatório %s %s em 📅 %d → %s", tipo, acao, ano, url)
