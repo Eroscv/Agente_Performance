@@ -240,17 +240,51 @@ def markdown_to_blocks(text: str) -> list[dict]:
 def truncar_blocos(blocks: list[dict], max_blocks: int = 49) -> list[dict]:
     """
     Limita a lista de blocos ao máximo do Slack (50 blocos por mensagem).
-    Se truncar, adiciona aviso no final.
+
+    Se truncar, usa ordem de prioridade para descartar o menos importante:
+      1. Resumo (header + callout KPI)          → nunca descartado
+      2. Alertas                                → nunca descartado
+      3. Top Campanhas / Comparativo períodos    → só descartados por último
+      4. Tabela técnica detalhada               → descartada primeiro
+      5. Alocação de budget                    → descartada antes da tabela principal
     """
     if len(blocks) <= max_blocks:
         return blocks
 
-    truncados = blocks[:max_blocks]
-    truncados.append({
+    # Detecta blocos por tipo de conteúdo para priorização
+    def _is_low_priority(block: dict) -> bool:
+        """Retorna True para blocos que podem ser descartados primeiro."""
+        # Tabelas técnicas (toggle ou tabela com muitas colunas)
+        if block.get("type") == "toggle":
+            return True
+        # Sections longas de alocação (bullet lists de budget)
+        if block.get("type") == "bulleted_list_item":
+            texto = ""
+            for rt in block.get("bulleted_list_item", {}).get("rich_text", []):
+                texto += rt.get("text", {}).get("content", "")
+            # Budget allocation lines têm padrão: "R$ xxx (xx%)"
+            if "%" in texto and "R$" in texto:
+                return True
+        return False
+
+    # Separa em prioridade alta vs baixa
+    high = [b for b in blocks if not _is_low_priority(b)]
+    low  = [b for b in blocks if _is_low_priority(b)]
+
+    # Tenta só com blocos de alta prioridade
+    if len(high) <= max_blocks:
+        result = high
+        omitidos = len(blocks) - len(high)
+    else:
+        # Mesmo high priority precisa truncar — corta pelo final
+        result   = high[:max_blocks - 1]
+        omitidos = len(blocks) - len(result)
+
+    result.append({
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": f"_...resposta truncada ({len(blocks) - max_blocks} blocos omitidos)_",
+            "text": f"_...{omitidos} bloco(s) de detalhes técnicos omitidos (limite Slack). Ver relatório completo no Notion._",
         },
     })
-    return truncados
+    return result

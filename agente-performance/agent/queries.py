@@ -42,6 +42,54 @@ _FREQ_EXPR = "ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COA
 
 # ── Diagnóstico ───────────────────────────────────────────────────────────────
 
+def metricas_video(
+    campanha:    Optional[str] = None,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """
+    Métricas de vídeo por campanha: views, ThruPlays, retenção e custo.
+
+    Retorna para cada campanha:
+      - reproducoes_video   : total de reproduções iniciadas
+      - video_3s            : visualizações de 3 segundos (métrica padrão Meta)
+      - thruplays           : visualizações completas (≥ 15s ou 97% do vídeo)
+      - taxa_retencao_pct   : ThruPlays / reproducoes_video * 100
+      - custo_thruplay      : custo médio por ThruPlay
+      - visualizacoes       : visualizações totais (inclui partilhas)
+      - custo_por_view      : investimento / visualizacoes
+    """
+    base = "campanha = ?" if campanha else None
+    extra = [campanha] if campanha else []
+    where, params = _build_where(
+        base,
+        extra_params=extra,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    rows = query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(COALESCE(reproducoes_video, 0)), 0)   AS reproducoes_video,
+            ROUND(SUM(COALESCE(video_3s, 0)), 0)            AS video_3s,
+            ROUND(SUM(COALESCE(thruplays, 0)), 0)           AS thruplays,
+            ROUND(
+                CAST(SUM(COALESCE(thruplays, 0)) AS FLOAT)
+                / NULLIF(SUM(COALESCE(reproducoes_video, 0)), 0) * 100
+            , 2)                                            AS taxa_retencao_pct,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(thruplays, 0)), 0), 4) AS custo_thruplay,
+            ROUND(SUM(COALESCE(visualizacoes, 0)), 0)       AS visualizacoes,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(visualizacoes, 0)), 0), 4) AS custo_por_view,
+            ROUND(SUM(investimento), 2)                     AS investimento
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(COALESCE(reproducoes_video, 0)) > 0
+        ORDER BY thruplays DESC
+    """, tuple(params))
+    return rows
+
+
 def data_range_disponivel() -> dict:
     """Retorna min/max de datas disponíveis no banco — útil para diagnóstico."""
     return query_one("""
@@ -184,10 +232,11 @@ AWARENESS_PATTERNS = ['tráfego', 'trafego', 'awareness', 'engajamento', 'alcanc
 
 
 def top_campanhas_roas(
-    limit:              int = 10,
-    data_inicio:        Optional[str] = None,
-    data_fim:           Optional[str] = None,
-    excluir_awareness:  bool = True,
+    limit:                   int = 10,
+    data_inicio:             Optional[str] = None,
+    data_fim:                Optional[str] = None,
+    excluir_awareness:       bool = True,
+    exigir_atividade_recente: bool = True,
 ) -> list[dict]:
     """
     Top N campanhas por ROAS ponderado (mínimo R$100 investidos).
@@ -195,6 +244,10 @@ def top_campanhas_roas(
     Retorna metadado 'investimento_minimo_filtro' para transparência.
     Campanhas de awareness/tráfego são excluídas por padrão (excluir_awareness=True)
     pois não têm objetivo de conversão e distorcem o ranking.
+
+    exigir_atividade_recente=True (padrão): exclui campanhas cuja última atividade
+    seja anterior ao data_inicio do filtro — evita que campanhas antigas apareçam
+    em rankings por ter poucos dias com ROAS inflado.
     """
     INVEST_MIN = 100
     where, params = _build_where(
@@ -211,18 +264,26 @@ def top_campanhas_roas(
         )
         awareness_filter = f" AND ({awareness_clauses})"
 
+    # Filtro de atividade recente: só campanhas com dados dentro do período pedido
+    # (HAVING MAX(data_fim) >= data_inicio garante que a campanha estava ativa no período)
+    atividade_filter = ""
+    if exigir_atividade_recente and data_inicio:
+        atividade_filter = f" AND MAX(data_fim) >= '{data_inicio}'"
+
     rows = query(f"""
         SELECT
             campanha,
             {_ROAS_EXPR}                                AS roas,
             ROUND(SUM(investimento), 2)                 AS investimento,
             ROUND(SUM(valor_compras), 2)                AS receita,
-            ROUND(SUM(compras), 0)                      AS compras
+            ROUND(SUM(compras), 0)                      AS compras,
+            MAX(data_fim)                               AS ultima_atividade
         FROM campanhas
         {where}{awareness_filter}
         GROUP BY campanha
         HAVING SUM(investimento) >= {INVEST_MIN}
            AND SUM(valor_compras) > 0
+           {atividade_filter}
         ORDER BY roas DESC
         LIMIT ?
     """, tuple(params + [limit]))
@@ -336,12 +397,12 @@ def resumo_periodo(data_inicio: str, data_fim: str) -> dict:
     return result
 
 
-def alertas_roas_baixo(threshold: float = 1.0) -> list[dict]:
+def alertas_roas_baixo(threshold: float = 1.0, janela_dias: int = 30) -> list[dict]:
     """
     Campanhas com ROAS preocupante.
 
     Usa a data máxima do banco (não DATE('now')) para funcionar mesmo
-    com dados defasados. Janela: últimos 30 dias a partir da data mais recente.
+    com dados defasados. Janela configurável via janela_dias (padrão: 30).
     """
     dr = data_range_disponivel()
     data_max = dr.get("data_maxima")
@@ -349,7 +410,9 @@ def alertas_roas_baixo(threshold: float = 1.0) -> list[dict]:
         logger.warning("[queries] alertas_roas_baixo: banco vazio")
         return []
 
-    logger.debug("[queries] alertas_roas_baixo: data_max do banco = %s, threshold = %.2f", data_max, threshold)
+    logger.debug("[queries] alertas_roas_baixo: data_max=%s threshold=%.2f janela=%dd",
+                 data_max, threshold, janela_dias)
+    janela_sql = f"-{janela_dias} days"
 
     return query("""
         SELECT
@@ -365,7 +428,7 @@ def alertas_roas_baixo(threshold: float = 1.0) -> list[dict]:
                 ELSE 'ok'
             END AS tipo_alerta
         FROM campanhas
-        WHERE data_inicio >= DATE(?, '-30 days')
+        WHERE data_inicio >= DATE(?, ?)
           AND campanha IS NOT NULL AND campanha != ''
           AND LOWER(campanha) NOT LIKE '%engajamento%'
           AND LOWER(campanha) NOT LIKE '%trafego%'
@@ -379,7 +442,7 @@ def alertas_roas_baixo(threshold: float = 1.0) -> list[dict]:
         ORDER BY
             CASE WHEN SUM(valor_compras) = 0 THEN 0 ELSE 1 END ASC,
             SUM(valor_compras) / NULLIF(SUM(investimento), 0) ASC
-    """, (threshold, data_max, threshold))
+    """, (threshold, data_max, janela_sql, threshold))
 
 
 def comparar_campanhas(

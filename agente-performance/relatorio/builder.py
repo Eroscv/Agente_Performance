@@ -615,9 +615,88 @@ def _blocos_alertas(alertas: list[str]) -> list[dict]:
 def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anterior_str: str) -> list[dict]:
     """
     Bloco de comparativo entre período atual e anterior.
-    Mostra tabela com ROAS, Invest, Receita, Compras, CPA, CTR, CPC
-    + variação % e tendência (seta + texto).
+    Destaque visual correto por direção: métricas onde MENOR é melhor
+    (CPA, CPC, CPM) têm lógica de cor invertida.
     """
+    # Métricas onde uma queda é POSITIVA (menor = melhor)
+    MENOR_MELHOR = {"CPA", "CPC", "CPM"}
+
+    def _variacao_pct(atual, anterior, nome_metrica):
+        if atual is None or anterior is None or anterior == 0:
+            return None, "→ Estável"
+        var = (atual - anterior) / abs(anterior) * 100
+        if abs(var) < 5:
+            return var, "→ Estável"
+        # Inverte lógica para métricas onde menor é melhor
+        subiu = var > 0
+        if nome_metrica in MENOR_MELHOR:
+            tendencia = "⬇️ Melhorou" if not subiu else "⬆️ Piorou"
+        else:
+            tendencia = "⬆️ Melhorou" if subiu else "⬇️ Piorou"
+        return var, tendencia
+
+    def _fmt_var(var):
+        if var is None:
+            return "—"
+        sign = "+" if var > 0 else ""
+        return f"{sign}{var:.1f}%"
+
+    metricas = [
+        ("ROAS",     resumo_atual.get("roas"),          resumo_anterior.get("roas"),          _fmt_x),
+        ("Invest.",  resumo_atual.get("total_invest"),   resumo_anterior.get("total_invest"),  _fmt_brl),
+        ("Receita",  resumo_atual.get("total_receita"),  resumo_anterior.get("total_receita"), _fmt_brl),
+        ("Compras",  resumo_atual.get("total_compras"),  resumo_anterior.get("total_compras"), lambda v: str(int(v)) if v is not None else "—"),
+        ("CPA",      resumo_atual.get("cpa"),            resumo_anterior.get("cpa"),           _fmt_brl),
+        ("CTR",      resumo_atual.get("ctr"),            resumo_anterior.get("ctr"),           _fmt_pct),
+        ("CPC",      resumo_atual.get("cpc_medio"),      resumo_anterior.get("cpc_medio"),     _fmt_brl),
+        ("CPM",      resumo_atual.get("cpm_medio"),      resumo_anterior.get("cpm_medio"),     _fmt_brl),
+    ]
+
+    receita_atrib = resumo_atual.get("receita_atribuida", 0) or 0
+    if receita_atrib > 0:
+        metricas.append((
+            "Receita Atribuída (cross)",
+            receita_atrib,
+            resumo_anterior.get("receita_atribuida", 0) or 0,
+            _fmt_brl,
+        ))
+
+    header = ["Métrica", "Atual", "Anterior", "Variação", "Tendência"]
+    table_rows = [
+        {
+            "type": "table_row",
+            "table_row": {"cells": [[{"text": {"content": h}, "annotations": {"bold": True}}] for h in header]}
+        }
+    ]
+
+    for nome, atual, anterior, fmt_fn in metricas:
+        var, tend = _variacao_pct(atual, anterior, nome)
+        table_rows.append({
+            "type": "table_row",
+            "table_row": {"cells": [
+                [{"text": {"content": nome}}],
+                [{"text": {"content": fmt_fn(atual)}}],
+                [{"text": {"content": fmt_fn(anterior)}}],
+                [{"text": {"content": _fmt_var(var)}}],
+                [{"text": {"content": tend}}],
+            ]}
+        })
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": f"📈 Comparativo com Período Anterior ({periodo_anterior_str})"}}]}},
+        {
+            "object": "block",
+            "type": "table",
+            "table": {
+                "table_width": len(header),
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": table_rows,
+            }
+        },
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
     def _variacao_pct(atual, anterior):
         """Retorna (variacao_pct, tendencia_str)"""
         if atual is None or anterior is None or anterior == 0:
@@ -697,8 +776,78 @@ def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anter
 
 def _blocos_funil(resumo: dict) -> list[dict]:
     """
-    Funil de conversão visual: Impressões → Cliques → Carrinho → Checkout → Compras.
+    Funil de conversão visual com quebra correta:
+    Alcance → Impressões (frequência) → Cliques (CTR) → Carrinho → Checkout → Compras.
+    Separa alcance de impressões para não misturar frequência com taxa de clique.
     """
+    r = resumo
+    impressoes = r.get("total_impressoes") or 0
+    alcance    = r.get("total_alcance") or 0
+    cliques    = r.get("total_cliques") or 0
+    carrinho   = r.get("total_carrinho") or 0
+    checkout   = r.get("total_checkout") or 0
+    compras    = r.get("total_compras") or 0
+    ctr        = r.get("ctr")
+    frequencia = r.get("frequencia_media")
+
+    # Taxas entre etapas
+    pct_impr_clique      = round(cliques  / impressoes * 100, 2) if impressoes else None  # = CTR
+    pct_alcance_impr     = round(impressoes / alcance, 2) if alcance else None             # = frequência
+    pct_clique_carrinho  = round(carrinho / cliques  * 100, 1) if cliques   else None
+    pct_carrinho_checkout= round(checkout / carrinho * 100, 1) if carrinho  else None
+    pct_checkout_compra  = round(compras  / checkout * 100, 1) if checkout  else None
+    efic_geral           = round(compras  / impressoes * 100, 3) if impressoes else None
+
+    def _p(txt):
+        return {
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": [{"text": {"content": txt}}]}
+        }
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🔽 Funil de Conversão"}}]}},
+    ]
+
+    # Etapa 1: Alcance (pessoas únicas)
+    blocos.append(_p(f"👤 {_fmt_n(alcance)} pessoas alcançadas (alcance único)"))
+
+    # Etapa 2: Impressões (frequência = impr/alcance)
+    freq_str = f" — frequência média {_fmt_n(float(frequencia), 2)}x" if frequencia else ""
+    blocos.append(_p(f"   ↳ {_fmt_n(impressoes)} impressões{freq_str}"))
+
+    # Etapa 3: Cliques (CTR = cliques/impressões)
+    ctr_str = f" — CTR {_fmt_pct(pct_impr_clique)}" if pct_impr_clique else ""
+    blocos.append(_p(f"   ↳ {_fmt_n(cliques)} cliques no link{ctr_str}"))
+
+    # Etapa 4: Carrinho
+    carr_str = f" — {_fmt_pct(pct_clique_carrinho)} dos cliques" if pct_clique_carrinho else ""
+    blocos.append(_p(f"   ↳ {_fmt_n(carrinho)} adições ao carrinho{carr_str}"))
+
+    # Etapa 5: Checkout
+    chk_str = f" — {_fmt_pct(pct_carrinho_checkout)} do carrinho" if pct_carrinho_checkout else ""
+    blocos.append(_p(f"   ↳ {_fmt_n(checkout)} checkouts iniciados{chk_str}"))
+
+    # Etapa 6: Compras
+    cmp_str = f" — {_fmt_pct(pct_checkout_compra)} do checkout" if pct_checkout_compra else ""
+    blocos.append(_p(f"   ↳ {_fmt_n(compras)} compras{cmp_str}"))
+
+    # Callout com eficiência geral
+    efic_txt = (
+        f"Eficiência geral alcance→compra: {efic_geral:.3f}% "
+        f"({compras} compras para {_fmt_n(alcance)} pessoas alcançadas)"
+        if efic_geral is not None
+        else "Eficiência geral: —"
+    )
+    blocos.append({
+        "object": "block", "type": "callout",
+        "callout": {
+            "rich_text": [{"text": {"content": efic_txt}}],
+            "icon": {"type": "emoji", "emoji": "🔽"},
+        }
+    })
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    return blocos
     r = resumo
     impressoes = r.get("total_impressoes") or 0
     cliques    = r.get("total_cliques") or 0
@@ -764,6 +913,45 @@ def _blocos_funil(resumo: dict) -> list[dict]:
 
 
 # ── Função principal ──────────────────────────────────────────────────────────
+
+
+def _blocos_tendencia_semanal(semanas: int = 4) -> list[dict]:
+    """
+    Tendencia das ultimas N semanas (WoW) no relatorio Notion.
+    """
+    try:
+        from agent.comparatives import comparar_semana_a_semana
+        serie = comparar_semana_a_semana(semanas=semanas)
+    except Exception as e:
+        logger.warning("[Builder] _blocos_tendencia_semanal falhou: %s", e)
+        return []
+    if not serie:
+        return []
+    header = ["Semana", "Invest.", "Receita", "ROAS", "Compras", "CTR", "CPC", "D ROAS", "D Receita"]
+    def _fmt_wow(v):
+        if v is None: return ""
+        sign = "+" if v > 0 else ""
+        arrow = "UP" if v > 5 else ("DOWN" if v < -5 else "->")
+        return f"{arrow} {sign}{v:.1f}%"
+    table_rows = [{"type":"table_row","table_row":{"cells":[[{"text":{"content":h},"annotations":{"bold":True}}] for h in header]}}]
+    for s in serie:
+        table_rows.append({"type":"table_row","table_row":{"cells":[
+            [{"text":{"content":s.get("semana","")}}],
+            [{"text":{"content":_fmt_brl(s.get("investimento"))}}],
+            [{"text":{"content":_fmt_brl(s.get("receita"))}}],
+            [{"text":{"content":_fmt_x(s.get("roas"))}}],
+            [{"text":{"content":_fmt_n(s.get("compras"))}}],
+            [{"text":{"content":_fmt_pct(s.get("ctr"))}}],
+            [{"text":{"content":_fmt_brl(s.get("cpc"))}}],
+            [{"text":{"content":_fmt_wow(s.get("roas_wow_pct"))}}],
+            [{"text":{"content":_fmt_wow(s.get("receita_wow_pct"))}}],
+        ]}})
+    return [
+        {"object":"block","type":"heading_2","heading_2":{"rich_text":[{"text":{"content":f"Tendencia Ultimas {semanas} Semanas (WoW)"}}]}},
+        {"object":"block","type":"table","table":{"table_width":len(header),"has_column_header":True,"has_row_header":False,"children":table_rows}},
+        {"object":"block","type":"divider","divider":{}},
+    ]
+
 
 def gerar_relatorio_semanal(
     cliente: str = "source_of",
@@ -855,6 +1043,8 @@ def gerar_relatorio_semanal(
     # Comparativo com período anterior (se tiver dados)
     if resumo_anterior:
         blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
+    # Tendência das últimas 4 semanas
+    blocos += _blocos_tendencia_semanal()
     blocos += _blocos_tabela_campanhas(campanhas)
     blocos += _blocos_top_campanhas(campanhas)
     blocos += _blocos_alocacao(campanhas)
