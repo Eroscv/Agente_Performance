@@ -96,6 +96,13 @@ def gerar_resposta(
     # Contexto de thread anterior
     contexto_str = f"\n{contexto}\n" if contexto else ""
 
+    # Aviso de ajuste automático de período (NLP)
+    periodo_nota = meta.get("periodo_nota")
+    periodo_nota_str = (
+        f"\n\n⚠️ *Nota sobre o período:* {periodo_nota}"
+        if periodo_nota else ""
+    )
+
     # Memória de longo prazo — injeta exemplos aprovados do Notion KB
     kb_contexto = ""
     if usar_kb:
@@ -117,7 +124,7 @@ Intenção detectada: {intent}
 Dados retornados do banco:
 {dados_str}{extras_str}
 
-Responda a pergunta do usuário com base nesses dados. Seja analítico e direto."""
+Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.{periodo_nota_str}"""
 
     # Monta system prompt com memória KB (se disponível)
     system = SYSTEM_PROMPT + ("\n\n" + kb_contexto if kb_contexto else "")

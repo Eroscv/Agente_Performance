@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import re
+import threading
 from datetime import date, timedelta
 from typing import Optional
 
@@ -35,6 +36,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 _client: anthropic.Anthropic | None = None
+_client_lock = threading.Lock()
 
 INTENTS_DISPONIVEIS = [
     "listar_campanhas",
@@ -113,7 +115,9 @@ Sua tarefa: analisar a pergunta do usuário e retornar um JSON estruturado com o
 def get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
-        _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+        with _client_lock:
+            if _client is None:  # double-checked locking
+                _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     return _client
 
 
@@ -256,8 +260,9 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
         }
 
         logger.info(
-            "NLP: intents=%s | campanha=%s | período=%s→%s",
-            intents, campanha, result["data_inicio"], result["data_fim"]
+            "NLP: intents=%s | campanha=%s | período=%s→%s%s",
+            intents, campanha, result["data_inicio"], result["data_fim"],
+            f" | nota='{periodo_nota}'" if periodo_nota else "",
         )
         return result
 

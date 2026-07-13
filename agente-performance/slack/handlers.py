@@ -28,6 +28,26 @@ from agent.conversation_log import registrar as log_registrar
 from agent.cache import get as cache_get
 from slack.formatter import markdown_to_blocks, truncar_blocos
 
+# Timeout global para _processar_e_responder (segundos)
+_HANDLER_TIMEOUT = int(os.getenv("SLACK_HANDLER_TIMEOUT", "60"))
+
+# Dict de clientes Notion — elevado para módulo para evitar reconstrução a cada chamada
+_CLIENTES_NOTION: dict[str, str] = {
+    "consorcio":         "consorcio_sorteado",
+    "consórcio":         "consorcio_sorteado",
+    "sorteado":          "consorcio_sorteado",
+    "source":            "source_of",
+    "source of":         "source_of",
+    "máximo":            "maximo_servico",
+    "maximo":            "maximo_servico",
+    "serviço":           "maximo_servico",
+    "mushin":            "be_mushin",
+    "be mushin":         "be_mushin",
+    "bazar":             "bazar_precatorio",
+    "precatório":        "bazar_precatorio",
+    "precatorio":        "bazar_precatorio",
+}
+
 AJUDA_TEXTO = """
 *⚙️ Agente de Performance Guará — Source OF*
 
@@ -108,23 +128,8 @@ def _detectar_formato_export(text: str) -> tuple[str | None, str | None]:
     elif tem_pdf:
         formato = "pdf"
 
-    # Detecta cliente do Notion no texto
+    # Detecta cliente do Notion no texto usando o dict de módulo
     cliente = None
-    _CLIENTES_NOTION = {
-        "consorcio":         "consorcio_sorteado",
-        "consórcio":         "consorcio_sorteado",
-        "sorteado":          "consorcio_sorteado",
-        "source":            "source_of",
-        "source of":         "source_of",
-        "máximo":            "maximo_servico",
-        "maximo":            "maximo_servico",
-        "serviço":           "maximo_servico",
-        "mushin":            "be_mushin",
-        "be mushin":         "be_mushin",
-        "bazar":             "bazar_precatorio",
-        "precatório":        "bazar_precatorio",
-        "precatorio":        "bazar_precatorio",
-    }
     t = text.lower()
     for token, key in _CLIENTES_NOTION.items():
         if token in t:
@@ -132,6 +137,47 @@ def _detectar_formato_export(text: str) -> tuple[str | None, str | None]:
             break
 
     return formato, cliente
+
+
+def _brl(v) -> str:
+    """Formata valor como BRL."""
+    if v is None:
+        return "—"
+    return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def formatar_resumo_relatorio(resultado: dict) -> str:
+    """
+    Formata o resumo de um resultado de relatório (semanal ou mensal) como texto Slack.
+    Reutilizada por /relatorio (handlers.py) e cron_relatorio.py.
+
+    Args:
+        resultado: dict retornado por gerar_relatorio_semanal / gerar_relatorio_mensal
+
+    Returns:
+        String formatada para Slack (mrkdwn)
+    """
+    r           = resultado.get("resumo", {})
+    periodo_str = resultado.get("periodo", "")
+    url         = resultado.get("url") or f"https://notion.so/{resultado.get('page_id','').replace('-','')}"
+    alertas     = resultado.get("alertas", [])
+    alerta_txt  = "\n".join(f"  {a}" for a in alertas)
+
+    roas_str = f"{r['roas']:.2f}x" if r.get('roas') else '—'
+    ctr_str  = f"{r['ctr']:.2f}%" if r.get('ctr') else '—'
+
+    return (
+        f"✅ *Relatório publicado no Notion!*\n\n"
+        f"📅 *Período:* {periodo_str}\n"
+        f"📊 *Campanhas:* {resultado.get('num_campanhas')}\n"
+        f"💰 *Investimento:* {_brl(r.get('total_invest'))}  (+imposto: {_brl(r.get('invest_imp'))})\n"
+        f"📈 *ROAS:* {roas_str}\n"
+        f"🛒 *Compras:* {r.get('total_compras', '—')}\n"
+        f"💵 *CPA:* {_brl(r.get('cpa'))}\n"
+        f"🎯 *CTR:* {ctr_str}\n\n"
+        f"🚨 *Alertas:*\n{alerta_txt}\n\n"
+        f"📎 <{url}|Abrir relatório no Notion>"
+    )
 
 
 app = AsyncApp(
@@ -160,141 +206,166 @@ async def _processar_e_responder(
     cliente_notion: str = None,  # chave do DATABASES do Notion (ex: 'source_of')
 ):
     """Núcleo: NLP → query banco → Claude → posta no Slack → salva histórico + log."""
+    import asyncio
     t_inicio = time.time()
     resposta_final = ""
     erro_final = None
     cache_hit = False
 
-    try:
-        # Verifica cache antes de tudo (para marcar cache_hit no log)
-        cache_hit = cache_get(text) is not None
+    async def _executar():
+        nonlocal resposta_final, erro_final, cache_hit
+        try:
+            # Verifica cache antes de tudo (para marcar cache_hit no log)
+            cache_hit = cache_get(text) is not None
 
-        append_history(thread_ts, channel, "user", text)
-        contexto = build_context_summary(thread_ts)
+            append_history(thread_ts, channel, "user", text)
+            # Constrói contexto uma única vez e reutiliza em consultar() e gerar_resposta()
+            contexto = build_context_summary(thread_ts)
 
-        resultado   = consultar(text, thread_ts=thread_ts, channel=channel, user_id=user_id)
-        dados       = resultado["dados"]
-        intent      = resultado["intent"]
-        meta        = resultado["meta"]
-        dados_extra = resultado.get("dados_extra", {})
-        erro        = resultado.get("erro")
-        aviso_vazio = resultado.get("aviso_vazio")
+            resultado   = consultar(text, thread_ts=thread_ts, channel=channel, user_id=user_id)
+            dados       = resultado["dados"]
+            intent      = resultado["intent"]
+            meta        = resultado["meta"]
+            dados_extra = resultado.get("dados_extra", {})
+            erro        = resultado.get("erro")
+            aviso_vazio = resultado.get("aviso_vazio")
 
-        # Campanha não encontrada — responde diretamente sem chamar Claude
-        if erro:
-            resposta_final = erro
-            erro_final = erro
-            await client.chat_postMessage(
-                channel=channel, thread_ts=thread_ts,
-                text=erro, mrkdwn=True,
-            )
-            return
-
-        # Dados vazios com sugestão de período
-        if aviso_vazio:
-            resposta_final = aviso_vazio
-            await client.chat_postMessage(
-                channel=channel, thread_ts=thread_ts,
-                text=aviso_vazio, mrkdwn=True,
-            )
-            return
-
-        # ── Exportação de arquivo (excel / pdf) ────────────────────────────────
-        fmt_arquivo = formato_export if formato_export in ("excel", "pdf") else None
-        if fmt_arquivo == "excel+notion":
-            fmt_arquivo = "excel"
-        if fmt_arquivo:
-            from reports.exporter import gerar_relatorio
-            conteudo, filename, mimetype = gerar_relatorio(resultado, text, fmt_arquivo)
-            await client.files_upload_v2(
-                channel=channel,
-                thread_ts=thread_ts,
-                content=conteudo,
-                filename=filename,
-                title=f"Relatório — {intent}",
-            )
-            resposta_final = f"Arquivo {filename} gerado"
-            await client.chat_postMessage(
-                channel=channel, thread_ts=thread_ts,
-                text=f"✅ Arquivo *{filename}* gerado com sucesso!",
-                mrkdwn=True,
-            )
-            # Se for só arquivo, retorna (Notion será tratado abaixo se solicitado)
-            if formato_export not in ("notion", "excel+notion"):
+            # Campanha não encontrada — responde diretamente sem chamar Claude
+            if erro:
+                resposta_final = erro
+                erro_final = erro
+                await client.chat_postMessage(
+                    channel=channel, thread_ts=thread_ts,
+                    text=erro, mrkdwn=True,
+                )
                 return
 
-        # ── Exportação para Notion ────────────────────────────────────────────
-        if formato_export in ("notion", "excel+notion"):
-            try:
-                from notion.relatorio import publicar_relatorio_campanha
+            # Dados vazios com sugestão de período
+            if aviso_vazio:
+                resposta_final = aviso_vazio
                 await client.chat_postMessage(
                     channel=channel, thread_ts=thread_ts,
-                    text="⏳ Publicando relatório no Notion...",
-                    mrkdwn=True,
+                    text=aviso_vazio, mrkdwn=True,
                 )
-                page_id, url = publicar_relatorio_campanha(
-                    resultado=resultado,
-                    pergunta=text,
-                    cliente_key=cliente_notion,
+                return
+
+            # ── Exportação de arquivo (excel / pdf) ────────────────────────────────
+            fmt_arquivo = formato_export if formato_export in ("excel", "pdf") else None
+            if fmt_arquivo == "excel+notion":
+                fmt_arquivo = "excel"
+            if fmt_arquivo:
+                from reports.exporter import gerar_relatorio
+                conteudo, filename, mimetype = gerar_relatorio(resultado, text, fmt_arquivo)
+                await client.files_upload_v2(
+                    channel=channel,
+                    thread_ts=thread_ts,
+                    content=conteudo,
+                    filename=filename,
+                    title=f"Relatório — {intent}",
                 )
-                resposta_final = f"Relatório publicado no Notion: {url}"
+                resposta_final = f"Arquivo {filename} gerado"
                 await client.chat_postMessage(
                     channel=channel, thread_ts=thread_ts,
-                    text=(
-                        f"✅ *Relatório publicado no Notion!*\n"
-                        f"📎 <{url}|Abrir no Notion>"
-                    ),
+                    text=f"✅ Arquivo *{filename}* gerado com sucesso!",
                     mrkdwn=True,
                 )
-            except Exception as e_notion:
-                logger.exception("Erro ao publicar no Notion: %s", e_notion)
-                await client.chat_postMessage(
-                    channel=channel, thread_ts=thread_ts,
-                    text=f"⚠️ Não foi possível publicar no Notion: `{e_notion}`",
-                    mrkdwn=True,
-                )
-            return
+                # Se for só arquivo, retorna (Notion será tratado abaixo se solicitado)
+                if formato_export not in ("notion", "excel+notion"):
+                    return
 
-        # Gera resposta conversacional com Claude
-        resposta_final = gerar_resposta(
-            pergunta=text, dados=dados, intent=intent, meta=meta,
-            dados_extra=dados_extra, contexto=contexto,
+            # ── Exportação para Notion ────────────────────────────────────────────
+            if formato_export in ("notion", "excel+notion"):
+                try:
+                    from notion.relatorio import publicar_relatorio_campanha
+                    await client.chat_postMessage(
+                        channel=channel, thread_ts=thread_ts,
+                        text="⏳ Publicando relatório no Notion...",
+                        mrkdwn=True,
+                    )
+                    page_id, url = publicar_relatorio_campanha(
+                        resultado=resultado,
+                        pergunta=text,
+                        cliente_key=cliente_notion,
+                    )
+                    resposta_final = f"Relatório publicado no Notion: {url}"
+                    await client.chat_postMessage(
+                        channel=channel, thread_ts=thread_ts,
+                        text=(
+                            f"✅ *Relatório publicado no Notion!*\n"
+                            f"📎 <{url}|Abrir no Notion>"
+                        ),
+                        mrkdwn=True,
+                    )
+                except Exception as e_notion:
+                    logger.exception("Erro ao publicar no Notion: %s", e_notion)
+                    await client.chat_postMessage(
+                        channel=channel, thread_ts=thread_ts,
+                        text=f"⚠️ Não foi possível publicar no Notion: `{e_notion}`",
+                        mrkdwn=True,
+                    )
+                return
+
+            # Gera resposta conversacional com Claude
+            # Passa o contexto já construído acima (evita segunda chamada a build_context_summary)
+            resposta_final = gerar_resposta(
+                pergunta=text, dados=dados, intent=intent, meta=meta,
+                dados_extra=dados_extra, contexto=contexto,
+            )
+
+            append_history(thread_ts, channel, "agent", resposta_final[:500], meta)
+
+            blocks = truncar_blocos(markdown_to_blocks(resposta_final))
+            msg = await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=resposta_final[:150], blocks=blocks,
+            )
+
+            # Salva na Base de Conhecimento (não aprovado até receber 👍)
+            if not cache_hit and resposta_final and not erro_final:
+                try:
+                    from notion.knowledge_base import salvar_entrada
+                    resp_msg_ts = msg.get("ts") if msg else None
+                    salvar_entrada(
+                        pergunta=text,
+                        resposta=resposta_final,
+                        intent=intent,
+                        campanha=meta.get("campanha"),
+                        data_ini=meta.get("data_inicio"),
+                        data_fim=meta.get("data_fim"),
+                        slack_msg_ts=resp_msg_ts,
+                    )
+                except Exception as e_kb:
+                    logger.debug("KB: erro ao salvar (não crítico): %s", e_kb)
+
+        except Exception as e:
+            erro_final = str(e)
+            logger.exception("Erro ao processar mensagem: %s", e)
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=f"⚠️ Ocorreu um erro: `{e}`\nTente novamente.",
+                mrkdwn=True,
+            )
+
+    try:
+        await asyncio.wait_for(_executar(), timeout=_HANDLER_TIMEOUT)
+    except asyncio.TimeoutError:
+        logger.error(
+            "_processar_e_responder: timeout após %ds (user=%s, text='%s')",
+            _HANDLER_TIMEOUT, user_id, text[:80],
         )
-
-        append_history(thread_ts, channel, "agent", resposta_final[:500], meta)
-
-        blocks = truncar_blocos(markdown_to_blocks(resposta_final))
-        msg = await client.chat_postMessage(
-            channel=channel, thread_ts=thread_ts,
-            text=resposta_final[:150], blocks=blocks,
-        )
-
-        # Salva na Base de Conhecimento (não aprovado até receber 👍)
-        if not cache_hit and resposta_final and not erro_final:
-            try:
-                from notion.knowledge_base import salvar_entrada
-                resp_msg_ts = msg.get("ts") if msg else None
-                salvar_entrada(
-                    pergunta=text,
-                    resposta=resposta_final,
-                    intent=intent,
-                    campanha=meta.get("campanha"),
-                    data_ini=meta.get("data_inicio"),
-                    data_fim=meta.get("data_fim"),
-                    slack_msg_ts=resp_msg_ts,
-                )
-            except Exception as e_kb:
-                logger.debug("KB: erro ao salvar (não crítico): %s", e_kb)
-
-    except Exception as e:
-        erro_final = str(e)
-        logger.exception("Erro ao processar mensagem: %s", e)
-        await client.chat_postMessage(
-            channel=channel, thread_ts=thread_ts,
-            text=f"⚠️ Ocorreu um erro: `{e}`\nTente novamente.",
-            mrkdwn=True,
-        )
-
+        try:
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=(
+                    f"⏱️ *Tempo limite excedido ({_HANDLER_TIMEOUT}s).*\n"
+                    "A consulta está demorando mais do que o esperado. "
+                    "Tente novamente em alguns instantes ou simplifique a pergunta."
+                ),
+                mrkdwn=True,
+            )
+        except Exception:
+            pass
+        erro_final = f"timeout after {_HANDLER_TIMEOUT}s"
     finally:
         # Registra SEMPRE no log — mesmo em caso de erro ou cache hit
         latencia_ms = int((time.time() - t_inicio) * 1000)
@@ -581,33 +652,8 @@ async def handle_relatorio(ack, respond, command, client):
             )
             return
 
-        r          = resultado.get("resumo", {})
-        periodo_str = resultado.get("periodo", "")
-        url = resultado.get("url") or f"https://notion.so/{resultado.get('page_id','').replace('-','')}"
-
-        def _brl(v):
-            if v is None: return "—"
-            return f"R$ {float(v):,.2f}".replace(",","X").replace(".",",").replace("X",".")
-
-        alertas = resultado.get("alertas", [])
-        alerta_txt = "\n".join(f"  {a}" for a in alertas)
-
-        roas_str = f"{r['roas']:.2f}x" if r.get('roas') else '—'
-        ctr_str  = f"{r['ctr']:.2f}%" if r.get('ctr') else '—'
-
-        msg = (
-            f"✅ *Relatório publicado no Notion!*\n\n"
-            f"📅 *Período:* {periodo_str}\n"
-            f"📊 *Campanhas:* {resultado.get('num_campanhas')}\n"
-            f"💰 *Investimento:* {_brl(r.get('total_invest'))}  (+imposto: {_brl(r.get('invest_imp'))})\n"
-            f"📈 *ROAS:* {roas_str}\n"
-            f"🛒 *Compras:* {r.get('total_compras', '—')}\n"
-            f"💵 *CPA:* {_brl(r.get('cpa'))}\n"
-            f"🎯 *CTR:* {ctr_str}\n\n"
-            f"🚨 *Alertas:*\n{alerta_txt}\n\n"
-            f"📎 <{url}|Abrir relatório no Notion>"
-        )
-
+        # Reutiliza formatar_resumo_relatorio (compartilhado com cron_relatorio.py)
+        msg = formatar_resumo_relatorio(resultado)
         await client.chat_postMessage(channel=channel, text=msg, mrkdwn=True)
 
     except Exception as e:

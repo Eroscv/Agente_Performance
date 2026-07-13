@@ -307,6 +307,7 @@ def consultar(
     data_fim    = params["data_fim"]
     limit       = params["limit"]
     campanha_raw = params.get("raw", {}).get("campanha")  # nome original antes do fuzzy
+    periodo_nota = params.get("periodo_nota")  # aviso de ajuste automático de período
 
     # 3. Valida campanha
     # Se NLP extraiu um nome de campanha (raw) mas fuzzy não encontrou match,
@@ -348,13 +349,14 @@ def consultar(
 
     campanha = campanha_valida
     meta = {
-        "intents":     intents,
-        "campanha":    campanha,
-        "data_inicio": data_inicio,
-        "data_fim":    data_fim,
-        "limit":       limit,
-        "nlp_raw":     params.get("raw", {}),
-        "intent":      intents[0],
+        "intents":      intents,
+        "campanha":     campanha,
+        "data_inicio":  data_inicio,
+        "data_fim":     data_fim,
+        "limit":        limit,
+        "nlp_raw":      params.get("raw", {}),
+        "intent":       intents[0],
+        "periodo_nota": periodo_nota,  # ← propagado para o claude_client via meta
     }
 
     # 4. Executa queries

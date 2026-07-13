@@ -30,6 +30,10 @@ CACHE_DB = BASE_DIR / "data" / "cache.db"
 # ── L1: memória ───────────────────────────────────────────────────────────────
 _store: dict[str, dict] = {}
 
+# Controle de limpeza periódica do L1 (evict expirados sem dep... de leitura)
+_L1_CLEANUP_INTERVAL = int(os.getenv("CACHE_L1_CLEANUP_INTERVAL", "600"))  # 10 min
+_l1_last_cleanup: float = 0.0
+
 # ── L2: SQLite ────────────────────────────────────────────────────────────────
 _db_conn: Optional[sqlite3.Connection] = None
 
@@ -70,6 +74,9 @@ def get(pergunta: str) -> Optional[dict]:
     """Retorna resultado cacheado (L1 → L2) ou None."""
     chave = _chave(pergunta)
     agora = time.time()
+
+    # Limpeza periódica do L1 (evict entradas expiradas)
+    _evict_l1_if_due(agora)
 
     # L1 — memória
     entry = _store.get(chave)
@@ -137,6 +144,26 @@ def set(pergunta: str, resultado: dict) -> None:
 
 
 # ── Manutenção ────────────────────────────────────────────────────────────────
+
+def _evict_l1_if_due(agora: float = 0.0) -> int:
+    """
+    Remove do L1 as entradas cujo TTL já expirou.
+    Só executa a cada _L1_CLEANUP_INTERVAL segundos para não impactar a hot path.
+    Retorna o número de entradas removidas.
+    """
+    global _l1_last_cleanup
+    agora = agora or time.time()
+    if agora - _l1_last_cleanup < _L1_CLEANUP_INTERVAL:
+        return 0
+    _l1_last_cleanup = agora
+
+    expiradas = [k for k, v in list(_store.items()) if v["expires_at"] < agora]
+    for k in expiradas:
+        _store.pop(k, None)
+    if expiradas:
+        logger.info("Cache L1 evict: %d entrada(s) expirada(s) removida(s)", len(expiradas))
+    return len(expiradas)
+
 
 def clear():
     """Alias direto para invalidar_tudo() — usado pelo reload do banco na API."""

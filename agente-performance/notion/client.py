@@ -18,6 +18,7 @@ Outros databases relevantes:
 
 import logging
 import os
+import random
 import time
 from typing import Any, Optional
 
@@ -114,11 +115,13 @@ def _request_with_retry(method: str, path: str, **kwargs) -> dict:
             if resp.status_code in _RETRY_STATUSES and tentativa < _RETRY_MAX:
                 retry_after = resp.headers.get("Retry-After")
                 wait = float(retry_after) if retry_after else delay
+                jitter = random.uniform(0, wait * 0.3)
+                wait_total = wait + jitter
                 logger.warning(
-                    "[Notion] %s %s → HTTP %d (tentativa %d/%d). Aguardando %.0fs...",
-                    method, path, resp.status_code, tentativa, _RETRY_MAX, wait,
+                    "[Notion] %s %s → HTTP %d (tentativa %d/%d). Aguardando %.1fs (jitter +%.1fs)...",
+                    method, path, resp.status_code, tentativa, _RETRY_MAX, wait, jitter,
                 )
-                time.sleep(wait)
+                time.sleep(wait_total)
                 delay = min(delay * 2, _RETRY_MAX_DELAY)
                 continue
 
@@ -127,11 +130,13 @@ def _request_with_retry(method: str, path: str, **kwargs) -> dict:
 
         except (requests.ConnectionError, requests.Timeout) as exc:
             if tentativa < _RETRY_MAX:
+                jitter = random.uniform(0, delay * 0.3)
+                wait_total = delay + jitter
                 logger.warning(
-                    "[Notion] %s %s — %s (tentativa %d/%d). Aguardando %.0fs...",
-                    method, path, exc, tentativa, _RETRY_MAX, delay,
+                    "[Notion] %s %s — %s (tentativa %d/%d). Aguardando %.1fs (jitter +%.1fs)...",
+                    method, path, exc, tentativa, _RETRY_MAX, delay, jitter,
                 )
-                time.sleep(delay)
+                time.sleep(wait_total)
                 delay = min(delay * 2, _RETRY_MAX_DELAY)
             else:
                 logger.error("[Notion] %s %s — desistindo após %d tentativas: %s", method, path, _RETRY_MAX, exc)

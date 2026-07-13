@@ -12,6 +12,7 @@ Uso:
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -32,6 +33,9 @@ logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent
 DB_PATH  = BASE_DIR / "data" / "campanhas.db"
+
+# Timeout em segundos para queries SQLite no builder (evita travar se banco estiver locked)
+_SQLITE_TIMEOUT = int(os.getenv("BUILDER_SQLITE_TIMEOUT", "30"))
 
 # Clientes mapeados para chave Notion
 CLIENTES = {
@@ -84,7 +88,7 @@ def _buscar_campanhas(
         GROUP BY campanha
         ORDER BY investimento DESC
     """
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
     conn.row_factory = sqlite3.Row
     cur  = conn.cursor()
     cur.execute(sql, (data_inicio.isoformat(), data_fim.isoformat()))

@@ -29,24 +29,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def _brl(v) -> str:
-    if v is None:
-        return "—"
-    return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-
-def _x(v) -> str:
-    if v is None:
-        return "—"
-    return f"{float(v):.2f}x"
-
-
-def _pct(v) -> str:
-    if v is None:
-        return "—"
-    return f"{float(v):.2f}%"
-
-
 def resolver_periodo(periodo: str):
     hoje = date.today()
     if periodo == "semana":
@@ -130,6 +112,7 @@ def main():
     logger.info("Cron %s iniciado: %s", tipo, periodo_str)
 
     from relatorio.builder import gerar_relatorio_semanal, gerar_relatorio_mensal
+    from slack.handlers import formatar_resumo_relatorio
 
     if args.periodo == "mes":
         resultado = gerar_relatorio_mensal(
@@ -150,34 +133,9 @@ def main():
         logger.error("Erro: %s", resultado["erro"])
         sys.exit(1)
 
-    r   = resultado.get("resumo", {})
-    url = resultado.get("url") or ""
-
-    roas_str = _x(r.get("roas"))
-    ctr_str  = _pct(r.get("ctr"))
-    invest_str = _brl(r.get("total_invest"))
-    invest_imp_str = _brl(r.get("invest_imp"))
-    cpa_str  = _brl(r.get("cpa"))
-
-    alertas      = resultado.get("alertas", [])
-    alerta_txt   = "\n".join(f"  {a}" for a in alertas)
-    num_campanhas = resultado.get("num_campanhas", 0)
-    compras      = r.get("total_compras", "—")
-
+    # Reutiliza formatar_resumo_relatorio (compartilhado com /relatorio do Slack)
     titulo = f"📊 Relatório {tipo} — Source OF · Meta Ads\n{periodo_str}"
-    corpo = (
-        f"*{titulo}*\n\n"
-        f"📊 *Campanhas:* {num_campanhas}\n"
-        f"💰 *Investimento:* {invest_str}  (+imposto: {invest_imp_str})\n"
-        f"📈 *ROAS:* {roas_str}\n"
-        f"🛒 *Compras:* {compras}\n"
-        f"💵 *CPA:* {cpa_str}\n"
-        f"🎯 *CTR:* {ctr_str}\n\n"
-        f"🚨 *Alertas:*\n{alerta_txt}\n"
-    )
-
-    if url:
-        corpo += f"\n📎 <{url}|Abrir relatório no Notion>"
+    corpo = f"*{titulo}*\n\n" + formatar_resumo_relatorio(resultado)
 
     ok = postar_slack(corpo)
     logger.info("Cron %s concluído. Slack: %s | Notion: %s", tipo, "OK" if ok else "FALHOU", url or "—")
