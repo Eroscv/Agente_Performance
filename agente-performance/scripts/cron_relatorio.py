@@ -59,10 +59,20 @@ def resolver_periodo(periodo: str):
     raise ValueError(f"Período inválido: {periodo}")
 
 
-def postar_slack(msg: str):
-    """Posta mensagem no canal Slack via Webhook."""
+def postar_slack(msg: str, max_tentativas: int = None, delay_inicial: float = 5.0, delay_maximo: float = 300.0) -> bool:
+    """
+    Posta mensagem no canal Slack via Webhook.
+    Faz retry infinito (ou até max_tentativas) com backoff exponencial até funcionar.
+
+    Args:
+        msg:             Texto da mensagem.
+        max_tentativas:  None = retry infinito até sucesso. Inteiro limita as tentativas.
+        delay_inicial:   Segundos de espera antes da 1ª retentativa.
+        delay_maximo:    Teto do backoff exponencial (segundos).
+    """
     import urllib.request
     import json
+    import time
 
     webhook_url = os.getenv("SLACK_WEBHOOK_URL")
     if not webhook_url:
@@ -70,20 +80,38 @@ def postar_slack(msg: str):
         return False
 
     payload = json.dumps({"text": msg}).encode("utf-8")
-    req = urllib.request.Request(
-        webhook_url,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            ok = resp.status == 200
-            logger.info("Slack webhook: status %d", resp.status)
-            return ok
-    except Exception as e:
-        logger.error("Erro ao postar no Slack: %s", e)
-        return False
+    tentativa = 0
+    delay = delay_inicial
+
+    while True:
+        tentativa += 1
+        req = urllib.request.Request(
+            webhook_url,
+            data=payload,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status == 200:
+                    logger.info("Slack webhook: status %d (tentativa %d)", resp.status, tentativa)
+                    return True
+                else:
+                    logger.warning(
+                        "Slack webhook: status inesperado %d (tentativa %d)",
+                        resp.status, tentativa,
+                    )
+        except Exception as e:
+            logger.warning("Erro ao postar no Slack (tentativa %d): %s", tentativa, e)
+
+        # Checa limite de tentativas
+        if max_tentativas is not None and tentativa >= max_tentativas:
+            logger.error("Slack webhook: desistindo após %d tentativas.", tentativa)
+            return False
+
+        logger.info("Aguardando %.0fs antes de retentativa %d...", delay, tentativa + 1)
+        time.sleep(delay)
+        delay = min(delay * 2, delay_maximo)
 
 
 def main():
