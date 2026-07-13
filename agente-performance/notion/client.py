@@ -18,6 +18,7 @@ Outros databases relevantes:
 
 import logging
 import os
+import time
 from typing import Any, Optional
 
 import requests
@@ -30,6 +31,13 @@ logger = logging.getLogger(__name__)
 NOTION_API_KEY  = os.getenv("NOTION_API_KEY", "")
 NOTION_VERSION  = os.getenv("NOTION_VERSION", "2025-09-03")
 BASE_URL        = "https://api.notion.com/v1"
+
+# Retry config
+_RETRY_MAX      = int(os.getenv("NOTION_RETRY_MAX", "5"))
+_RETRY_DELAY    = float(os.getenv("NOTION_RETRY_DELAY", "2.0"))   # segundos iniciais
+_RETRY_MAX_DELAY = float(os.getenv("NOTION_RETRY_MAX_DELAY", "60.0"))  # teto backoff
+# Status HTTP que justificam retry (erros transitórios)
+_RETRY_STATUSES = {429, 500, 502, 503, 504}
 
 # ── IDs dos databases de relatórios ──────────────────────────────────────────
 # data_source_id → para queries
@@ -82,25 +90,67 @@ def _headers() -> dict:
     }
 
 
+def _request_with_retry(method: str, path: str, **kwargs) -> dict:
+    """
+    Executa uma requisição HTTP à API do Notion com retry + backoff exponencial.
+
+    Faz até _RETRY_MAX tentativas nos status transitórios (429/5xx) e em
+    erros de conexão/timeout. Levanta a última exceção se esgotar as tentativas.
+    """
+    url   = f"{BASE_URL}{path}"
+    delay = _RETRY_DELAY
+
+    for tentativa in range(1, _RETRY_MAX + 1):
+        try:
+            resp = requests.request(method, url, headers=_headers(), timeout=20, **kwargs)
+
+            # Resposta bem-sucedida
+            if resp.status_code < 400:
+                if tentativa > 1:
+                    logger.info("[Notion] %s %s OK na tentativa %d", method, path, tentativa)
+                return resp.json()
+
+            # Erros que vale retentir
+            if resp.status_code in _RETRY_STATUSES and tentativa < _RETRY_MAX:
+                retry_after = resp.headers.get("Retry-After")
+                wait = float(retry_after) if retry_after else delay
+                logger.warning(
+                    "[Notion] %s %s → HTTP %d (tentativa %d/%d). Aguardando %.0fs...",
+                    method, path, resp.status_code, tentativa, _RETRY_MAX, wait,
+                )
+                time.sleep(wait)
+                delay = min(delay * 2, _RETRY_MAX_DELAY)
+                continue
+
+            # Erro não retriável (4xx exceto 429) — levanta imediatamente
+            resp.raise_for_status()
+
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            if tentativa < _RETRY_MAX:
+                logger.warning(
+                    "[Notion] %s %s — %s (tentativa %d/%d). Aguardando %.0fs...",
+                    method, path, exc, tentativa, _RETRY_MAX, delay,
+                )
+                time.sleep(delay)
+                delay = min(delay * 2, _RETRY_MAX_DELAY)
+            else:
+                logger.error("[Notion] %s %s — desistindo após %d tentativas: %s", method, path, _RETRY_MAX, exc)
+                raise
+
+    # Não deve chegar aqui, mas garante o raise para mypy
+    raise RuntimeError(f"[Notion] {method} {path} falhou após {_RETRY_MAX} tentativas")
+
+
 def _get(path: str) -> dict:
-    url = f"{BASE_URL}{path}"
-    r = requests.get(url, headers=_headers(), timeout=15)
-    r.raise_for_status()
-    return r.json()
+    return _request_with_retry("GET", path)
 
 
 def _post(path: str, body: dict) -> dict:
-    url = f"{BASE_URL}{path}"
-    r = requests.post(url, headers=_headers(), json=body, timeout=15)
-    r.raise_for_status()
-    return r.json()
+    return _request_with_retry("POST", path, json=body)
 
 
 def _patch(path: str, body: dict) -> dict:
-    url = f"{BASE_URL}{path}"
-    r = requests.patch(url, headers=_headers(), json=body, timeout=15)
-    r.raise_for_status()
-    return r.json()
+    return _request_with_retry("PATCH", path, json=body)
 
 
 # ── Operações básicas ─────────────────────────────────────────────────────────
