@@ -235,22 +235,32 @@ def normalizar_pergunta(texto: str) -> str:
     """
     Enriquece a pergunta com anotações de sinônimos para o Claude.
 
-    - Deduplica anotações (mesma canonical não aparece duas vezes)
+    Deduplicação completa:
+    - Mesma canonical de métrica: aparece UMA vez, no formato "metrica=canonical"
+    - Mesmo período: aparece UMA vez, com o período resolvido
     - Preserva o texto original
     """
     t = texto.lower()
     anotacoes: list[str] = []
-    vistos: set[str] = set()
+    metricas_vistas: set[str]  = set()   # canonical de métrica já anotada
+    periodos_vistos: set[str]  = set()   # período resolvido já anotado
 
+    # Métricas: anota "metrica=canonical" apenas uma vez por canonical
     for sinonimo, canonico in METRIC_SYNONYMS.items():
-        if sinonimo in t and canonico not in vistos:
-            anotacoes.append(f"{sinonimo}={canonico}")
-            vistos.add(canonico)
+        if sinonimo in t and canonico not in metricas_vistas:
+            anotacoes.append(f"metrica={canonico}")
+            metricas_vistas.add(canonico)
 
-    for sinonimo, periodo in PERIOD_SYNONYMS.items():
-        if sinonimo in t and periodo not in vistos:
-            anotacoes.append(f"periodo={periodo}")
-            vistos.add(periodo)
+    # Períodos: anota "periodo=YYYY-MM-DD a YYYY-MM-DD" apenas uma vez por período resolvido
+    # Ordena por comprimento (mais específico primeiro) para evitar que "mês" engula "mês passado"
+    for sinonimo in sorted(PERIOD_SYNONYMS.keys(), key=len, reverse=True):
+        if sinonimo in t:
+            periodo = PERIOD_SYNONYMS[sinonimo]
+            if periodo not in periodos_vistos:
+                anotacoes.append(f"periodo={periodo}")
+                periodos_vistos.add(periodo)
+            # Remove o sinonimo do texto processado para evitar matches parciais sobrepostos
+            t = t.replace(sinonimo, " ")
 
     if anotacoes:
         return f"{texto} [contexto: {', '.join(anotacoes)}]"

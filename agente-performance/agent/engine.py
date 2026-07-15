@@ -41,23 +41,29 @@ import re
 from datetime import date, timedelta
 
 def _detect_intent(text: str) -> str:
+    import unicodedata as _ud
+    # Normaliza acentos para que "frequencia" == "frequência", "nao" == "não"
+    def _norm(s: str) -> str:
+        return _ud.normalize("NFD", s).encode("ascii", "ignore").decode("ascii").lower()
+    text_norm = _norm(text)
+
     _INTENT_PATTERNS = [
         # Básicas (sem_conversao antes de listar para evitar colisão "quais campanhas sem X")
-        ("sem_conversao",           r"sem\s+compra|sem\s+convers|zero\s+compra|gastando.*sem|n.o\s+vend|n.o\s+convert|quais.*sem\s+compra|quais.*n.o\s+conver"),
+        ("sem_conversao",           r"sem\s+compra|sem\s+convers|zero\s+compra|gastando.*sem|nao.*vend|nao.*conver|nao.*est..*conver|sem\s+retorno|desperd|jogando.*dinheiro|dinheiro.*fora|quais.*sem\s+compra"),
         ("listar_campanhas",        r"list[ae]|quais\s+campanha|mostra.*campanha|campanhas\s+ativ"),
         # Rankings
         ("top_roas",                r"melhor.*roas|maior.*roas|top.*roas|roas.*maior|mais\s+eficiente|vale\s+a\s+pena|t[aá]\s+valendo"),
         ("top_compras",             r"mais\s+compra|maior.*compra|top.*compra|compra.*maior|mais\s+vend"),
         ("top_receita",             r"mais\s+receita|maior.*receita|top.*receita|mais.*faturou|maior.*faturamento"),
-        ("top_ctr",                 r"melhor.*ctr|maior.*ctr|top.*ctr|clique.*eficiente|mais\s+clique"),
-        ("top_cpm",                 r"mais\s+barato.*impres|menor.*cpm|top.*cpm|cpm.*menor|custo.*impressão"),
-        ("top_alcance",             r"mais.*alcance|maior.*alcance|top.*alcance|mais.*pessoas"),
-        ("top_cliques",             r"mais\s+cliques|maior.*cliques|top.*cliques|volume.*cliques|cliques.*link"),
+        ("top_cliques",             r"mais\s+cliques?|maior.*cliques?|top.*cliques?|volume.*cliques?|cliques?.*link|qual.*mais\s+cliques?"),
+        ("top_ctr",                 r"melhor.*ctr|maior.*ctr|top.*ctr|clique.*eficiente|taxa\s+de\s+clique|maior\s+taxa\s+de\s+clique"),
+        ("top_cpm",                 r"mais\s+barato.*impres|menor.*cpm|top.*cpm|cpm.*menor|custo.*impress"),
+        ("top_alcance",             r"mais.*alcance|maior.*alcance|top.*alcance|mais.*pessoas|maior.*público"),
         # Análises específicas
-        ("alertas_roas",            r"alerta|roas\s+baixo|roas\s+ruim|abaixo.*roas|problema|ruim"),
+        ("alertas_roas",            r"alerta|roas\s+baixo|roas\s+ruim|abaixo.*roas|ruim|ruins|pior.*roas|roas.*abaixo|campanha.*ruins?|mal.*performan|performan.*ruins?|roas\s+de\s+[0-9]|abaixo\s+de|abaixo.*esperado|esperado.*abaixo|problema.*campanha"),
         ("campanhas_inativas",      r"inativ|pausad|parou|n.o\s+rod|encerrad"),
-        ("variacao_roas",           r"volatilidade|variação.*roas|roas.*variou|oscilação|pico.*roas"),
-        ("saturacao_frequencia",    r"satura|frequência\s+alta|muitas\s+vezes|cansa|repetição|audiência.*cansad"),
+        ("variacao_roas",           r"volatilidade|variacao.*roas|variação.*roas|roas.*variou|oscilacao|oscilação|pico.*roas|instabilidade.*roas"),
+        ("saturacao_frequencia",    r"satura|frequen.+alta|muitas\s+vezes|cansa|repeti|audiencia.*cansad|freq.*alta"),
         ("eficiencia_criativo",     r"criativo|hook\s+rate|retenção.*vídeo|qualidade.*anúncio|scroll\s+stop"),
         ("distribuicao_investimento", r"distribui|share\s+budget|alocação|onde.*dinheiro|budget.*campanhas"),
         ("historico_mensal",        r"histór|mês.*a.*mês|mensal|sazonalidade|ao\s+longo\s+dos\s+meses"),
@@ -73,9 +79,8 @@ def _detect_intent(text: str) -> str:
         ("periodo",                 r"período|resumo\s+de|total\s+de|consolidado"),
         ("resumo_geral",            r"resumo|geral|overview|visão\s+geral|como\s+est[áa]"),
     ]
-    t = text.lower()
     for intent, pattern in _INTENT_PATTERNS:
-        if re.search(pattern, t):
+        if re.search(pattern, text_norm, re.I):
             return intent
     return "resumo_geral"
 
@@ -293,7 +298,7 @@ def _executar_intent(
     elif intent == "campanhas_inativas":
         return queries.campanhas_inativas()
 
-    elif intent == "variacao_roas":
+        ("variacao_roas",           r"volatilidade|variacao.*roas|variação.*roas|roas.*variou|oscilacao|oscilação|pico.*roas|instabilidade.*roas"),
         return queries.variacao_diaria_roas(campanha, data_inicio, data_fim)
 
     elif intent == "saturacao_frequencia":
