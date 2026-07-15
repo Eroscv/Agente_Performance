@@ -80,39 +80,39 @@ def _detect_intent(text: str) -> str:
     return "resumo_geral"
 
 def _extract_dates(text: str) -> tuple[Optional[str], Optional[str]]:
-    today = date.today()
-    if re.search(r"últimos?\s+7\s+dias|semana\s+passada|última\s+semana|essa\s+semana|esta\s+semana", text, re.I):
-        return (today - timedelta(days=7)).isoformat(), today.isoformat()
-    if re.search(r"ontem", text, re.I):
-        d = (today - timedelta(days=1)).isoformat()
-        return d, d
-    if re.search(r"últimos?\s+30\s+dias|mês\s+passado|último\s+mês", text, re.I):
-        return (today - timedelta(days=30)).isoformat(), today.isoformat()
-    if re.search(r"últimos?\s+90\s+dias|trimestre", text, re.I):
-        return (today - timedelta(days=90)).isoformat(), today.isoformat()
-    if re.search(r"esse\s+mês|este\s+mês|mês\s+atual", text, re.I):
-        return today.replace(day=1).isoformat(), today.isoformat()
-    # Meses nomeados
-    _MONTHS = {
-        "janeiro":"01","fevereiro":"02","março":"03","abril":"04",
-        "maio":"05","junho":"06","julho":"07","agosto":"08",
-        "setembro":"09","outubro":"10","novembro":"11","dezembro":"12",
-    }
-    for nome, num in _MONTHS.items():
-        if re.search(rf"\b{nome}\b", text, re.I):
-            ano = "2026" if int(num) <= date.today().month else "2025"
-            import calendar
-            ultimo = calendar.monthrange(int(ano), int(num))[1]
-            return f"{ano}-{num}-01", f"{ano}-{num}-{ultimo:02d}"
+    """
+    Extrai datas do texto via PERIOD_SYNONYMS dinâmico do synonyms.py.
+    Fallback para regex de datas explícitas (YYYY-MM-DD, DD/MM/YYYY).
+    """
+    from agent.synonyms import PERIOD_SYNONYMS
+
+    # Datas ISO explícitas têm prioridade máxima (evita sinônimos como "2026" engolindo datas)
     dates = re.findall(r"\d{4}-\d{2}-\d{2}", text)
     if len(dates) >= 2:
         return dates[0], dates[1]
     if len(dates) == 1:
-        return dates[0], None
+        # Verifica se há segunda data no formato BR também
+        pass  # continua para BR abaixo
+
+    # Datas BR (DD/MM/YYYY)
     dates_br = re.findall(r"\d{2}/\d{2}/\d{4}", text)
     if len(dates_br) >= 2:
         def conv(d): return "-".join(reversed(d.split("/")))
         return conv(dates_br[0]), conv(dates_br[1])
+
+    if len(dates) == 1:
+        return dates[0], None
+
+    # Sinônimos de período (mais específico primeiro — chaves mais longas)
+    t_lower = text.lower()
+    for sinonimo in sorted(PERIOD_SYNONYMS.keys(), key=len, reverse=True):
+        if sinonimo in t_lower:
+            periodo = PERIOD_SYNONYMS[sinonimo]
+            # formato: "YYYY-MM-DD a YYYY-MM-DD"
+            partes = periodo.split(" a ")
+            if len(partes) == 2:
+                return partes[0].strip(), partes[1].strip()
+
     return None, None
 
 def _extract_limit(text: str, default: int = 10) -> int:

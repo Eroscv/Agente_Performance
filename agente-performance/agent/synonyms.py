@@ -5,148 +5,252 @@ Mapeamento de sinônimos e linguagem natural para termos técnicos.
 Usado pelo NLP antes de enviar a pergunta ao Claude.
 
 Normaliza expressões do usuário → vocabulário interno do agente.
+
+v2:
+  - PERIOD_SYNONYMS agora é gerado dinamicamente (datas corretas para o ano atual)
+  - "mês passado" corrigido: retorna o mês calendário anterior, não "hoje - 30 dias"
+  - normalizar_pergunta deduplica anotações
 """
+
+import calendar
+from datetime import date, timedelta
 
 # Sinônimos de métricas → nome canônico
 METRIC_SYNONYMS: dict[str, str] = {
     # Investimento / Custo
-    "gasto":            "investimento",
-    "gastos":           "investimento",
-    "gastei":           "investimento",
-    "investido":        "investimento",
-    "budget":           "investimento",
-    "verba":            "investimento",
-    "quanto custou":    "investimento",
-    "custo total":      "investimento",
-    "valor investido":  "investimento",
-    "dinheiro gasto":   "investimento",
+    "gasto":              "investimento",
+    "gastos":             "investimento",
+    "gastei":             "investimento",
+    "investido":          "investimento",
+    "budget":             "investimento",
+    "verba":              "investimento",
+    "quanto custou":      "investimento",
+    "custo total":        "investimento",
+    "valor investido":    "investimento",
+    "dinheiro gasto":     "investimento",
 
     # Receita / Retorno
-    "retorno":          "roas",
-    "receita":          "valor_compras",
-    "faturamento":      "valor_compras",
-    "faturou":          "valor_compras",
-    "gerou":            "valor_compras",
-    "ganhou":           "valor_compras",
-    "lucrou":           "valor_compras",
-    "roi":              "roas",
-    "vale a pena":      "roas",
-    "tá valendo":       "roas",
-    "ta valendo":       "roas",
-    "eficiência":       "roas",
-    "eficiente":        "roas",
-    "rentável":         "roas",
-    "rentabilidade":    "roas",
+    "retorno":            "roas",
+    "receita":            "valor_compras",
+    "faturamento":        "valor_compras",
+    "faturou":            "valor_compras",
+    "gerou":              "valor_compras",
+    "ganhou":             "valor_compras",
+    "lucrou":             "valor_compras",
+    "roi":                "roas",
+    "vale a pena":        "roas",
+    "tá valendo":         "roas",
+    "ta valendo":         "roas",
+    "eficiência":         "roas",
+    "eficiente":          "roas",
+    "rentável":           "roas",
+    "rentabilidade":      "roas",
 
     # Compras
-    "vendas":           "compras",
-    "vendeu":           "compras",
-    "conversões":       "compras",
-    "pedidos":          "compras",
-    "orders":           "compras",
-    "transações":       "compras",
-    "comprou":          "compras",
+    "vendas":             "compras",
+    "vendeu":             "compras",
+    "conversões":         "compras",
+    "pedidos":            "compras",
+    "orders":             "compras",
+    "transações":         "compras",
+    "comprou":            "compras",
 
     # Cliques
-    "clicou":           "cliques_link",
-    "cliques":          "cliques_link",
-    "clicks":           "cliques_link",
-    "acessos":          "cliques_link",
-    "visitas":          "cliques_link",
+    "clicou":             "cliques_link",
+    "clicks":             "cliques_link",
+    "acessos":            "cliques_link",
+    "visitas":            "cliques_link",
 
     # CTR
-    "taxa de clique":   "ctr",
-    "taxa de cliques":  "ctr",
-    "engajamento":      "ctr",
+    "taxa de clique":     "ctr",
+    "taxa de cliques":    "ctr",
 
     # CPC
-    "custo por clique": "cpc",
-    "cpc":              "cpc",
+    "custo por clique":   "cpc",
 
     # CPM
-    "custo por mil":    "cpm",
-    "cpm":              "cpm",
+    "custo por mil":      "cpm",
 
     # Impressões / Alcance
-    "visualizações":    "impressoes",
-    "views":            "impressoes",
-    "apareceu":         "impressoes",
-    "exibido":          "impressoes",
-    "pessoas":          "alcance",
-    "alcançou":         "alcance",
+    "visualizações":      "impressoes",
+    "views":              "impressoes",
+    "apareceu":           "impressoes",
+    "exibido":            "impressoes",
+    "pessoas":            "alcance",
+    "alcançou":           "alcance",
 
     # Frequência
-    "repetição":        "frequencia",
-    "vezes que apareceu":"frequencia",
-    "saturação":        "frequencia",
+    "repetição":          "frequencia",
+    "vezes que apareceu": "frequencia",
+    "saturação":          "frequencia",
 
     # Funil
-    "carrinho":         "adicoes_carrinho",
-    "abandonou":        "checkout_iniciado",
-    "finalizou":        "compras",
-    "conversão":        "compras",
+    "carrinho":           "adicoes_carrinho",
+    "abandonou":          "checkout_iniciado",
+    "finalizou":          "compras",
+    "conversão":          "compras",
 }
 
-# Sinônimos de períodos → expressão normalizada
-PERIOD_SYNONYMS: dict[str, str] = {
-    "ontem":                "últimos 1 dias",
-    "hoje":                 "últimos 0 dias",
-    "essa semana":          "últimos 7 dias",
-    "esta semana":          "últimos 7 dias",
-    "semana atual":         "últimos 7 dias",
-    "semana passada":       "últimos 7 dias",
-    "última semana":        "últimos 7 dias",
-    "esse mês":             "mês atual",
-    "este mês":             "mês atual",
-    "mês atual":            "mês atual",
-    "mês passado":          "últimos 30 dias",
-    "último mês":           "últimos 30 dias",
-    "últimos 30 dias":      "últimos 30 dias",
-    "últimos 7 dias":       "últimos 7 dias",
-    "últimos 14 dias":      "últimos 14 dias",
-    "últimos 90 dias":      "últimos 90 dias",
-    "trimestre":            "últimos 90 dias",
-    "último trimestre":     "últimos 90 dias",
-    "segundo trimestre":    "2026-04-01 a 2026-06-30",
-    "primeiro trimestre":   "2026-01-01 a 2026-03-31",
-    "black friday":         "2025-11-28 a 2025-12-02",
-    "natal":                "2025-12-15 a 2025-12-25",
-    "ano passado":          "2025-01-01 a 2025-12-31",
-    "em 2025":              "2025-01-01 a 2025-12-31",
-    "em 2026":              "2026-01-01 a 2026-12-31",
-    "janeiro":              "2026-01-01 a 2026-01-31",
-    "fevereiro":            "2026-02-01 a 2026-02-28",
-    "março":                "2026-03-01 a 2026-03-31",
-    "abril":                "2026-04-01 a 2026-04-30",
-    "maio":                 "2026-05-01 a 2026-05-31",
-    "junho":                "2026-06-01 a 2026-06-30",
-    "julho":                "2025-07-01 a 2025-07-31",
-    "agosto":               "2025-08-01 a 2025-08-31",
-    "setembro":             "2025-09-01 a 2025-09-30",
-    "outubro":              "2025-10-01 a 2025-10-31",
-    "novembro":             "2025-11-01 a 2025-11-30",
-    "dezembro":             "2025-12-01 a 2025-12-31",
-    "em maio":              "2026-05-01 a 2026-05-31",
-    "em junho":             "2026-06-01 a 2026-06-30",
-    "em novembro":          "2025-11-01 a 2025-11-30",
-    "em dezembro":          "2025-12-01 a 2025-12-31",
-}
+# ── Geração dinâmica de períodos ──────────────────────────────────────────────
+
+def _build_period_synonyms() -> dict[str, str]:
+    """
+    Gera PERIOD_SYNONYMS dinamicamente com base na data atual.
+
+    Regras:
+    - Meses pelo nome: se o mês já passou este ano → ano corrente;
+      se ainda não chegou → ano corrente (pois não faz sentido apontar para futuro)
+      exceto se o mês for claramente histórico (>6 meses atrás → ano anterior)
+    - "mês passado" → primeiro e último dia do mês calendário anterior (correto)
+    - "semana passada" → segunda a domingo da semana anterior
+    - Trimestres calculados com base no trimestre atual
+    """
+    hoje = date.today()
+    ano  = hoje.year
+
+    # ── Relativos ─────────────────────────────────────────────────────────────
+    # Semana: segunda a domingo
+    inicio_semana_atual = hoje - timedelta(days=hoje.weekday())
+    fim_semana_atual    = inicio_semana_atual + timedelta(days=6)
+    inicio_sem_passada  = inicio_semana_atual - timedelta(days=7)
+    fim_sem_passada     = inicio_semana_atual - timedelta(days=1)
+
+    # Mês passado (calendário, não -30 dias)
+    primeiro_do_mes_atual = hoje.replace(day=1)
+    ultimo_mes_fim        = primeiro_do_mes_atual - timedelta(days=1)
+    ultimo_mes_inicio     = ultimo_mes_fim.replace(day=1)
+
+    # Trimestres
+    trimestre_atual = (hoje.month - 1) // 3 + 1
+    trim_map = {
+        1: (date(ano, 1,  1), date(ano, 3,  31)),
+        2: (date(ano, 4,  1), date(ano, 6,  30)),
+        3: (date(ano, 7,  1), date(ano, 9,  30)),
+        4: (date(ano, 10, 1), date(ano, 12, 31)),
+    }
+    trim_anterior_num = trimestre_atual - 1 if trimestre_atual > 1 else 4
+    trim_anterior_ano = ano if trimestre_atual > 1 else ano - 1
+    trim_ant_map = {
+        1: (date(trim_anterior_ano, 1,  1), date(trim_anterior_ano, 3,  31)),
+        2: (date(trim_anterior_ano, 4,  1), date(trim_anterior_ano, 6,  30)),
+        3: (date(trim_anterior_ano, 7,  1), date(trim_anterior_ano, 9,  30)),
+        4: (date(trim_anterior_ano, 10, 1), date(trim_anterior_ano, 12, 31)),
+    }
+
+    def _fmt(d: date) -> str:
+        return d.isoformat()
+
+    syns: dict[str, str] = {
+        # Dias
+        "ontem":               f"{_fmt(hoje - timedelta(days=1))} a {_fmt(hoje - timedelta(days=1))}",
+        "hoje":                f"{_fmt(hoje)} a {_fmt(hoje)}",
+        "anteontem":           f"{_fmt(hoje - timedelta(days=2))} a {_fmt(hoje - timedelta(days=2))}",
+
+        # Semanas
+        "essa semana":         f"{_fmt(inicio_semana_atual)} a {_fmt(hoje)}",
+        "esta semana":         f"{_fmt(inicio_semana_atual)} a {_fmt(hoje)}",
+        "semana atual":        f"{_fmt(inicio_semana_atual)} a {_fmt(hoje)}",
+        "semana passada":      f"{_fmt(inicio_sem_passada)} a {_fmt(fim_sem_passada)}",
+        "última semana":       f"{_fmt(inicio_sem_passada)} a {_fmt(fim_sem_passada)}",
+        "últimos 7 dias":      f"{_fmt(hoje - timedelta(days=7))} a {_fmt(hoje)}",
+        "últimos 14 dias":     f"{_fmt(hoje - timedelta(days=14))} a {_fmt(hoje)}",
+        "últimos 30 dias":     f"{_fmt(hoje - timedelta(days=30))} a {_fmt(hoje)}",
+        "últimos 60 dias":     f"{_fmt(hoje - timedelta(days=60))} a {_fmt(hoje)}",
+        "últimos 90 dias":     f"{_fmt(hoje - timedelta(days=90))} a {_fmt(hoje)}",
+
+        # Meses — calendário correto
+        "esse mês":            f"{_fmt(hoje.replace(day=1))} a {_fmt(hoje)}",
+        "este mês":            f"{_fmt(hoje.replace(day=1))} a {_fmt(hoje)}",
+        "mês atual":           f"{_fmt(hoje.replace(day=1))} a {_fmt(hoje)}",
+        "mês passado":         f"{_fmt(ultimo_mes_inicio)} a {_fmt(ultimo_mes_fim)}",
+        "último mês":          f"{_fmt(ultimo_mes_inicio)} a {_fmt(ultimo_mes_fim)}",
+
+        # Trimestres
+        "trimestre atual":     f"{_fmt(trim_map[trimestre_atual][0])} a {_fmt(trim_map[trimestre_atual][1])}",
+        "esse trimestre":      f"{_fmt(trim_map[trimestre_atual][0])} a {_fmt(hoje)}",
+        "trimestre passado":   f"{_fmt(trim_ant_map[trim_anterior_num][0])} a {_fmt(trim_ant_map[trim_anterior_num][1])}",
+        "último trimestre":    f"{_fmt(trim_ant_map[trim_anterior_num][0])} a {_fmt(trim_ant_map[trim_anterior_num][1])}",
+        "primeiro trimestre":  f"{_fmt(date(ano, 1, 1))} a {_fmt(date(ano, 3, 31))}",
+        "segundo trimestre":   f"{_fmt(date(ano, 4, 1))} a {_fmt(date(ano, 6, 30))}",
+        "terceiro trimestre":  f"{_fmt(date(ano, 7, 1))} a {_fmt(date(ano, 9, 30))}",
+        "quarto trimestre":    f"{_fmt(date(ano, 10, 1))} a {_fmt(date(ano, 12, 31))}",
+
+        # Anos
+        "esse ano":            f"{_fmt(date(ano, 1, 1))} a {_fmt(hoje)}",
+        "este ano":            f"{_fmt(date(ano, 1, 1))} a {_fmt(hoje)}",
+        "ano atual":           f"{_fmt(date(ano, 1, 1))} a {_fmt(hoje)}",
+        "ano passado":         f"{_fmt(date(ano - 1, 1, 1))} a {_fmt(date(ano - 1, 12, 31))}",
+        f"em {ano}":           f"{_fmt(date(ano, 1, 1))} a {_fmt(hoje)}",
+        f"em {ano - 1}":       f"{_fmt(date(ano - 1, 1, 1))} a {_fmt(date(ano - 1, 12, 31))}",
+        f"{ano}":              f"{_fmt(date(ano, 1, 1))} a {_fmt(hoje)}",
+        f"{ano - 1}":          f"{_fmt(date(ano - 1, 1, 1))} a {_fmt(date(ano - 1, 12, 31))}",
+
+        # Datas especiais (fixas por ser referência histórica)
+        "black friday":        "2025-11-28 a 2025-12-02",
+        "natal":               "2025-12-15 a 2025-12-25",
+        "natal 2025":          "2025-12-15 a 2025-12-25",
+        "black friday 2025":   "2025-11-28 a 2025-12-02",
+    }
+
+    # ── Meses pelo nome (dinâmico) ─────────────────────────────────────────────
+    # Regra: se o mês ainda não chegou este ano → é do ano corrente (futuro próximo)
+    # Se passou este ano → ano corrente. Se passou há >6 meses → ainda ano corrente
+    # (o Claude já tem a data atual e vai raciocinar; aqui só damos dica de período)
+    NOMES_MESES = [
+        "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+        "julho",   "agosto",   "setembro", "outubro", "novembro", "dezembro",
+    ]
+    for i, nome in enumerate(NOMES_MESES, start=1):
+        # Determina o ano mais provável para esse mês
+        # Se o mês está 3+ meses no futuro relativo ao atual → provavelmente ano passado
+        diff = i - hoje.month
+        if diff > 3:
+            ano_mes = ano - 1
+        else:
+            ano_mes = ano
+
+        ultimo_dia = calendar.monthrange(ano_mes, i)[1]
+        ini = date(ano_mes, i, 1).isoformat()
+        fim = date(ano_mes, i, ultimo_dia).isoformat()
+
+        syns[nome]        = f"{ini} a {fim}"
+        syns[f"em {nome}"] = f"{ini} a {fim}"
+        # Forma "mês de X"
+        syns[f"mês de {nome}"] = f"{ini} a {fim}"
+        # Com ano explícito (ambos os anos cobertos)
+        for yr in (ano, ano - 1):
+            ud = calendar.monthrange(yr, i)[1]
+            syns[f"{nome} {yr}"]    = f"{date(yr, i, 1).isoformat()} a {date(yr, i, ud).isoformat()}"
+            syns[f"{nome}/{yr}"]    = f"{date(yr, i, 1).isoformat()} a {date(yr, i, ud).isoformat()}"
+            syns[f"{nome}/{str(yr)[2:]}"] = f"{date(yr, i, 1).isoformat()} a {date(yr, i, ud).isoformat()}"
+
+    return syns
+
+
+# Instancia ao importar — reavaliado a cada import (processo vive dias, não semanas)
+PERIOD_SYNONYMS: dict[str, str] = _build_period_synonyms()
+
 
 def normalizar_pergunta(texto: str) -> str:
     """
-    Substitui sinônimos conhecidos no texto por termos canônicos.
-    Preserva o texto original mas enriquece com contexto técnico.
+    Enriquece a pergunta com anotações de sinônimos para o Claude.
+
+    - Deduplica anotações (mesma canonical não aparece duas vezes)
+    - Preserva o texto original
     """
     t = texto.lower()
-    anotacoes = []
+    anotacoes: list[str] = []
+    vistos: set[str] = set()
 
     for sinonimo, canonico in METRIC_SYNONYMS.items():
-        if sinonimo in t:
+        if sinonimo in t and canonico not in vistos:
             anotacoes.append(f"{sinonimo}={canonico}")
+            vistos.add(canonico)
 
     for sinonimo, periodo in PERIOD_SYNONYMS.items():
-        if sinonimo in t:
+        if sinonimo in t and periodo not in vistos:
             anotacoes.append(f"periodo={periodo}")
+            vistos.add(periodo)
 
     if anotacoes:
         return f"{texto} [contexto: {', '.join(anotacoes)}]"
