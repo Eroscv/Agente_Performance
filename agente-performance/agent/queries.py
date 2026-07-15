@@ -544,3 +544,584 @@ def _build_where(
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     return where, params
+
+
+# ── Novas consultas v3 ────────────────────────────────────────────────────────
+
+def historico_mensal(
+    campanha:    Optional[str] = None,
+    meses:       int = 12,
+) -> list[dict]:
+    """
+    Série histórica mensal: últimos N meses com totais e ROAS.
+    Útil para visualizar sazonalidade e tendências de longo prazo.
+    """
+    import calendar as _cal
+    from datetime import date as _date
+
+    hoje = _date.today()
+    resultado = []
+
+    for i in range(meses - 1, -1, -1):
+        ano = hoje.year
+        mes = hoje.month - i
+        while mes <= 0:
+            mes += 12
+            ano -= 1
+
+        ini = _date(ano, mes, 1).isoformat()
+        fim = _date(ano, mes, _cal.monthrange(ano, mes)[1]).isoformat()
+
+        base = "campanha = ?" if campanha else None
+        extra = [campanha] if campanha else []
+        where, params = _build_where(base, extra_params=extra, data_inicio=ini, data_fim=fim)
+
+        nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+        row = query(f"""
+            SELECT
+                '{nomes[mes-1]}/{str(ano)[2:]}' AS mes_label,
+                '{ini}'                          AS data_inicio,
+                '{fim}'                          AS data_fim,
+                ROUND(SUM(investimento), 2)      AS investimento,
+                ROUND(SUM(COALESCE(valor_compras, 0)), 2)     AS receita,
+                ROUND(SUM(COALESCE(compras, 0)), 0)           AS compras,
+                {_ROAS_EXPR}                                  AS roas,
+                ROUND(SUM(impressoes), 0)        AS impressoes,
+                ROUND(SUM(COALESCE(cliques_link, 0)), 0)      AS cliques,
+                ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
+                COUNT(DISTINCT campanha)         AS campanhas_ativas
+            FROM campanhas
+            {where}
+        """, tuple(params))
+
+        if row and row[0].get("investimento"):
+            resultado.append(row[0])
+
+    return resultado
+
+
+def top_campanhas_ctr(
+    limit:       int = 10,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """Top N campanhas por CTR (mínimo 1.000 impressões para evitar distorção)."""
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0)  AS cliques,
+            ROUND(SUM(impressoes), 0)                  AS impressoes,
+            ROUND(SUM(investimento), 2)                AS investimento,
+            {_ROAS_EXPR}                               AS roas
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(impressoes) >= 1000
+        ORDER BY ctr DESC
+        LIMIT ?
+    """, tuple(params + [limit]))
+
+
+def top_campanhas_cpm(
+    limit:       int = 10,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """Top N campanhas por menor CPM (mais eficiente em custo de exibição)."""
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
+            ROUND(SUM(impressoes), 0)          AS impressoes,
+            ROUND(SUM(investimento), 2)        AS investimento,
+            {_ROAS_EXPR}                       AS roas,
+            ROUND(SUM(COALESCE(compras, 0)), 0) AS compras
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(impressoes) >= 1000
+        ORDER BY cpm ASC
+        LIMIT ?
+    """, tuple(params + [limit]))
+
+
+def top_campanhas_alcance(
+    limit:       int = 10,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """Top N campanhas por alcance total único."""
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(COALESCE(alcance, 0)), 0)       AS alcance,
+            ROUND(SUM(impressoes), 0)                  AS impressoes,
+            {_FREQ_EXPR},
+            ROUND(SUM(investimento), 2)                AS investimento,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(alcance, 0)), 0) * 1000, 2) AS custo_por_mil_alcance
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(COALESCE(alcance, 0)) > 0
+        ORDER BY alcance DESC
+        LIMIT ?
+    """, tuple(params + [limit]))
+
+
+def top_campanhas_cliques(
+    limit:       int = 10,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """Top N campanhas por volume de cliques no link."""
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0)  AS cliques,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
+            ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
+            ROUND(SUM(investimento), 2)                AS investimento,
+            {_ROAS_EXPR}                               AS roas
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(COALESCE(cliques_link, 0)) > 0
+        ORDER BY cliques DESC
+        LIMIT ?
+    """, tuple(params + [limit]))
+
+
+def top_campanhas_receita(
+    limit:       int = 10,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """Top N campanhas por receita total gerada."""
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)  AS receita,
+            ROUND(SUM(COALESCE(compras, 0)), 0)        AS compras,
+            ROUND(SUM(investimento), 2)                AS investimento,
+            {_ROAS_EXPR}                               AS roas,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(COALESCE(valor_compras, 0)) > 0
+        ORDER BY receita DESC
+        LIMIT ?
+    """, tuple(params + [limit]))
+
+
+def eficiencia_criativo(
+    campanha:    Optional[str] = None,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """
+    Indicadores de qualidade de criativo por campanha.
+
+    Retorna CPM (custo de exibição), CTR (qualidade do clique),
+    CPC e hook rate estimado (video_3s / impressoes).
+    Métricas proxy para avaliar se o criativo é bom.
+    """
+    base  = "campanha = ?" if campanha else None
+    extra = [campanha] if campanha else []
+    where, params = _build_where(
+        base,
+        extra_params=extra,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2)   AS cpm,
+            ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
+            ROUND(CAST(SUM(COALESCE(video_3s, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 2) AS hook_rate_pct,
+            ROUND(CAST(SUM(COALESCE(thruplays, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(reproducoes_video, 0)), 0) * 100, 2) AS retencao_video_pct,
+            ROUND(SUM(impressoes), 0)              AS impressoes,
+            ROUND(SUM(COALESCE(alcance, 0)), 0)    AS alcance,
+            ROUND(SUM(investimento), 2)            AS investimento,
+            {_ROAS_EXPR}                           AS roas
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(impressoes) >= 500
+        ORDER BY ctr DESC
+    """, tuple(params))
+
+
+def distribuicao_investimento(
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """
+    Share de investimento por campanha (% do total do período).
+
+    Mostra onde está indo o budget e o ROAS de cada fatia.
+    Útil para identificar se o dinheiro está indo para as campanhas certas.
+    """
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(investimento), 2)          AS investimento,
+            ROUND(
+                SUM(investimento) * 100.0 /
+                NULLIF(SUM(SUM(investimento)) OVER (), 0)
+            , 1)                                 AS share_pct,
+            {_ROAS_EXPR}                         AS roas,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2) AS receita,
+            ROUND(SUM(COALESCE(compras, 0)), 0)  AS compras
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        ORDER BY investimento DESC
+    """, tuple(params))
+
+
+def campanhas_sem_conversao(
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+    invest_min:  float = 50.0,
+) -> list[dict]:
+    """
+    Campanhas com investimento mas ZERO compras registradas.
+
+    São candidatas a revisão imediata — dinheiro sendo gasto sem retorno.
+    invest_min: mínimo de investimento para aparecer na lista (default R$50).
+    """
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(investimento), 2)           AS investimento,
+            ROUND(SUM(impressoes), 0)             AS impressoes,
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0) AS cliques,
+            ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0) AS carrinho,
+            ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0) AS checkout,
+            MAX(data_fim)                         AS ultima_atividade
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(investimento) >= {invest_min}
+           AND (SUM(COALESCE(compras, 0)) = 0 OR SUM(COALESCE(valor_compras, 0)) = 0)
+        ORDER BY investimento DESC
+    """, tuple(params))
+
+
+def campanhas_inativas(
+    dias_sem_dados: int = 14,
+) -> list[dict]:
+    """
+    Campanhas que não têm dados nos últimos N dias.
+
+    Identifica campanhas pausadas, encerradas ou com problema de tracking.
+    dias_sem_dados: considera inativa se a última atividade foi há mais de N dias.
+    """
+    dr = data_range_disponivel()
+    data_max = dr.get("data_maxima")
+    if not data_max:
+        return []
+
+    return query("""
+        SELECT
+            campanha,
+            MAX(data_fim)                        AS ultima_atividade,
+            ROUND(SUM(investimento), 2)          AS investimento_total,
+            ROUND(SUM(COALESCE(compras, 0)), 0)  AS compras_total,
+            {_ROAS}                              AS roas_historico,
+            COUNT(DISTINCT data_inicio)          AS dias_com_dados
+        FROM campanhas
+        WHERE campanha IS NOT NULL AND campanha != ''
+        GROUP BY campanha
+        HAVING MAX(data_fim) < DATE(?, ?)
+           AND SUM(investimento) >= 100
+        ORDER BY ultima_atividade DESC
+    """.replace("{_ROAS}", _ROAS_EXPR), (data_max, f"-{dias_sem_dados} days"))
+
+
+def variacao_diaria_roas(
+    campanha:    Optional[str] = None,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """
+    Volatilidade do ROAS dia a dia.
+
+    Retorna ROAS diário e variação percentual em relação ao dia anterior.
+    Útil para identificar picos, quedas e instabilidades.
+    """
+    base  = "campanha = ?" if campanha else None
+    extra = [campanha] if campanha else []
+    where, params = _build_where(
+        base,
+        extra_params=extra,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            data_inicio                         AS data,
+            ROUND(SUM(investimento), 2)         AS investimento,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2) AS receita,
+            ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4) AS roas,
+            ROUND(
+                (SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0)
+                - LAG(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0))
+                    OVER (ORDER BY data_inicio))
+                / NULLIF(
+                    LAG(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0))
+                    OVER (ORDER BY data_inicio),
+                    0
+                ) * 100
+            , 1) AS variacao_roas_pct,
+            ROUND(SUM(COALESCE(compras, 0)), 0) AS compras
+        FROM campanhas
+        {where}
+        GROUP BY data_inicio
+        ORDER BY data_inicio ASC
+    """, tuple(params))
+
+
+def saturacao_frequencia(
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+    threshold:   float = 3.0,
+) -> list[dict]:
+    """
+    Campanhas com frequência média acima do threshold (padrão: 3x).
+
+    Alta frequência indica saturação de audiência — o público está vendo
+    o mesmo anúncio muitas vezes, o que costuma degradar o ROAS.
+    """
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia_media,
+            ROUND(SUM(impressoes), 0)              AS impressoes,
+            ROUND(SUM(COALESCE(alcance, 0)), 0)    AS alcance,
+            {_ROAS_EXPR}                           AS roas,
+            ROUND(SUM(investimento), 2)            AS investimento,
+            ROUND(SUM(COALESCE(compras, 0)), 0)    AS compras,
+            ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING frequencia_media >= {threshold}
+           AND SUM(COALESCE(alcance, 0)) > 0
+        ORDER BY frequencia_media DESC
+    """, tuple(params))
+
+
+def custo_funil_detalhado(
+    campanha:    Optional[str] = None,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """
+    Custo em cada etapa do funil por campanha.
+
+    Retorna custo por: clique → landing → view conteúdo → carrinho → checkout → compra.
+    Ideal para identificar onde o funil está 'vazando' dinheiro.
+    """
+    base  = "campanha = ?" if campanha else None
+    extra = [campanha] if campanha else []
+    where, params = _build_where(
+        base,
+        extra_params=extra,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(investimento), 2)           AS investimento,
+            -- Clique
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0)      AS cliques,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
+            -- Landing page
+            ROUND(SUM(COALESCE(visualizacoes_landing, 0)), 0)  AS landing_views,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(visualizacoes_landing, 0)), 0), 2) AS custo_por_landing,
+            -- Visualização de conteúdo
+            ROUND(SUM(COALESCE(views_conteudo, 0)), 0)     AS views_conteudo,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(views_conteudo, 0)), 0), 2) AS custo_por_view_conteudo,
+            -- Carrinho
+            ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)   AS carrinho,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(adicoes_carrinho, 0)), 0), 2) AS custo_por_carrinho,
+            -- Checkout
+            ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)  AS checkout,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(checkout_iniciado, 0)), 0), 2) AS custo_por_checkout,
+            -- Compra
+            ROUND(SUM(COALESCE(compras, 0)), 0)            AS compras,
+            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
+            -- Taxas de conversão no funil
+            ROUND(CAST(SUM(COALESCE(adicoes_carrinho, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0) * 100, 2) AS taxa_click_carrinho_pct,
+            ROUND(CAST(SUM(COALESCE(checkout_iniciado, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(adicoes_carrinho, 0)), 0) * 100, 2) AS taxa_carrinho_checkout_pct,
+            ROUND(CAST(SUM(COALESCE(compras, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(checkout_iniciado, 0)), 0) * 100, 2) AS taxa_checkout_compra_pct,
+            ROUND(CAST(SUM(COALESCE(compras, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0) * 100, 2) AS taxa_conversao_geral_pct
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(investimento) >= 50
+        ORDER BY investimento DESC
+    """, tuple(params))
+
+
+def metricas_engajamento(
+    campanha:    Optional[str] = None,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """
+    Métricas de engajamento social por campanha.
+
+    Curtidas, comentários, compartilhamentos, salvamentos, reações.
+    Útil para campanhas de awareness/engajamento onde o KPI não é conversão.
+    """
+    base  = "campanha = ?" if campanha else None
+    extra = [campanha] if campanha else []
+    where, params = _build_where(
+        base,
+        extra_params=extra,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(COALESCE(engajamentos_post, 0)), 0)   AS engajamentos_post,
+            ROUND(SUM(COALESCE(comentarios, 0)), 0)         AS comentarios,
+            ROUND(SUM(COALESCE(compartilhamentos, 0)), 0)   AS compartilhamentos,
+            ROUND(SUM(COALESCE(salvamentos, 0)), 0)         AS salvamentos,
+            ROUND(SUM(COALESCE(reacoes, 0)), 0)             AS reacoes,
+            ROUND(SUM(COALESCE(curtidas_facebook, 0)), 0)   AS curtidas_facebook,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(engajamentos_post, 0)), 0), 2) AS custo_por_engajamento,
+            ROUND(SUM(investimento), 2)                     AS investimento,
+            ROUND(SUM(impressoes), 0)                       AS impressoes,
+            ROUND(
+                CAST(SUM(COALESCE(engajamentos_post, 0)) AS FLOAT)
+                / NULLIF(SUM(impressoes), 0) * 100
+            , 2)                                            AS taxa_engajamento_pct
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(COALESCE(engajamentos_post, 0)) > 0
+           OR SUM(COALESCE(compartilhamentos, 0)) > 0
+        ORDER BY engajamentos_post DESC
+    """, tuple(params))
+
+
+def metricas_mensageria(
+    campanha:    Optional[str] = None,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> list[dict]:
+    """
+    Métricas de campanhas de mensageria (WhatsApp/Messenger).
+
+    Conversas iniciadas, respondidas, custo por conversa e boas-vindas.
+    Ideal para negócios que usam Meta para gerar leads por mensagem.
+    """
+    base  = "campanha = ?" if campanha else None
+    extra = [campanha] if campanha else []
+    where, params = _build_where(
+        base,
+        extra_params=extra,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+    )
+    return query(f"""
+        SELECT
+            campanha,
+            ROUND(SUM(COALESCE(conversas_iniciadas, 0)), 0)     AS conversas_iniciadas,
+            ROUND(SUM(COALESCE(conversas_respondidas_7d, 0)), 0) AS conversas_respondidas,
+            ROUND(SUM(COALESCE(msg_boas_vindas, 0)), 0)         AS msg_boas_vindas,
+            ROUND(SUM(COALESCE(msg_inscricoes, 0)), 0)          AS inscricoes,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(conversas_iniciadas, 0)), 0), 2) AS custo_por_conversa,
+            ROUND(SUM(investimento), 2)                         AS investimento,
+            ROUND(SUM(impressoes), 0)                           AS impressoes
+        FROM campanhas
+        {where}
+        GROUP BY campanha
+        HAVING SUM(COALESCE(conversas_iniciadas, 0)) > 0
+        ORDER BY conversas_iniciadas DESC
+    """, tuple(params))
+
+
+def resumo_executivo(
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+) -> dict:
+    """
+    Visão executiva completa: totais + top campanhas + alertas.
+
+    Agrega em uma única chamada:
+    - Totais do período
+    - Top 3 por ROAS, compras e receita
+    - Campanhas com ROAS baixo
+    - Campanhas sem conversão
+    - Distribuição de investimento
+
+    Retorna dict com todas essas seções.
+    """
+    totais    = resumo_periodo(data_inicio, data_fim) if (data_inicio and data_fim) else {}
+    top_roas  = top_campanhas_roas(3, data_inicio, data_fim)
+    top_comp  = top_campanhas_compras(3, data_inicio, data_fim)
+    top_rec   = top_campanhas_receita(3, data_inicio, data_fim)
+    alertas   = alertas_roas_baixo()
+    sem_conv  = campanhas_sem_conversao(data_inicio, data_fim)
+    distrib   = distribuicao_investimento(data_inicio, data_fim)
+
+    return {
+        "totais":             totais,
+        "top_roas":           top_roas,
+        "top_compras":        top_comp,
+        "top_receita":        top_rec,
+        "alertas_roas":       alertas,
+        "sem_conversao":      sem_conv,
+        "distribuicao":       distrib,
+        "periodo":            {"inicio": data_inicio, "fim": data_fim},
+    }

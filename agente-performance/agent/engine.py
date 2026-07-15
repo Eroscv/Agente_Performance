@@ -42,16 +42,36 @@ from datetime import date, timedelta
 
 def _detect_intent(text: str) -> str:
     _INTENT_PATTERNS = [
-        ("listar_campanhas",     r"list[ae]|quais\s+campanha|mostra.*campanha|campanhas\s+ativ"),
-        ("top_roas",             r"melhor.*roas|maior.*roas|top.*roas|roas.*maior|mais\s+eficiente|vale\s+a\s+pena|t[aá]\s+valendo"),
-        ("top_compras",          r"mais\s+compra|maior.*compra|top.*compra|compra.*maior|mais\s+vend"),
-        ("alertas_roas",         r"alerta|roas\s+baixo|roas\s+ruim|abaixo.*roas|problema|ruim"),
-        ("funil",                r"funil|carrinho|checkout|convers[ãa]o"),
-        ("evolucao_diaria",      r"evolu|diário|ao\s+longo|por\s+dia|histórico|tendência"),
-        ("comparar",             r"compar|versus|vs\.?|lado\s+a\s+lado"),
-        ("performance_campanha", r"performance|desempenho|resultado"),
-        ("periodo",              r"período|resumo\s+de|total\s+de|consolidado"),
-        ("resumo_geral",         r"resumo|geral|overview|visão\s+geral|como\s+est[áa]"),
+        # Básicas (sem_conversao antes de listar para evitar colisão "quais campanhas sem X")
+        ("sem_conversao",           r"sem\s+compra|sem\s+convers|zero\s+compra|gastando.*sem|n.o\s+vend|n.o\s+convert|quais.*sem\s+compra|quais.*n.o\s+conver"),
+        ("listar_campanhas",        r"list[ae]|quais\s+campanha|mostra.*campanha|campanhas\s+ativ"),
+        # Rankings
+        ("top_roas",                r"melhor.*roas|maior.*roas|top.*roas|roas.*maior|mais\s+eficiente|vale\s+a\s+pena|t[aá]\s+valendo"),
+        ("top_compras",             r"mais\s+compra|maior.*compra|top.*compra|compra.*maior|mais\s+vend"),
+        ("top_receita",             r"mais\s+receita|maior.*receita|top.*receita|mais.*faturou|maior.*faturamento"),
+        ("top_ctr",                 r"melhor.*ctr|maior.*ctr|top.*ctr|clique.*eficiente|mais\s+clique"),
+        ("top_cpm",                 r"mais\s+barato.*impres|menor.*cpm|top.*cpm|cpm.*menor|custo.*impressão"),
+        ("top_alcance",             r"mais.*alcance|maior.*alcance|top.*alcance|mais.*pessoas"),
+        ("top_cliques",             r"mais\s+cliques|maior.*cliques|top.*cliques|volume.*cliques|cliques.*link"),
+        # Análises específicas
+        ("alertas_roas",            r"alerta|roas\s+baixo|roas\s+ruim|abaixo.*roas|problema|ruim"),
+        ("campanhas_inativas",      r"inativ|pausad|parou|n.o\s+rod|encerrad"),
+        ("variacao_roas",           r"volatilidade|variação.*roas|roas.*variou|oscilação|pico.*roas"),
+        ("saturacao_frequencia",    r"satura|frequência\s+alta|muitas\s+vezes|cansa|repetição|audiência.*cansad"),
+        ("eficiencia_criativo",     r"criativo|hook\s+rate|retenção.*vídeo|qualidade.*anúncio|scroll\s+stop"),
+        ("distribuicao_investimento", r"distribui|share\s+budget|alocação|onde.*dinheiro|budget.*campanhas"),
+        ("historico_mensal",        r"histór|mês.*a.*mês|mensal|sazonalidade|ao\s+longo\s+dos\s+meses"),
+        ("funil_detalhado",         r"funil\s+detalhado|custo\s+por\s+etapa|onde\s+vaza|perda\s+no\s+funil"),
+        ("funil",                   r"funil|carrinho|checkout|convers[ãa]o"),
+        ("metricas_video",          r"vídeo|video|thruplay|play|reprodução|retenção\s+vídeo|view.*video"),
+        ("metricas_engajamento",    r"engajamento|curtida|comentário|compartilhamento|salvamento|reação"),
+        ("metricas_mensageria",     r"mensage|conversa|whatsapp|messenger|lead.*mensagem"),
+        ("resumo_executivo",        r"executivo|visão\s+completa|panorama|tudo\s+sobre|dashboard"),
+        ("evolucao_diaria",         r"evolu|diário|ao\s+longo|por\s+dia|histórico|tendência"),
+        ("comparar",                r"compar|versus|vs\.?|lado\s+a\s+lado"),
+        ("performance_campanha",    r"performance|desempenho|resultado"),
+        ("periodo",                 r"período|resumo\s+de|total\s+de|consolidado"),
+        ("resumo_geral",            r"resumo|geral|overview|visão\s+geral|como\s+est[áa]"),
     ]
     t = text.lower()
     for intent, pattern in _INTENT_PATTERNS:
@@ -236,6 +256,57 @@ def _executar_intent(
 
     elif intent == "alertas_roas":
         return queries.alertas_roas_baixo()
+
+    elif intent == "historico_mensal":
+        return queries.historico_mensal(campanha)
+
+    elif intent == "resumo_executivo":
+        return queries.resumo_executivo(data_inicio, data_fim)
+
+    elif intent == "top_receita":
+        return queries.top_campanhas_receita(limit, data_inicio, data_fim)
+
+    elif intent == "top_ctr":
+        return queries.top_campanhas_ctr(limit, data_inicio, data_fim)
+
+    elif intent == "top_cpm":
+        return queries.top_campanhas_cpm(limit, data_inicio, data_fim)
+
+    elif intent == "top_alcance":
+        return queries.top_campanhas_alcance(limit, data_inicio, data_fim)
+
+    elif intent == "top_cliques":
+        return queries.top_campanhas_cliques(limit, data_inicio, data_fim)
+
+    elif intent == "funil_detalhado":
+        return queries.custo_funil_detalhado(campanha, data_inicio, data_fim)
+
+    elif intent == "eficiencia_criativo":
+        return queries.eficiencia_criativo(campanha, data_inicio, data_fim)
+
+    elif intent == "distribuicao_investimento":
+        return queries.distribuicao_investimento(data_inicio, data_fim)
+
+    elif intent == "sem_conversao":
+        return queries.campanhas_sem_conversao(data_inicio, data_fim)
+
+    elif intent == "campanhas_inativas":
+        return queries.campanhas_inativas()
+
+    elif intent == "variacao_roas":
+        return queries.variacao_diaria_roas(campanha, data_inicio, data_fim)
+
+    elif intent == "saturacao_frequencia":
+        return queries.saturacao_frequencia(data_inicio, data_fim)
+
+    elif intent == "metricas_video":
+        return queries.metricas_video(campanha, data_inicio, data_fim)
+
+    elif intent == "metricas_engajamento":
+        return queries.metricas_engajamento(campanha, data_inicio, data_fim)
+
+    elif intent == "metricas_mensageria":
+        return queries.metricas_mensageria(campanha, data_inicio, data_fim)
 
     elif intent == "comparar":
         campanhas_todas = _get_available_campaigns()

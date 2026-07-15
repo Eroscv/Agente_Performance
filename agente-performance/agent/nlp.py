@@ -39,21 +39,41 @@ _client: anthropic.Anthropic | None = None
 _client_lock = threading.Lock()
 
 INTENTS_DISPONIVEIS = [
+    # Básicas
     "listar_campanhas",
     "resumo_geral",
     "performance_campanha",
+    "periodo",
+    "evolucao_diaria",
+    "historico_mensal",
+    "resumo_executivo",
+    # Rankings
     "top_roas",
     "top_compras",
-    "evolucao_diaria",
+    "top_receita",
+    "top_ctr",
+    "top_cpm",
+    "top_alcance",
+    "top_cliques",
+    "ranking_metrica",
+    # Análises específicas
     "funil",
+    "funil_detalhado",
     "alertas_roas",
     "comparar",
     "comparar_periodos",
     "comparar_wow",
     "comparar_mom",
     "comparar_antes_depois",
-    "ranking_metrica",
-    "periodo",
+    "eficiencia_criativo",
+    "distribuicao_investimento",
+    "sem_conversao",
+    "campanhas_inativas",
+    "variacao_roas",
+    "saturacao_frequencia",
+    "metricas_video",
+    "metricas_engajamento",
+    "metricas_mensageria",
 ]
 
 NLP_SYSTEM_PROMPT = """Você é um parser de linguagem natural para um sistema de análise de campanhas Meta Ads.
@@ -61,21 +81,44 @@ NLP_SYSTEM_PROMPT = """Você é um parser de linguagem natural para um sistema d
 Sua tarefa: analisar a pergunta do usuário e retornar um JSON estruturado com os parâmetros para executar as consultas corretas.
 
 ## Intenções disponíveis
+
+### Básicas
 - listar_campanhas: listar todas as campanhas disponíveis
-- resumo_geral: visão geral de todas as campanhas
-- performance_campanha: desempenho de uma campanha específica ao longo do tempo
+- resumo_geral: visão geral de todas as campanhas (resumo por campanha)
+- performance_campanha: desempenho de uma campanha específica ao longo do tempo (série diária)
+- periodo: resumo consolidado totalizando um período específico
+- evolucao_diaria: evolução dia a dia de métricas (gráfico temporal)
+- historico_mensal: histórico mês a mês dos últimos N meses (sazonalidade, tendência)
+- resumo_executivo: visão executiva completa com top campanhas + alertas em uma só resposta
+
+### Rankings
 - top_roas: ranking de campanhas por ROAS (retorno sobre investimento)
 - top_compras: ranking de campanhas por volume de compras/vendas
-- evolucao_diaria: evolução dia a dia de métricas
-- funil: métricas de funil (impressões → cliques → carrinho → checkout → compra)
-- alertas_roas: campanhas com ROAS abaixo do esperado, com problemas
+- top_receita: ranking de campanhas por receita total gerada
+- top_ctr: ranking de campanhas por CTR (taxa de cliques — qualidade do anúncio)
+- top_cpm: ranking por menor CPM (custo de exibição mais barato)
+- top_alcance: ranking por maior alcance único de pessoas
+- top_cliques: ranking por volume de cliques no link
+- ranking_metrica: ranking de todas as campanhas por qualquer métrica específica mencionada
+
+### Análises específicas
+- funil: métricas de funil resumidas (impressões → cliques → carrinho → checkout → compra)
+- funil_detalhado: custo em cada etapa do funil + taxas de conversão entre etapas
+- alertas_roas: campanhas com ROAS abaixo do esperado ou com problemas de conversão
+- sem_conversao: campanhas gastando dinheiro mas sem nenhuma compra registrada
+- campanhas_inativas: campanhas que pararam de rodar (sem dados recentes)
+- variacao_roas: volatilidade diária do ROAS — identifica picos e quedas
+- saturacao_frequencia: campanhas com frequência alta (público vendo o anúncio muitas vezes — saturação)
+- eficiencia_criativo: qualidade do criativo — CPM, CTR, hook rate, retenção de vídeo
+- distribuicao_investimento: share de orçamento por campanha (% do total)
+- metricas_video: métricas de vídeo (views, ThruPlays, hook rate, custo por view)
+- metricas_engajamento: curtidas, comentários, compartilhamentos, salvamentos
+- metricas_mensageria: conversas iniciadas (WhatsApp/Messenger), custo por conversa
 - comparar: comparação lado a lado entre campanhas específicas mencionadas
 - comparar_periodos: comparar dois períodos (ex: maio vs junho, semana passada vs essa semana, 2025 vs 2026)
 - comparar_wow: evolução semana a semana com variação % (week over week)
 - comparar_mom: evolução mês a mês com variação % (month over month)
 - comparar_antes_depois: comparar antes e depois de uma data específica
-- ranking_metrica: ranking de todas as campanhas por uma métrica (roas, cpc, ctr, cpm, compras, receita, investimento, frequencia, cliques, carrinho, checkout, custo_por_compra)
-- periodo: resumo consolidado de um período específico
 
 ## Regras
 1. Você pode retornar MÚLTIPLAS intenções se a pergunta pedir mais de uma coisa
