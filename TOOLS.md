@@ -41,8 +41,8 @@ Add whatever helps you do your job. This is your cheat sheet.
 
 ### GitHub
 
-- Token (classic, full access): `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`
-- Criado em: 2026-06-09
+- Token (fine-grained, contents R/W): `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`
+- Criado em: 2026-07-13
 
 ### Repositórios GitHub
 

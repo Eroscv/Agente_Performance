@@ -39,5 +39,5 @@ Qualquer trabalho no **Agente de Performance Guará** NUNCA deve afetar:
 - `000-default.conf` — redireciona HTTP → HTTPS
 
 ### GitHub
-- Token: `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`
+- Token: `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`
 - Repositório Flora: https://github.com/Eroscv/Flora-Agente (privado, owner: Eroscv)

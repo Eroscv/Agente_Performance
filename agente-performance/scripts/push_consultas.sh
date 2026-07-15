@@ -14,8 +14,12 @@ REMOTE_URL="https://${GIT_TOKEN}@github.com/Eroscv/Agente_Performance.git"
 
 echo "[push_consultas] $(date -u '+%Y-%m-%d %H:%M UTC') — Iniciando..."
 
-# 1. Gera o README
+# 1. Sincroniza dados da planilha Google Sheets → SQLite
 cd "$REPO_DIR"
+echo "[push_consultas] Sincronizando planilha Google Sheets..."
+"$VENV_PYTHON" -m db.loader_sheets
+
+# 2. Gera o README
 "$VENV_PYTHON" "$SCRIPT"
 
 # 2. Configura identidade git (necessário em ambiente headless)
