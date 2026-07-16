@@ -790,18 +790,20 @@ def _blocos_analise_ultima_semana(
     """
     Seção 1 — Análise da Última Semana.
     Busca dados das 2 últimas semanas do mês, gera texto narrativo
-    e tabela comparativa semanal.
+    e 3 tabelas separadas: Métricas de Site/CRM, Meta Ads, Google Ads.
     """
-    from calendar import monthrange
-
     # Semana 2 (última): últimos 7 dias do mês
-    sem2_fim   = data_fim
-    sem2_ini   = data_fim - timedelta(days=6)
-    # Semana 1 (penúltima): 7 dias antes da última semana
-    sem1_fim   = sem2_ini - timedelta(days=1)
-    sem1_ini   = sem1_fim - timedelta(days=6)
+    sem2_fim = data_fim
+    sem2_ini = data_fim - timedelta(days=6)
+    # Semana 1 (penúltima): 7 dias anteriores à última semana
+    # data_fim - 13 dias até data_fim - 7 dias
+    sem1_ini = data_fim - timedelta(days=13)
+    sem1_fim = data_fim - timedelta(days=7)
 
-    def _buscar_semana(ini: date, fim: date):
+    def _label(ini: date, fim: date) -> str:
+        return f"{ini.strftime('%d/%m')} a {fim.strftime('%d/%m')}"
+
+    def _buscar_semana(ini: date, fim: date) -> dict:
         conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
@@ -829,60 +831,128 @@ def _blocos_analise_ultima_semana(
 
     s1 = _buscar_semana(sem1_ini, sem1_fim)
     s2 = _buscar_semana(sem2_ini, sem2_fim)
+    label1 = _label(sem1_ini, sem1_fim)
+    label2 = _label(sem2_ini, sem2_fim)
 
-    # Texto narrativo da última semana
-    def _comp(atual, anterior, nome, fmt_fn):
+    # ── Texto narrativo ───────────────────────────────────────────────────
+    def _comp(atual, anterior, fmt_fn):
         if anterior and anterior != 0:
             var = (atual - anterior) / abs(anterior) * 100
             sinal = "acima" if var > 0 else "abaixo"
             return f"{fmt_fn(atual)} ({abs(var):.1f}% {sinal} da semana anterior)"
         return fmt_fn(atual)
 
-    narrativa_partes = []
-    narrativa_partes.append(
-        f"Na última semana do mês ({sem2_ini.strftime('%d/%m')}–{sem2_fim.strftime('%d/%m')}), "
-        f"o investimento em Meta Ads foi de {_comp(s2['invest'], s1['invest'], 'investimento', _fmt_brl)}, "
+    narrativa_partes = [
+        f"Na última semana do mês ({label2}), "
+        f"o investimento em Meta Ads foi de {_comp(s2['invest'], s1['invest'], _fmt_brl)}, "
         f"com ROAS de {_fmt_x(s2['roas'])}"
-    )
-    if s1['roas'] and s2['roas']:
-        var_roas = (s2['roas'] - s1['roas']) / abs(s1['roas']) * 100 if s1['roas'] else 0
+    ]
+    if s1["roas"] and s2["roas"]:
+        var_roas = (s2["roas"] - s1["roas"]) / abs(s1["roas"]) * 100
         tend = "acima" if var_roas > 0 else "abaixo"
         narrativa_partes[-1] += f" ({abs(var_roas):.1f}% {tend} da semana anterior)"
     narrativa_partes[-1] += "."
-
     narrativa_partes.append(
         f"Foram registradas {s2['compras']} transações, "
-        f"com receita de {_comp(s2['receita'], s1['receita'], 'receita', _fmt_brl)}. "
+        f"com receita de {_comp(s2['receita'], s1['receita'], _fmt_brl)}. "
         f"Ticket médio: {_fmt_brl(s2['ticket'])}."
     )
-
     narrativa = " ".join(narrativa_partes)
 
-    # Tabela comparativa
-    header = ["Semana", "Invest. Meta", "Invest.+Imposto", "Transações", "Receita", "ROAS", "Ticket Médio"]
-    table_rows = [
-        {"type": "table_row", "table_row": {"cells": [
-            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
-        ]}}
+    # ── Helper: montar bloco table ────────────────────────────────────────
+    def _mk_table(headers: list[str], data_rows: list[list[str]]) -> dict:
+        """Monta bloco Notion table com header + linhas de dados."""
+        n = len(headers)
+        rows = [
+            {
+                "object": "block", "type": "table_row",
+                "table_row": {"cells": [
+                    [{"type": "text", "text": {"content": h},
+                      "annotations": {"bold": True}}]
+                    for h in headers
+                ]}
+            }
+        ]
+        for dr in data_rows:
+            rows.append({
+                "object": "block", "type": "table_row",
+                "table_row": {"cells": [
+                    [{"type": "text", "text": {"content": str(v)}}]
+                    for v in dr
+                ]}
+            })
+        return {
+            "object": "block", "type": "table",
+            "table": {
+                "table_width": n,
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": rows,
+            }
+        }
+
+    # ── Tabela 1 — Métricas de Site/CRM (8 colunas) ───────────────────────
+    headers_site = [
+        "Semana", "% Conversão", "Ticket Médio",
+        "N. Usuários", "Novos Clientes", "CAC", "% Desconto", "Pedidos > R$300"
+    ]
+    rows_site = [
+        [
+            label1,
+            "—",
+            _fmt_brl(s1["ticket"]),  # ticket calculado do SQLite
+            "—", "—", "—", "—", "—",
+        ],
+        [
+            label2,
+            "—",
+            _fmt_brl(s2["ticket"]),  # ticket calculado do SQLite
+            "—", "—", "—", "—", "—",
+        ],
     ]
 
-    for label, ini, fim, s in [
-        (f"Sem. {sem1_ini.strftime('%d/%m')}–{sem1_fim.strftime('%d/%m')}", sem1_ini, sem1_fim, s1),
-        (f"Sem. {sem2_ini.strftime('%d/%m')}–{sem2_fim.strftime('%d/%m')}", sem2_ini, sem2_fim, s2),
-    ]:
-        table_rows.append({"type": "table_row", "table_row": {"cells": [
-            [{"text": {"content": label}}],
-            [{"text": {"content": _fmt_brl(s["invest"])}}],
-            [{"text": {"content": _fmt_brl(s["invest_imp"])}}],
-            [{"text": {"content": str(s["compras"]) if s["compras"] else "—"}}],
-            [{"text": {"content": _fmt_brl(s["receita"])}}],
-            [{"text": {"content": _fmt_x(s["roas"])}}],
-            [{"text": {"content": _fmt_brl(s["ticket"])}}],
-        ]}})
+    # ── Tabela 2 — Meta Ads por semana (7 colunas) ────────────────────────
+    headers_meta = [
+        "Semana", "Investimento Meta", "Investimento Meta + Imposto",
+        "Transações", "Receita", "ROAS Meta", "Ticket Médio"
+    ]
+    rows_meta = [
+        [
+            label1,
+            _fmt_brl(s1["invest"]),
+            _fmt_brl(s1["invest_imp"]),
+            str(s1["compras"]) if s1["compras"] else "—",
+            _fmt_brl(s1["receita"]),
+            _fmt_x(s1["roas"]),
+            _fmt_brl(s1["ticket"]),
+        ],
+        [
+            label2,
+            _fmt_brl(s2["invest"]),
+            _fmt_brl(s2["invest_imp"]),
+            str(s2["compras"]) if s2["compras"] else "—",
+            _fmt_brl(s2["receita"]),
+            _fmt_x(s2["roas"]),
+            _fmt_brl(s2["ticket"]),
+        ],
+    ]
+
+    # ── Tabela 3 — Google Ads por semana (6 colunas, placeholder) ─────────
+    headers_google = [
+        "Semana", "Investimento Google",
+        "Transações", "Receita", "ROAS Google", "Ticket Médio"
+    ]
+    rows_google = [
+        [label1, "—", "—", "—", "—", "—"],
+        [label2, "—", "—", "—", "—", "—"],
+    ]
 
     return [
+        # Heading principal
         {"object": "block", "type": "heading_2",
          "heading_2": {"rich_text": [{"text": {"content": "📝 Análise da Última Semana"}}]}},
+
+        # Callout narrativo
         {
             "object": "block", "type": "callout",
             "callout": {
@@ -891,16 +961,36 @@ def _blocos_analise_ultima_semana(
                 "color": "blue_background",
             }
         },
+
+        {"object": "block", "type": "divider", "divider": {}},
+
+        # --- Tabela 1: Métricas de Site ---
         {"object": "block", "type": "heading_3",
-         "heading_3": {"rich_text": [{"text": {"content": "Semanal"}}]}},
+         "heading_3": {"rich_text": [{"text": {"content": "Métricas de Site"}}]}},
+        _mk_table(headers_site, rows_site),
+
+        {"object": "block", "type": "divider", "divider": {}},
+
+        # --- Tabela 2: Meta Ads ---
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Meta Ads"}}]}},
+        _mk_table(headers_meta, rows_meta),
+
+        {"object": "block", "type": "divider", "divider": {}},
+
+        # --- Tabela 3: Google Ads (placeholder) ---
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Google Ads"}}]}},
         {
-            "object": "block", "type": "table", "table": {
-                "table_width": len(header),
-                "has_column_header": True,
-                "has_row_header": False,
-                "children": table_rows,
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Dados Google Ads pendentes de integração."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
             }
         },
+        _mk_table(headers_google, rows_google),
+
         {"object": "block", "type": "divider", "divider": {}},
     ]
 
