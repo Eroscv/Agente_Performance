@@ -1900,7 +1900,8 @@ def gerar_relatorio_semanal(
 
     # ── Blocos Notion ──────────────────────────────────────────────────────
     if tipo == "mensal":
-        titulo = f"📊 {cliente_nome} · Meta Ads Mensal · {titulo_periodo}"
+        mes_pt  = _MESES_PT[data_inicio.month]
+        titulo  = f"Source Of Report - Mensal {mes_pt} {data_inicio.year}"
     else:
         titulo = f"📊 {cliente_nome} · Meta Ads · {titulo_periodo}"
 
