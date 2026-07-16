@@ -999,27 +999,17 @@ def _blocos_visao_mensal_diaria(
     data_inicio: date,
     data_fim: date,
     db_path: Path = DB_PATH,
+    dados_diarios: list = None,
 ) -> list[dict]:
     """
     Seção 2 — Visão Mensal (tabela dia a dia).
-    Agrega campanhas por dia e retorna tabela Notion com uma linha por dia + total.
+    Se dados_diarios fornecidos (lista de dicts do _buscar_dados_diarios), usa-os
+    diretamente para evitar dupla query no banco. Caso contrário busca no SQLite.
     """
-    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT
-            data_inicio                        AS dia,
-            SUM(investimento)                  AS invest,
-            SUM(COALESCE(compras, 0))           AS compras,
-            SUM(COALESCE(valor_compras, 0))     AS receita
-        FROM campanhas
-        WHERE data_inicio >= ? AND data_fim <= ?
-        GROUP BY data_inicio
-        ORDER BY data_inicio
-    """, (data_inicio.isoformat(), data_fim.isoformat()))
-    rows = cur.fetchall()
-    conn.close()
+    if dados_diarios is None:
+        dados_diarios = _buscar_dados_diarios(data_inicio, data_fim, db_path)
+
+    rows = dados_diarios  # alias para manter o loop original inalterado
 
     header = ["Data", "Gasto", "Compras Meta", "Receita Meta", "ROAS Meta", "Ticket Médio Meta"]
     table_rows = [
@@ -1033,18 +1023,21 @@ def _blocos_visao_mensal_diaria(
     total_receita = 0.0
 
     for row in rows:
-        invest  = float(row["invest"] or 0)
-        compras = int(row["compras"] or 0)
-        receita = float(row["receita"] or 0)
+        invest  = float(row.get("invest", row.get("invest", 0)) or 0)
+        compras = int(row.get("compras", 0) or 0)
+        receita = float(row.get("receita", 0) or 0)
         roas    = round(receita / invest, 2) if invest > 0 else None
         ticket  = round(receita / compras, 2) if compras else None
 
-        # Formatar data como dd/mm
+        # Campo "data" vem de _buscar_dados_diarios (lista de dicts)
+        dia_raw = row.get("data") or row.get("dia", "")
         try:
-            dia_date = date.fromisoformat(row["dia"])
-            dia_str  = dia_date.strftime("%d/%m")
+            if isinstance(dia_raw, date):
+                dia_str = dia_raw.strftime("%d/%m")
+            else:
+                dia_str = date.fromisoformat(str(dia_raw)).strftime("%d/%m")
         except Exception:
-            dia_str = str(row["dia"])
+            dia_str = str(dia_raw)
 
         table_rows.append({"type": "table_row", "table_row": {"cells": [
             [{"text": {"content": dia_str}}],
@@ -1204,6 +1197,324 @@ def _blocos_alocacao_por_anuncio(
                 "children": table_rows,
             }
         },
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+# ── Visão Mensal — análise narrativa automática ─────────────────────────────
+
+
+def _buscar_dados_diarios(
+    data_inicio: date,
+    data_fim: date,
+    db_path: Path = DB_PATH,
+) -> list[dict]:
+    """
+    Retorna lista de dicts {data, invest, compras, receita, roas} por dia.
+    Reutilizada tanto pela tabela diária quanto pela narrativa mensal.
+    """
+    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            data_inicio                        AS dia,
+            SUM(investimento)                  AS invest,
+            SUM(COALESCE(compras, 0))           AS compras,
+            SUM(COALESCE(valor_compras, 0))     AS receita
+        FROM campanhas
+        WHERE data_inicio >= ? AND data_fim <= ?
+        GROUP BY data_inicio
+        ORDER BY data_inicio
+    """, (data_inicio.isoformat(), data_fim.isoformat()))
+    rows = cur.fetchall()
+    conn.close()
+
+    resultado = []
+    for row in rows:
+        invest  = float(row["invest"] or 0)
+        compras = int(row["compras"] or 0)
+        receita = float(row["receita"] or 0)
+        roas    = round(receita / invest, 4) if invest > 0 else None
+        resultado.append({
+            "data":    row["dia"],
+            "invest":  invest,
+            "compras": compras,
+            "receita": receita,
+            "roas":    roas,
+        })
+    return resultado
+
+
+def _detectar_fases(dados_diarios: list) -> dict:
+    """
+    Analisa dados diários e detecta padrões em duas fases.
+
+    Retorna dict com fase1, fase2, pico_roas, vale_roas, faixa_eficiente,
+    invest_medio_geral, mediana_invest, roas_baixo_invest, roas_alto_invest,
+    threshold, n_dias_baixo, n_dias_alto.
+    """
+    if not dados_diarios:
+        return {}
+
+    n = len(dados_diarios)
+    metade = n // 2
+    fase1_dados = dados_diarios[:metade] if metade > 0 else dados_diarios
+    fase2_dados = dados_diarios[metade:] if metade < n else dados_diarios
+
+    def _media(lst, campo):
+        vals = [d[campo] for d in lst if d.get(campo) is not None]
+        return round(sum(vals) / len(vals), 2) if vals else None
+
+    dias_com_roas = [d for d in dados_diarios if d["roas"] is not None]
+    pico = max(dias_com_roas, key=lambda d: d["roas"]) if dias_com_roas else None
+    vale = min(dias_com_roas, key=lambda d: d["roas"]) if dias_com_roas else None
+
+    invests = sorted(d["invest"] for d in dados_diarios)
+    if len(invests) % 2 == 0:
+        mediana = (invests[len(invests)//2 - 1] + invests[len(invests)//2]) / 2
+    else:
+        mediana = invests[len(invests)//2]
+
+    dias_baixo = [d for d in dados_diarios if d["invest"] < mediana and d["roas"] is not None]
+    dias_alto  = [d for d in dados_diarios if d["invest"] >= mediana and d["roas"] is not None]
+    roas_baixo = round(sum(d["roas"] for d in dias_baixo) / len(dias_baixo), 2) if dias_baixo else None
+    roas_alto  = round(sum(d["roas"] for d in dias_alto)  / len(dias_alto),  2) if dias_alto  else None
+
+    eficientes = [d for d in dados_diarios if d["roas"] is not None and d["roas"] > 4.0]
+    faixa_ef = None
+    if eficientes:
+        invests_ef = [d["invest"] for d in eficientes]
+        faixa_ef = {"invest_min": min(invests_ef), "invest_max": max(invests_ef)}
+
+    invest_medio_geral = round(sum(d["invest"] for d in dados_diarios) / n, 0)
+
+    return {
+        "fase1": {
+            "invest_medio": _media(fase1_dados, "invest"),
+            "roas_medio":   _media(fase1_dados, "roas"),
+            "n_dias":       len(fase1_dados),
+        },
+        "fase2": {
+            "invest_medio": _media(fase2_dados, "invest"),
+            "roas_medio":   _media(fase2_dados, "roas"),
+            "n_dias":       len(fase2_dados),
+        },
+        "pico_roas":          {"data": pico["data"], "valor": pico["roas"]} if pico else None,
+        "vale_roas":          {"data": vale["data"], "valor": vale["roas"]} if vale else None,
+        "faixa_eficiente":    faixa_ef,
+        "invest_medio_geral": invest_medio_geral,
+        "mediana_invest":     round(mediana, 0),
+        "roas_baixo_invest":  roas_baixo,
+        "roas_alto_invest":   roas_alto,
+        "threshold":          round(mediana, 0),
+        "n_dias_baixo":       len(dias_baixo),
+        "n_dias_alto":        len(dias_alto),
+    }
+
+
+def _gerar_texto_narrativo_mensal(
+    resumo: dict,
+    dados_diarios: list,
+    nome_mes: str,
+    ano: int,
+) -> tuple:
+    """
+    Gera textos narrativos para a seção RESUMO do relatório mensal.
+    Retorna tupla (abertura, comportamento, sensibilidade).
+    """
+    r = resumo
+    fases = _detectar_fases(dados_diarios)
+
+    invest     = r.get("total_invest", 0)
+    invest_imp = r.get("invest_imp", 0)
+    receita    = r.get("total_receita", 0)
+    compras    = r.get("total_compras", 0)
+    roas       = r.get("roas")
+    n_dias     = len(dados_diarios)
+
+    roas_str = f"{roas:.2f}x" if roas else "—"
+    if roas:
+        if roas >= 4.5:
+            roas_qualidade = "excepcional"
+        elif roas >= 3.5:
+            roas_qualidade = "sólida"
+        elif roas >= 2.5:
+            roas_qualidade = "razoável, mas abaixo do potencial"
+        else:
+            roas_qualidade = "abaixo do esperado"
+        roas_avaliacao = f"com performance {roas_qualidade}"
+    else:
+        roas_avaliacao = ""
+
+    abertura = (
+        f"{nome_mes}/{ano} encerrou com ROAS de {roas_str} {roas_avaliacao}. "
+        f"O mês acumulou {_fmt_brl(receita)} em receita Meta Ads sobre "
+        f"{_fmt_brl(invest)} de investimento ({_fmt_brl(invest_imp)} com imposto), "
+        f"em {n_dias} dias com dados disponíveis e {compras} transações registradas."
+    )
+
+    comportamento_partes = []
+    if fases and fases.get("fase1") and fases.get("fase2"):
+        f1 = fases["fase1"]
+        f2 = fases["fase2"]
+        if f1["invest_medio"] and f2["invest_medio"]:
+            var_invest = (f2["invest_medio"] - f1["invest_medio"]) / f1["invest_medio"] * 100
+            if abs(var_invest) >= 15:
+                dir_invest = "escalou" if var_invest > 0 else "recuou"
+                comportamento_partes.append(
+                    f"O mês apresentou mudança de patamar de investimento: "
+                    f"na primeira metade ({f1['n_dias']} dias) o gasto médio foi de "
+                    f"{_fmt_brl(f1['invest_medio'])}/dia, enquanto na segunda metade "
+                    f"({f2['n_dias']} dias) {dir_invest} para "
+                    f"{_fmt_brl(f2['invest_medio'])}/dia ({abs(var_invest):.0f}% de variação)."
+                )
+            else:
+                comportamento_partes.append(
+                    f"O investimento se manteve relativamente estável ao longo do mês: "
+                    f"{_fmt_brl(f1['invest_medio'])}/dia na primeira metade e "
+                    f"{_fmt_brl(f2['invest_medio'])}/dia na segunda metade."
+                )
+        if f1["roas_medio"] and f2["roas_medio"]:
+            var_roas = (f2["roas_medio"] - f1["roas_medio"]) / f1["roas_medio"] * 100
+            dir_roas = "melhorou" if var_roas > 0 else "caiu"
+            comportamento_partes.append(
+                f"O ROAS médio {dir_roas} entre as fases: "
+                f"{f1['roas_medio']:.2f}x \u2192 {f2['roas_medio']:.2f}x."
+            )
+
+    if fases.get("pico_roas") and fases.get("vale_roas"):
+        pico = fases["pico_roas"]
+        vale = fases["vale_roas"]
+        try:
+            pico_d = date.fromisoformat(str(pico["data"])).strftime("%d/%m")
+            vale_d = date.fromisoformat(str(vale["data"])).strftime("%d/%m")
+        except Exception:
+            pico_d = str(pico["data"])
+            vale_d = str(vale["data"])
+        comportamento_partes.append(
+            f"Melhor dia: {pico_d} com ROAS {pico['valor']:.2f}x. "
+            f"Pior dia: {vale_d} com ROAS {vale['valor']:.2f}x."
+        )
+
+    comportamento = (
+        " ".join(comportamento_partes)
+        if comportamento_partes
+        else "Análise de comportamento diário indisponível."
+    )
+
+    sensibilidade_parts = []
+    if fases.get("roas_baixo_invest") is not None and fases.get("roas_alto_invest") is not None:
+        threshold = fases["threshold"]
+        rb = fases["roas_baixo_invest"]
+        ra = fases["roas_alto_invest"]
+        nb = fases.get("n_dias_baixo", 0)
+        na = fases.get("n_dias_alto", 0)
+        if rb and ra:
+            if ra > rb:
+                sensibilidade_parts.append(
+                    f"Dias com investimento abaixo de {_fmt_brl(threshold)}/dia "
+                    f"({nb} dias): ROAS médio {rb:.2f}x. "
+                    f"Dias com investimento acima de {_fmt_brl(threshold)}/dia "
+                    f"({na} dias): ROAS médio {ra:.2f}x. "
+                    f"O canal responde positivamente ao aumento de budget."
+                )
+            else:
+                sensibilidade_parts.append(
+                    f"Dias com investimento abaixo de {_fmt_brl(threshold)}/dia "
+                    f"({nb} dias): ROAS médio {rb:.2f}x. "
+                    f"Dias com investimento acima de {_fmt_brl(threshold)}/dia "
+                    f"({na} dias): ROAS médio {ra:.2f}x. "
+                    f"A eficiência tende a ser maior em dias de menor escala "
+                    f"\u2014 atenção ao ponto de saturação."
+                )
+        if fases.get("faixa_eficiente"):
+            ef = fases["faixa_eficiente"]
+            sensibilidade_parts.append(
+                f"Faixa de maior eficiência (ROAS > 4.0x): "
+                f"{_fmt_brl(ef['invest_min'])} a {_fmt_brl(ef['invest_max'])}/dia."
+            )
+
+    sensibilidade = (
+        " ".join(sensibilidade_parts)
+        if sensibilidade_parts
+        else "Análise de sensibilidade indisponível com os dados atuais."
+    )
+    return abertura, comportamento, sensibilidade
+
+
+def _blocos_visao_mensal_narrativa(
+    resumo: dict,
+    dados_diarios: list,
+    nome_mes: str,
+    ano: int,
+) -> list[dict]:
+    """
+    Seção narrativa estratégica do relatório mensal (Visão Mensal — RESUMO).
+    Inserida após Análise da Última Semana e antes da tabela dia-a-dia.
+    """
+    abertura, comportamento, sensibilidade = _gerar_texto_narrativo_mensal(
+        resumo, dados_diarios, nome_mes, ano
+    )
+
+    ticket = resumo.get("ticket_medio")
+    ticket_str = _fmt_brl(ticket) if ticket else "—"
+    if ticket:
+        if ticket >= 500:
+            ticket_analise = "produto de ticket elevado — foco em qualificação do tráfego é essencial."
+        elif ticket >= 200:
+            ticket_analise = "ticket médio saudável para e-commerce de moda/lifestyle."
+        else:
+            ticket_analise = "ticket médio baixo — estratégias de upsell e bundle podem elevar a rentabilidade."
+    else:
+        ticket_analise = "análise indisponível."
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "📊 Visão Mensal"}}]}},
+        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "RESUMO"}}]}},
+        {"object": "block", "type": "paragraph",
+         "paragraph": {"rich_text": [{"text": {"content": abertura}}]}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "O que sustentou a eficiência"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"Ticket médio: {ticket_str} — {ticket_analise}"
+         }}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            "Taxa de descontos: — (fonte: Shopify)"
+         }}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            "Frete cobrado: — (fonte: Shopify)"
+         }}]}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Comportamento ao longo do mês"}}]}},
+        {"object": "block", "type": "paragraph",
+         "paragraph": {"rich_text": [{"text": {"content": comportamento}}]}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Criativos"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Análise qualitativa de criativos a ser preenchida pela equipe Guará."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
+        },
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Pontos de atenção"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            "CAC: — (fonte: Shopify/CRM)"
+         }}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content":
+            f"Sensibilidade ao investimento: {sensibilidade}"
+         }}]}},
         {"object": "block", "type": "divider", "divider": {}},
     ]
 
@@ -1611,8 +1922,15 @@ def gerar_relatorio_semanal(
         # 1. Análise da última semana
         blocos += _blocos_analise_ultima_semana(data_inicio, data_fim, db_path)
 
-        # 2. Visão mensal dia a dia
-        blocos += _blocos_visao_mensal_diaria(data_inicio, data_fim, db_path)
+        # 1b. Buscar dados diários — compartilhado pela narrativa e pela tabela
+        _dados_diarios_mes = _buscar_dados_diarios(data_inicio, data_fim, db_path)
+        _nome_mes_pt = _MESES_PT[data_inicio.month]
+
+        # 2a. Visão Mensal — narrativa estratégica (RESUMO, fases, correlação invest×ROAS)
+        blocos += _blocos_visao_mensal_narrativa(resumo, _dados_diarios_mes, _nome_mes_pt, data_inicio.year)
+
+        # 2b. Visão mensal dia a dia (tabela — reutiliza dados já buscados)
+        blocos += _blocos_visao_mensal_diaria(data_inicio, data_fim, db_path, dados_diarios=_dados_diarios_mes)
 
         # 3. Alocação budget canais
         blocos += _blocos_alocacao_canais(resumo)
