@@ -1570,48 +1570,570 @@ def _blocos_placeholder(
     return blocos
 
 
-def _blocos_metas_mes(resumo: dict) -> list[dict]:
-    """
-    Seção 13 — Onde Estamos — Metas do Mês.
-    Tabela: Métrica | Realizado | Meta | Variação.
-    Meta e Variação como placeholder até integração de metas.
-    """
-    r = resumo
-    taxa_conv = round(
-        r["total_compras"] / r["total_cliques"] * 100, 2
-    ) if r.get("total_cliques") and r["total_compras"] else None
 
-    metricas = [
-        ("Receita mensal",      _fmt_brl(r.get("total_receita"))),
-        ("ROAS",                _fmt_x(r.get("roas"))),
-        ("Ticket médio",        _fmt_brl(r.get("ticket_medio"))),
-        ("Taxa de conversão",   _fmt_pct(taxa_conv)),
-        ("Compras/mês",         str(r.get("total_compras", 0))),
-    ]
+# ── Dados históricos hardcoded (Jun/26) ──────────────────────────────────────
 
-    header = ["Métrica", "Realizado", "Meta", "Variação"]
-    table_rows = [
-        {"type": "table_row", "table_row": {"cells": [
-            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
-        ]}}
+_DADOS_HISTORICO = {
+    "Abr/26": {
+        "receita_meta": 1343195, "compras_meta": 4474, "ticket_meta": 290,
+        "roas_meta": 3.12, "invest_meta": 429901,
+        "receita_google": 114260, "compras_google": 257, "ticket_google": 444, "roas_google": 6.35,
+        "invest_google": 17979, "frete": 56949, "taxa_desconto": 9.02,
+        "novos_clientes": 4211, "cac": 95.29,
+    },
+    "Mai/26": {
+        "receita_meta": 1038126, "compras_meta": 3530, "ticket_meta": 283,
+        "roas_meta": 3.06, "invest_meta": 339198,
+        "receita_google": 111990, "compras_google": 268, "ticket_google": 417, "roas_google": 4.33,
+        "invest_google": 25852, "frete": 45332, "taxa_desconto": 9.28,
+        "novos_clientes": 3050, "cac": 119.68,
+    },
+    "Jun/26": {
+        "receita_meta": 850380, "compras_meta": 2629, "ticket_meta": 323,
+        "roas_meta": 3.48, "invest_meta": 244259,
+        "receita_google": 87640, "compras_google": 211, "ticket_google": 415, "roas_google": 7.10,
+        "invest_google": 12329, "frete": 30847, "taxa_desconto": 5.75,
+        "novos_clientes": 2007, "cac": 127.74,
+    },
+}
+
+_META_Q3 = {
+    "receita_meta": 1000000, "roas_meta": 4.0, "ticket_meta": 350,
+    "taxa_conversao": 6.5, "compras_meta": 2857, "invest_meta": 250000,
+}
+
+_RECOMPRAS_HISTORICO = [
+    ("2024/03", "14,29%", 14), ("2024/04", "21,62%", 8), ("2024/05", "18,52%", 15),
+    ("2024/06", "10,68%", 11), ("2024/07", "8,46%", 11), ("2024/08", "6,52%", 18),
+    ("2024/09", "5,91%", 24), ("2024/10", "12,02%", 41), ("2024/11", "18,20%", 93),
+    ("2024/12", "16,81%", 57), ("2025/01", "11,25%", 97), ("2025/02", "11,45%", 94),
+    ("2025/03", "25,07%", 175), ("2025/04", "21,32%", 94), ("2025/05", "25,00%", 165),
+    ("2025/06", "19,06%", 190), ("2025/07", "15,48%", 178), ("2025/08", "17,69%", 328),
+    ("2025/09", "23,57%", 404), ("2025/10", "19,59%", 473), ("2025/11", "38,65%", 853),
+    ("2025/12", "20,06%", 459), ("2026/01", "21,43%", 555), ("2026/02", "36,17%", 544),
+    ("2026/03", "31,78%", 773), ("2026/04", "11,98%", 585), ("2026/05", "22,81%", 882),
+    ("2026/06", "32,66%", 941),
+]
+
+_RECOMPRAS_ESTADOS = [
+    ("São Paulo", 11), ("Minas Gerais", 9), ("Rio de Janeiro", 8),
+    ("Paraná", 7), ("Rio Grande do Sul", 6), ("Santa Catarina", 5),
+    ("Bahia", 4), ("Goiás", 3), ("Pernambuco", 3), ("Ceará", 2),
+    ("Distrito Federal", 2), ("Espírito Santo", 2), ("Mato Grosso", 2),
+    ("Maranhão", 1), ("Pará", 1), ("Amazonas", 1), ("Tocantins", 1),
+    ("Alagoas", 1), ("Sergipe", 1), ("Rondônia", 1), ("Amapá", 1),
+    ("Acre", 1), ("Piauí", 1), ("Paraíba", 1), ("Rio Grande do Norte", 1),
+    ("Mato Grosso do Sul", 1),
+]
+
+_MESES_PT_ABR = {
+    1: "jan.", 2: "fev.", 3: "mar.", 4: "abr.",
+    5: "mai.", 6: "jun.", 7: "jul.", 8: "ago.",
+    9: "set.", 10: "out.", 11: "nov.", 12: "dez.",
+}
+
+
+def _fmt_data_pt(data_str: str) -> str:
+    """Formata data ISO como 'd de mes_pt de ano' (ex: '1 de jun. de 2026')."""
+    try:
+        d = date.fromisoformat(str(data_str))
+        return f"{d.day} de {_MESES_PT_ABR[d.month]} de {d.year}"
+    except Exception:
+        return str(data_str)
+
+
+def _mk_table_notion(headers: list, data_rows: list) -> dict:
+    """Helper: monta bloco Notion table (object block) com header + linhas de dados."""
+    n = len(headers)
+    rows = [
+        {
+            "object": "block", "type": "table_row",
+            "table_row": {"cells": [
+                [{"type": "text", "text": {"content": h}, "annotations": {"bold": True}}]
+                for h in headers
+            ]}
+        }
     ]
-    for nome, realizado in metricas:
-        table_rows.append({"type": "table_row", "table_row": {"cells": [
-            [{"text": {"content": nome}}],
-            [{"text": {"content": realizado}}],
-            [{"text": {"content": "—"}}],
-            [{"text": {"content": "—"}}],
-        ]}})
+    for dr in data_rows:
+        rows.append({
+            "object": "block", "type": "table_row",
+            "table_row": {"cells": [
+                [{"type": "text", "text": {"content": str(v)}}]
+                for v in dr
+            ]}
+        })
+    # Garantir ao menos 1 linha de dados além do header (regra Notion)
+    if not data_rows:
+        rows.append({
+            "object": "block", "type": "table_row",
+            "table_row": {"cells": [[{"type": "text", "text": {"content": "—"}}] for _ in headers]}
+        })
+    return {
+        "object": "block", "type": "table",
+        "table": {
+            "table_width": n,
+            "has_column_header": True,
+            "has_row_header": False,
+            "children": rows,
+        }
+    }
+
+
+def _blocos_rentabilidade_aquisicao(
+    data_inicio: date,
+    data_fim: date,
+    db_path: Path = DB_PATH,
+) -> list[dict]:
+    """
+    Seção 2c — Rentabilidade de Aquisição Mensal.
+    3 sub-seções: Geral, Meta Ads, Google Ads.
+    """
+    # Query diária do SQLite
+    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            data_inicio,
+            SUM(investimento)*1.1215                                              AS gasto_imp,
+            SUM(COALESCE(valor_compras, 0))                                       AS receita,
+            SUM(investimento)*1.1215 / NULLIF(SUM(COALESCE(compras,0)),0)         AS cpa,
+            SUM(COALESCE(compras, 0))                                              AS compras,
+            SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento)*1.1215,0)  AS roas_imp
+        FROM campanhas
+        WHERE data_inicio >= ? AND data_fim <= ?
+        GROUP BY data_inicio
+        ORDER BY data_inicio
+    """, (data_inicio.isoformat(), data_fim.isoformat()))
+    rows_db = [dict(r) for r in cur.fetchall()]
+    conn.close()
+
+    nome_mes  = _MESES_PT[data_inicio.month]
+    ano       = data_inicio.year
+    secao_tit = f"💰 Rentabilidade de Aquisição Mensal — {nome_mes}/{ano}"
+
+    # ── Tabela 1: Rentabilidade Geral ─────────────────────────────────────
+    headers_geral = ["Data", "Gasto", "Custo por Compra", "CPA Meta (plataforma)"]
+    rows_geral = []
+    for r in rows_db:
+        gasto = float(r["gasto_imp"] or 0)
+        cpa   = r["cpa"]
+        rows_geral.append([
+            _fmt_data_pt(r["data_inicio"]),
+            _fmt_brl(gasto) if gasto else "—",
+            _fmt_brl(float(cpa)) if cpa else "—",
+            "—",  # CPA Meta plataforma (não disponível por dia nessa query)
+        ])
+
+    # ── Tabela 2: Meta Ads ────────────────────────────────────────────────
+    headers_meta = ["Data", "Gasto c/ Imposto", "Receita Meta", "ROAS Meta"]
+    rows_meta = []
+    for r in rows_db:
+        gasto   = float(r["gasto_imp"] or 0)
+        receita = float(r["receita"] or 0)
+        roas    = r["roas_imp"]
+        rows_meta.append([
+            _fmt_data_pt(r["data_inicio"]),
+            _fmt_brl(gasto) if gasto else "—",
+            _fmt_brl(receita) if receita else "—",
+            _fmt_x(float(roas)) if roas else "—",
+        ])
+
+    # ── Tabela 3: Google Ads (placeholder, 30 linhas) ─────────────────────
+    headers_google = ["Data", "Gasto c/ Imposto", "Receita Google", "ROAS Google"]
+    rows_google = []
+    # Gera datas do período para o placeholder Google
+    dia_atual = data_inicio
+    while dia_atual <= data_fim:
+        rows_google.append([_fmt_data_pt(dia_atual.isoformat()), "—", "—", "—"])
+        dia_atual += timedelta(days=1)
+
+    # Garantir ao menos 1 linha
+    if not rows_geral:
+        rows_geral = [["—", "—", "—", "—"]]
+    if not rows_meta:
+        rows_meta = [["—", "—", "—", "—"]]
+    if not rows_google:
+        rows_google = [["—", "—", "—", "—"]]
 
     return [
         {"object": "block", "type": "heading_2",
-         "heading_2": {"rich_text": [{"text": {"content": "🎯 Onde Estamos"}}]}},
+         "heading_2": {"rich_text": [{"text": {"content": secao_tit}}]}},
+        {"object": "block", "type": "divider", "divider": {}},
+        # --- Geral ---
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Geral"}}]}},
+        _mk_table_notion(headers_geral, rows_geral),
+        {"object": "block", "type": "divider", "divider": {}},
+        # --- Meta Ads ---
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Meta Ads"}}]}},
+        _mk_table_notion(headers_meta, rows_meta),
+        {"object": "block", "type": "divider", "divider": {}},
+        # --- Google Ads ---
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Google Ads"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Dados Google Ads pendentes de integração."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
+        },
+        _mk_table_notion(headers_google, rows_google),
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+def _blocos_pedidos_sku() -> list[dict]:
+    """
+    Seção — Pedidos por SKU (hardcoded, ordem de popularidade histórica).
+    """
+    skus = [
+        "Kit Completo Source of",
+        "Duo - Água Micelar Demaquilante 200 ml",
+        "Trio - Hidratação Corporal",
+        "Duo - Hidratante Corporal 300 ml",
+        "Rotina Completa - 1 Hidratante Corporal + 1 Gel Creme Facial + 1 Água Micelar",
+        "Kit Travel Size Source of",
+        "Duo - 1 Hidratante Corporal e 1 Gel Creme Facial",
+        "Água Micelar Demaquilante TRAVEL SIZE",
+        "Sacola de presente",
+        "Duo - 2 Gel Creme Facial 50g cada",
+        "Água Micelar Demaquilante 200ml",
+        "Duo - 1 Água Micelar 200 ml + 1 Hidratante Corporal 300 ml",
+        "Duo - Facial 1 Gel Creme Facial + 1 Água Micelar",
+        "Hidratante Corporal + Travel Size",
+        "Hidratante Corporal Travel Size",
+        "Hidratante Corporal 300 ml",
+        "Trio - 2 Gel Creme Facial 50g cada + 1 Água Micelar 200ml",
+        "Gel Creme Facial 50g",
+        "Trio - 3 Águas Micelar Demaquilante 200 ml cada",
+    ]
+    rows = [[s] for s in skus]
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "📦 Pedidos por SKU"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Volumes de pedidos pendentes de integração Shopify. SKUs listados por ordem de popularidade histórica."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
+        },
+        _mk_table_notion(["SKU"], rows),
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+def _blocos_pedidos_estado() -> list[dict]:
+    """
+    Seção — Pedidos por Estado (hardcoded, ordem de presença histórica).
+    """
+    estados = [
+        "São Paulo", "Paraíba", "Distrito Federal", "Goiás", "Sergipe",
+        "Tocantins", "Alagoas", "Acre", "Piauí", "Rondônia", "Amapá",
+        "Rio Grande do Sul", "Mato Grosso", "Bahia", "Espírito Santo",
+        "Pernambuco", "Rio de Janeiro", "Minas Gerais", "Maranhão",
+        "Paraná", "Mato Grosso do Sul", "Rio Grande do Norte", "Pará",
+        "Amazonas", "Santa Catarina", "Ceará",
+    ]
+    rows = [[e] for e in estados]
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🗺️ Pedidos por Estado"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Volumes de pedidos por estado pendentes de integração Shopify. Estados listados por presença histórica."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
+        },
+        _mk_table_notion(["Estado"], rows),
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+def _blocos_recompradoras() -> list[dict]:
+    """
+    Seção — Base de Recompradoras (dados hardcoded).
+    """
+    # Tabela histórico
+    headers_hist = ["Mês", "Taxa de Recompra", "Volume de Recompras"]
+    rows_hist = [[m, t, str(v)] for m, t, v in _RECOMPRAS_HISTORICO]
+
+    skus_entrada = [
+        "Duo - Hidratante Corporal 300 ml",
+        "Trio - 2 Gel Creme Facial 50g cada + 1 Água Micelar 200ml",
+        "Sérum Facial Noturno 30ml",
+        "Rotina Completa - 1 Hidratante Corporal + 1 Gel Creme Facial + 1 Água Micelar",
+        "Água Micelar Demaquilante 200ml",
+        "Água Micelar Demaquilante TRAVEL SIZE",
+        "Kit Travel Size Source of",
+        "Gel Creme Facial 50g",
+        "Hidratante Corporal Travel Size",
+        "Hidratante Corporal + Travel Size",
+        "Duo - 2 Gel Creme Facial 50g cada",
+        "Kit Completo Source of",
+        "Hidratante Corporal 300 ml",
+        "Trio - Hidratação Corporal",
+        "Duo - Facial 1 Gel Creme Facial + 1 Água Micelar",
+        "Duo - 1 Água Micelar 200 ml + 1 Hidratante Corporal 300 ml",
+        "Sacola de presente",
+        "Duo - 1 Hidratante Corporal e 1 Gel Creme Facial",
+        "LEVE 4 PAGUE 3 - Hidratação Corporal",
+        "Embalagem de presente",
+    ]
+
+    # Tabela estados
+    headers_estados = ["Estado", "Número de Recompras"]
+    rows_estados = [[e, str(n)] for e, n in _RECOMPRAS_ESTADOS]
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "👥 Base de Recompradoras"}}]}},
+        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Histórico de Recompra"}}]}},
+        _mk_table_notion(headers_hist, rows_hist),
+        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "SKU de Entrada"}}]}},
+    ]
+    for sku in skus_entrada:
+        blocos.append({
+            "object": "block", "type": "bulleted_list_item",
+            "bulleted_list_item": {"rich_text": [{"text": {"content": sku}}]}
+        })
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    blocos.append({
+        "object": "block", "type": "heading_3",
+        "heading_3": {"rich_text": [{"text": {"content": "Recompras por Estado"}}]}
+    })
+    blocos.append(_mk_table_notion(headers_estados, rows_estados))
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    return blocos
+
+
+def _blocos_planejamento_q3(resumo: dict) -> list[dict]:
+    """
+    Seção — Planejamento Q3 2026 — Meta Ads (análise estratégica hardcoded).
+    """
+    def _p(txt):
+        return {
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": [{"text": {"content": txt}}]}
+        }
+
+    # Tabela resumo cenário-meta (5 colunas)
+    headers_cenario = ["Métrica", "Jun/26 (atual)", "Meta Q3", "Variação"]
+    rows_cenario = [
+        ["Receita mensal", "R$849k", "R$1.000k", "+18%"],
+        ["ROAS", "3,63x", "4,00x", "+10%"],
+        ["Investimento c/ imposto", "R$234k", "R$250k", "+7%"],
+        ["Ticket médio", "R$323", "R$350", "+8%"],
+        ["Taxa de conversão", "5,79%", "6,50%", "+12%"],
+        ["CPC (máximo tolerável)", "R$5,16", "R$5,69", "—"],
+        ["Compras/mês", "2.624", "~2.857", "+9%"],
+    ]
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🎯 Planejamento Q3 2026 — Meta Ads"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "Meta: R$1M de receita mensal com ROAS 4,0"}}],
+                "icon": {"type": "emoji", "emoji": "🎯"},
+                "color": "blue_background",
+            }
+        },
+        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Onde Estamos"}}]}},
+        _p("Junho fechou com R$849k de receita e ROAS 3.63, o melhor mês em eficiência desde março. O ticket médio subiu de R$288 (abril) para R$323 (junho), um ganho de 12% que sustentou o ROAS mesmo com CPC mais caro. O investimento mensal foi de R$234k (com imposto). Para atingir R$1M com ROAS 4, o investimento necessário é de R$250k/mês, próximo do que já foi operado em junho. O desafio não é de volume, é de eficiência: precisamos ganhar 0.37 pontos de ROAS."),
+        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "O que os dados mostram"}}]}},
+        _p("A fórmula do ROAS da conta é: (Taxa de Conversão × Ticket Médio) / CPC. Junho: (5.79% × R$323) / R$5.16 = 3.63. Para ROAS 4.0, precisamos que esse cálculo chegue em 4."),
+        _p("Analisando os 90 dias de histórico, identificamos 13 dias que já entregaram ROAS ≥ 4.0. O perfil médio desses dias:"),
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "Taxa de conversão: 7.13% (vs 5.79% da média de junho)"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "Ticket médio: R$325 (igual à média — não foi o ticket que puxou)"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "CPC: R$5.06 (levemente abaixo da média)"}}]}},
+        _p("A taxa de conversão é a variável que mais impacta o ROAS. Nos melhores dias, a conversão estava 23% acima da média. Isso significa que a principal alavanca está no site e na oferta, não no tráfego."),
+        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "3 Alavancas"}}]}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "1. Ticket médio → de R$323 para R$350"}}]}},
+        _p("O ticket já subiu 12% entre abril e junho. Para chegar em R$350, a estratégia é priorizar kits e bundles como oferta principal nos anúncios e na loja, ajustar frete grátis condicionado a valor mínimo e reforçar upsell no checkout."),
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "Estratégia: Kit Inverno — '3 hidratantes para o inverno todo'. O inverno é o momento certo para essa oferta. Ângulos de teste: 'Sua pele protegida até setembro', 'compre 2 e o 3º com 50% de desconto', 'O kit que substitui sua rotina de inverno'."}}],
+                "icon": {"type": "emoji", "emoji": "💡"},
+                "color": "green_background",
+            }
+        },
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "2. Taxa de conversão → de 5.79% para 6.5%"}}]}},
+        _p("Essa é a alavanca mais importante. As duas melhores semanas da conta (W23 e W24, com ROAS 3.95 e 4.13) tiveram CVR de 6.06% e 6.33%, próximas da meta. Foco em otimização de landing page, velocidade, provas sociais e redução de atrito no checkout."),
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "3. CPC → manter abaixo de R$5.70"}}]}},
+        _p("O CPC vem subindo (R$4.47 em abril → R$5.16 em junho). Manter ritmo de criativos novos para manter CTR saudável e evitar fadiga de audiência."),
+        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Distribuição Inteligente do Investimento"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "Por dia da semana: sábado e domingo têm ROAS 17% maior que quarta e quinta. CPC fim de semana: R$4.38 vs R$5.17 meio da semana."}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "Por semana do mês: 1ª semana (dias 1-7) tem ROAS 3.49 | 4ª semana (dias 22-28) tem ROAS 2.95. Accelerar no início, recuar na 4ª semana."}}]}},
+        {"object": "block", "type": "divider", "divider": {}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Resumo do Cenário-Meta"}}]}},
+        _mk_table_notion(headers_cenario, rows_cenario),
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+    return blocos
+
+def _blocos_metas_mes(resumo: dict) -> list[dict]:
+    """
+    Seção — Onde Estamos — Metas do Mês.
+    Tabela expandida: Métrica | Abr/26 | Mai/26 | Jun/26 | Meta Q3 | Var Jun->Meta
+    Com dados históricos hardcoded.
+    """
+    H = _DADOS_HISTORICO
+    Q = _META_Q3
+
+    def _var(atual, meta) -> str:
+        if atual is None or meta is None or meta == 0:
+            return "—"
+        v = (meta - atual) / abs(atual) * 100
+        sinal = "+" if v > 0 else ""
+        return f"{sinal}{v:.1f}%"
+
+    def _brl(v):
+        if v is None: return "—"
+        return "R$" + f"{int(v):,}".replace(",", ".")
+
+    def _x(v):
+        if v is None: return "—"
+        return f"{v:.2f}x".replace(".", ",")
+
+    def _pct(v):
+        if v is None: return "—"
+        return f"{v:.2f}%".replace(".", ",")
+
+    header = ["Métrica", "Abr/26", "Mai/26", "Jun/26", "Meta Q3", "Var Jun→Meta"]
+    n = len(header)
+
+    linhas = [
+        ["Invest. Meta",
+         _brl(H["Abr/26"]["invest_meta"]),
+         _brl(H["Mai/26"]["invest_meta"]),
+         _brl(H["Jun/26"]["invest_meta"]),
+         _brl(Q["invest_meta"]),
+         _var(H["Jun/26"]["invest_meta"], Q["invest_meta"])],
+
+        ["Receita Meta",
+         _brl(H["Abr/26"]["receita_meta"]),
+         _brl(H["Mai/26"]["receita_meta"]),
+         _brl(H["Jun/26"]["receita_meta"]),
+         _brl(Q["receita_meta"]),
+         _var(H["Jun/26"]["receita_meta"], Q["receita_meta"])],
+
+        ["Compras Meta",
+         f"{H['Abr/26']['compras_meta']:,}".replace(",", "."),
+         f"{H['Mai/26']['compras_meta']:,}".replace(",", "."),
+         f"{H['Jun/26']['compras_meta']:,}".replace(",", "."),
+         f"{Q['compras_meta']:,}".replace(",", "."),
+         _var(H["Jun/26"]["compras_meta"], Q["compras_meta"])],
+
+        ["Ticket Médio Meta",
+         _brl(H["Abr/26"]["ticket_meta"]),
+         _brl(H["Mai/26"]["ticket_meta"]),
+         _brl(H["Jun/26"]["ticket_meta"]),
+         _brl(Q["ticket_meta"]),
+         _var(H["Jun/26"]["ticket_meta"], Q["ticket_meta"])],
+
+        ["ROAS Meta",
+         _x(H["Abr/26"]["roas_meta"]),
+         _x(H["Mai/26"]["roas_meta"]),
+         _x(H["Jun/26"]["roas_meta"]),
+         _x(Q["roas_meta"]),
+         _var(H["Jun/26"]["roas_meta"], Q["roas_meta"])],
+
+        ["Invest. Google",
+         _brl(H["Abr/26"]["invest_google"]),
+         _brl(H["Mai/26"]["invest_google"]),
+         _brl(H["Jun/26"]["invest_google"]),
+         "—", "—"],
+
+        ["Receita Google",
+         _brl(H["Abr/26"]["receita_google"]),
+         _brl(H["Mai/26"]["receita_google"]),
+         _brl(H["Jun/26"]["receita_google"]),
+         "—", "—"],
+
+        ["ROAS Google",
+         _x(H["Abr/26"]["roas_google"]),
+         _x(H["Mai/26"]["roas_google"]),
+         _x(H["Jun/26"]["roas_google"]),
+         "—", "—"],
+
+        ["Frete Cobrado",
+         _brl(H["Abr/26"]["frete"]),
+         _brl(H["Mai/26"]["frete"]),
+         _brl(H["Jun/26"]["frete"]),
+         "—", "—"],
+
+        ["Taxa de Descontos",
+         _pct(H["Abr/26"]["taxa_desconto"]),
+         _pct(H["Mai/26"]["taxa_desconto"]),
+         _pct(H["Jun/26"]["taxa_desconto"]),
+         "—", "—"],
+
+        ["Novos Clientes",
+         f"{H['Abr/26']['novos_clientes']:,}".replace(",", "."),
+         f"{H['Mai/26']['novos_clientes']:,}".replace(",", "."),
+         f"{H['Jun/26']['novos_clientes']:,}".replace(",", "."),
+         "—", "—"],
+
+        ["CAC",
+         "R$" + f"{H['Abr/26']['cac']:.2f}".replace(".", ","),
+         "R$" + f"{H['Mai/26']['cac']:.2f}".replace(".", ","),
+         "R$" + f"{H['Jun/26']['cac']:.2f}".replace(".", ","),
+         "—", "—"],
+    ]
+
+    header_row = {
+        "type": "table_row",
+        "table_row": {"cells": [
+            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+        ]}
+    }
+    data_rows = []
+    for linha in linhas:
+        data_rows.append({
+            "type": "table_row",
+            "table_row": {"cells": [[{"text": {"content": c}}] for c in linha]}
+        })
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🎯 Onde Estamos — Metas"}}]}},
         {
             "object": "block", "type": "table", "table": {
-                "table_width": len(header),
+                "table_width": n,
                 "has_column_header": True,
                 "has_row_header": False,
-                "children": table_rows,
+                "children": [header_row] + data_rows,
             }
         },
         {"object": "block", "type": "divider", "divider": {}},
@@ -1917,7 +2439,7 @@ def gerar_relatorio_semanal(
     }
 
     if tipo == "mensal":
-        # ── Estrutura completa do relatório mensal (17 seções) ──────────────
+        # ── Estrutura completa do relatório mensal ───────────────────────────
         blocos = [callout_gerado]
 
         # 1. Análise da última semana
@@ -1933,36 +2455,31 @@ def gerar_relatorio_semanal(
         # 2b. Visão mensal dia a dia (tabela — reutiliza dados já buscados)
         blocos += _blocos_visao_mensal_diaria(data_inicio, data_fim, db_path, dados_diarios=_dados_diarios_mes)
 
+        # 2c. Rentabilidade de Aquisição Mensal (nova seção)
+        blocos += _blocos_rentabilidade_aquisicao(data_inicio, data_fim, db_path)
+
         # 3. Alocação budget canais
         blocos += _blocos_alocacao_canais(resumo)
 
         # 4. Alocação budget por anúncio
         blocos += _blocos_alocacao_por_anuncio(data_inicio, data_fim, db_path)
 
-        # 5. Pedidos por SKU (placeholder)
-        blocos += _blocos_placeholder(
-            "Pedidos por SKU", "📦",
-            "⏳ Integração Shopify pendente — dados serão preenchidos automaticamente quando conectado.",
-            colunas=["SKU", "Pedidos", "Receita"],
-        )
+        # 5. Pedidos por SKU (dados reais hardcoded)
+        blocos += _blocos_pedidos_sku()
 
-        # 6. Pedidos por Estado (placeholder)
-        blocos += _blocos_placeholder(
-            "Pedidos por Estado", "🗺️",
-            "⏳ Integração Shopify pendente.",
-            colunas=["Estado", "Pedidos"],
-        )
+        # 6. Pedidos por Estado (dados reais hardcoded)
+        blocos += _blocos_pedidos_estado()
 
         # 7. Recuperação de Carrinho (placeholder)
         blocos += _blocos_placeholder(
             "Recuperação de Carrinho Abandonado", "🔄",
-            "⏳ Dados de recuperação de carrinho pendentes (fonte: Shopify/e-mail marketing).",
+            "⏳ Dados de recuperação de carrinho pendentes.",
         )
 
         # 8. Pedidos Orgânicos Instagram (placeholder)
         blocos += _blocos_placeholder(
             "Pedidos Orgânicos Instagram", "📸",
-            "⏳ Dados de pedidos orgânicos pendentes (fonte: UTM Instagram).",
+            "⏳ Dados de pedidos orgânicos pendentes.",
         )
 
         # 9. Resumo executivo
@@ -1996,26 +2513,25 @@ def gerar_relatorio_semanal(
         # 13. Top campanhas por ROAS
         blocos += _blocos_top_campanhas(campanhas)
 
-        # 14. Onde estamos — Metas do mês
+        # 14. Planejamento Q3 2026 (nova seção)
+        blocos += _blocos_planejamento_q3(resumo)
+
+        # 15. Onde estamos — Metas (expandido com histórico)
         blocos += _blocos_metas_mes(resumo)
 
-        # 15. Base de Recompradoras (placeholder)
-        blocos += _blocos_placeholder(
-            "Base de Recompradoras", "👥",
-            "⏳ Dados de recompra pendentes (fonte: Shopify/CRM).",
-            colunas=["Mês", "Taxa de Recompra", "Volume de Recompras"],
-        )
+        # 16. Base de Recompradoras (dados reais)
+        blocos += _blocos_recompradoras()
 
-        # 16. Planejamento Criativo
+        # 17. Planejamento Criativo
         blocos += _blocos_planejamento_criativo(data_fim)
 
-        # 17. Próximos Passos
+        # 18. Próximos Passos
         blocos += _blocos_proximos_passos()
 
-        # 18. Funil de conversão
+        # 19. Funil de conversão
         blocos += _blocos_funil(resumo)
 
-        # 19. Alertas automáticos
+        # 20. Alertas automáticos
         blocos += _blocos_alertas(alertas)
 
     else:
