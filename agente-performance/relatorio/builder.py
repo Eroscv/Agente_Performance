@@ -779,6 +779,507 @@ def _blocos_funil(resumo: dict) -> list[dict]:
     return blocos
 
 
+# ── Novas funções para relatório mensal ─────────────────────────────────────
+
+
+def _blocos_analise_ultima_semana(
+    data_inicio: date,
+    data_fim: date,
+    db_path: Path = DB_PATH,
+) -> list[dict]:
+    """
+    Seção 1 — Análise da Última Semana.
+    Busca dados das 2 últimas semanas do mês, gera texto narrativo
+    e tabela comparativa semanal.
+    """
+    from calendar import monthrange
+
+    # Semana 2 (última): últimos 7 dias do mês
+    sem2_fim   = data_fim
+    sem2_ini   = data_fim - timedelta(days=6)
+    # Semana 1 (penúltima): 7 dias antes da última semana
+    sem1_fim   = sem2_ini - timedelta(days=1)
+    sem1_ini   = sem1_fim - timedelta(days=6)
+
+    def _buscar_semana(ini: date, fim: date):
+        conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT
+                SUM(investimento)               AS invest,
+                SUM(COALESCE(compras, 0))        AS compras,
+                SUM(COALESCE(valor_compras, 0))  AS receita
+            FROM campanhas
+            WHERE data_inicio >= ? AND data_fim <= ?
+        """, (ini.isoformat(), fim.isoformat()))
+        row = cur.fetchone()
+        conn.close()
+        invest  = float(row["invest"] or 0)
+        compras = int(row["compras"] or 0)
+        receita = float(row["receita"] or 0)
+        roas    = round(receita / invest, 2) if invest > 0 else None
+        ticket  = round(receita / compras, 2) if compras else None
+        invest_imp = spend_com_imposto(invest)
+        return dict(
+            invest=invest, invest_imp=invest_imp,
+            compras=compras, receita=receita,
+            roas=roas, ticket=ticket,
+        )
+
+    s1 = _buscar_semana(sem1_ini, sem1_fim)
+    s2 = _buscar_semana(sem2_ini, sem2_fim)
+
+    # Texto narrativo da última semana
+    def _comp(atual, anterior, nome, fmt_fn):
+        if anterior and anterior != 0:
+            var = (atual - anterior) / abs(anterior) * 100
+            sinal = "acima" if var > 0 else "abaixo"
+            return f"{fmt_fn(atual)} ({abs(var):.1f}% {sinal} da semana anterior)"
+        return fmt_fn(atual)
+
+    narrativa_partes = []
+    narrativa_partes.append(
+        f"Na última semana do mês ({sem2_ini.strftime('%d/%m')}–{sem2_fim.strftime('%d/%m')}), "
+        f"o investimento em Meta Ads foi de {_comp(s2['invest'], s1['invest'], 'investimento', _fmt_brl)}, "
+        f"com ROAS de {_fmt_x(s2['roas'])}"
+    )
+    if s1['roas'] and s2['roas']:
+        var_roas = (s2['roas'] - s1['roas']) / abs(s1['roas']) * 100 if s1['roas'] else 0
+        tend = "acima" if var_roas > 0 else "abaixo"
+        narrativa_partes[-1] += f" ({abs(var_roas):.1f}% {tend} da semana anterior)"
+    narrativa_partes[-1] += "."
+
+    narrativa_partes.append(
+        f"Foram registradas {s2['compras']} transações, "
+        f"com receita de {_comp(s2['receita'], s1['receita'], 'receita', _fmt_brl)}. "
+        f"Ticket médio: {_fmt_brl(s2['ticket'])}."
+    )
+
+    narrativa = " ".join(narrativa_partes)
+
+    # Tabela comparativa
+    header = ["Semana", "Invest. Meta", "Invest.+Imposto", "Transações", "Receita", "ROAS", "Ticket Médio"]
+    table_rows = [
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+        ]}}
+    ]
+
+    for label, ini, fim, s in [
+        (f"Sem. {sem1_ini.strftime('%d/%m')}–{sem1_fim.strftime('%d/%m')}", sem1_ini, sem1_fim, s1),
+        (f"Sem. {sem2_ini.strftime('%d/%m')}–{sem2_fim.strftime('%d/%m')}", sem2_ini, sem2_fim, s2),
+    ]:
+        table_rows.append({"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": label}}],
+            [{"text": {"content": _fmt_brl(s["invest"])}}],
+            [{"text": {"content": _fmt_brl(s["invest_imp"])}}],
+            [{"text": {"content": str(s["compras"]) if s["compras"] else "—"}}],
+            [{"text": {"content": _fmt_brl(s["receita"])}}],
+            [{"text": {"content": _fmt_x(s["roas"])}}],
+            [{"text": {"content": _fmt_brl(s["ticket"])}}],
+        ]}})
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "📝 Análise da Última Semana"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": narrativa}}],
+                "icon": {"type": "emoji", "emoji": "📝"},
+                "color": "blue_background",
+            }
+        },
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Semanal"}}]}},
+        {
+            "object": "block", "type": "table", "table": {
+                "table_width": len(header),
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": table_rows,
+            }
+        },
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+def _blocos_visao_mensal_diaria(
+    data_inicio: date,
+    data_fim: date,
+    db_path: Path = DB_PATH,
+) -> list[dict]:
+    """
+    Seção 2 — Visão Mensal (tabela dia a dia).
+    Agrega campanhas por dia e retorna tabela Notion com uma linha por dia + total.
+    """
+    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            data_inicio                        AS dia,
+            SUM(investimento)                  AS invest,
+            SUM(COALESCE(compras, 0))           AS compras,
+            SUM(COALESCE(valor_compras, 0))     AS receita
+        FROM campanhas
+        WHERE data_inicio >= ? AND data_fim <= ?
+        GROUP BY data_inicio
+        ORDER BY data_inicio
+    """, (data_inicio.isoformat(), data_fim.isoformat()))
+    rows = cur.fetchall()
+    conn.close()
+
+    header = ["Data", "Gasto", "Compras Meta", "Receita Meta", "ROAS Meta", "Ticket Médio Meta"]
+    table_rows = [
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+        ]}}
+    ]
+
+    total_invest = 0.0
+    total_compras = 0
+    total_receita = 0.0
+
+    for row in rows:
+        invest  = float(row["invest"] or 0)
+        compras = int(row["compras"] or 0)
+        receita = float(row["receita"] or 0)
+        roas    = round(receita / invest, 2) if invest > 0 else None
+        ticket  = round(receita / compras, 2) if compras else None
+
+        # Formatar data como dd/mm
+        try:
+            dia_date = date.fromisoformat(row["dia"])
+            dia_str  = dia_date.strftime("%d/%m")
+        except Exception:
+            dia_str = str(row["dia"])
+
+        table_rows.append({"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": dia_str}}],
+            [{"text": {"content": _fmt_brl(invest)}}],
+            [{"text": {"content": str(compras) if compras else "—"}}],
+            [{"text": {"content": _fmt_brl(receita)}}],
+            [{"text": {"content": _fmt_x(roas)}}],
+            [{"text": {"content": _fmt_brl(ticket)}}],
+        ]}})
+
+        total_invest  += invest
+        total_compras += compras
+        total_receita += receita
+
+    # Se não houver dados, pelo menos 1 linha de dados (regra Notion)
+    if not rows:
+        table_rows.append({"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+        ]}})
+
+    # Linha de total
+    roas_total   = round(total_receita / total_invest, 2) if total_invest > 0 else None
+    ticket_total = round(total_receita / total_compras, 2) if total_compras else None
+    table_rows.append({"type": "table_row", "table_row": {"cells": [
+        [{"text": {"content": "TOTAL"}, "annotations": {"bold": True}}],
+        [{"text": {"content": _fmt_brl(total_invest)}, "annotations": {"bold": True}}],
+        [{"text": {"content": str(total_compras) if total_compras else "—"}, "annotations": {"bold": True}}],
+        [{"text": {"content": _fmt_brl(total_receita)}, "annotations": {"bold": True}}],
+        [{"text": {"content": _fmt_x(roas_total)}, "annotations": {"bold": True}}],
+        [{"text": {"content": _fmt_brl(ticket_total)}, "annotations": {"bold": True}}],
+    ]}})
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "📊 Visão Mensal"}}]}},
+        {
+            "object": "block", "type": "table", "table": {
+                "table_width": len(header),
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": table_rows,
+            }
+        },
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+def _blocos_alocacao_canais(resumo: dict) -> list[dict]:
+    """
+    Seção 3 — Alocação Budget por Canal.
+    Meta Ads com valor real + Google Ads como placeholder.
+    """
+    header = ["Canal", "Investimento"]
+    table_rows = [
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+        ]}},
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": "Meta Ads"}}],
+            [{"text": {"content": _fmt_brl(resumo.get("total_invest"))}}],
+        ]}},
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": "Google Ads"}}],
+            [{"text": {"content": "— (integração pendente)"}}],
+        ]}},
+    ]
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "💰 Alocação Budget Canais"}}]}},
+        {
+            "object": "block", "type": "table", "table": {
+                "table_width": len(header),
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": table_rows,
+            }
+        },
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+def _blocos_alocacao_por_anuncio(
+    data_inicio: date,
+    data_fim: date,
+    db_path: Path = DB_PATH,
+) -> list[dict]:
+    """
+    Seção 4 — Alocação Budget por Anúncio (Meta Ads).
+    Agrega ads_diario por ad_name, ordena por investimento DESC.
+    """
+    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            ad_name,
+            SUM(investimento)               AS invest,
+            SUM(COALESCE(compras, 0))        AS compras,
+            SUM(COALESCE(valor_compras, 0))  AS receita,
+            MAX(status_criativo)             AS status
+        FROM ads_diario
+        WHERE data_inicio >= ? AND data_inicio <= ?
+        GROUP BY ad_name
+        HAVING SUM(investimento) > 0
+        ORDER BY SUM(investimento) DESC
+    """, (data_inicio.isoformat(), data_fim.isoformat()))
+    rows = cur.fetchall()
+    conn.close()
+
+    header = ["Anúncio", "Invest.", "Compras", "ROAS", "Status Criativo"]
+    table_rows = [
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+        ]}}
+    ]
+
+    for row in rows:
+        invest  = float(row["invest"] or 0)
+        compras = int(row["compras"] or 0)
+        receita = float(row["receita"] or 0)
+        roas    = round(receita / invest, 2) if invest > 0 else None
+        nome    = (row["ad_name"] or "")[:80]
+        status  = row["status"] or "—"
+
+        table_rows.append({"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": nome}}],
+            [{"text": {"content": _fmt_brl(invest)}}],
+            [{"text": {"content": str(compras) if compras else "—"}}],
+            [{"text": {"content": _fmt_x(roas)}}],
+            [{"text": {"content": status}}],
+        ]}})
+
+    # Garantir ao menos 1 linha de dados além do header (regra Notion)
+    if not rows:
+        table_rows.append({"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+        ]}})
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🎯 Alocação Budget por Anúncio (Meta Ads)"}}]}},
+        {
+            "object": "block", "type": "table", "table": {
+                "table_width": len(header),
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": table_rows,
+            }
+        },
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+def _blocos_placeholder(
+    titulo: str,
+    emoji: str,
+    descricao: str,
+    colunas: list[str] = None,
+) -> list[dict]:
+    """
+    Seção genérica para dados ainda não disponíveis.
+    Retorna heading_2 + callout amarelo + (opcional) tabela vazia com header + 1 linha —.
+    """
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": f"{emoji} {titulo}"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": descricao}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
+        },
+    ]
+
+    if colunas:
+        header_row = {
+            "type": "table_row",
+            "table_row": {"cells": [
+                [{"text": {"content": col}, "annotations": {"bold": True}}]
+                for col in colunas
+            ]}
+        }
+        # Linha vazia obrigatória (Notion exige pelo menos 1 linha de dados)
+        data_row = {
+            "type": "table_row",
+            "table_row": {"cells": [
+                [{"text": {"content": "—"}}] for _ in colunas
+            ]}
+        }
+        blocos.append({
+            "object": "block", "type": "table", "table": {
+                "table_width": len(colunas),
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": [header_row, data_row],
+            }
+        })
+
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    return blocos
+
+
+def _blocos_metas_mes(resumo: dict) -> list[dict]:
+    """
+    Seção 13 — Onde Estamos — Metas do Mês.
+    Tabela: Métrica | Realizado | Meta | Variação.
+    Meta e Variação como placeholder até integração de metas.
+    """
+    r = resumo
+    taxa_conv = round(
+        r["total_compras"] / r["total_cliques"] * 100, 2
+    ) if r.get("total_cliques") and r["total_compras"] else None
+
+    metricas = [
+        ("Receita mensal",      _fmt_brl(r.get("total_receita"))),
+        ("ROAS",                _fmt_x(r.get("roas"))),
+        ("Ticket médio",        _fmt_brl(r.get("ticket_medio"))),
+        ("Taxa de conversão",   _fmt_pct(taxa_conv)),
+        ("Compras/mês",         str(r.get("total_compras", 0))),
+    ]
+
+    header = ["Métrica", "Realizado", "Meta", "Variação"]
+    table_rows = [
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+        ]}}
+    ]
+    for nome, realizado in metricas:
+        table_rows.append({"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": nome}}],
+            [{"text": {"content": realizado}}],
+            [{"text": {"content": "—"}}],
+            [{"text": {"content": "—"}}],
+        ]}})
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🎯 Onde Estamos"}}]}},
+        {
+            "object": "block", "type": "table", "table": {
+                "table_width": len(header),
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": table_rows,
+            }
+        },
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
+def _blocos_planejamento_criativo(data_fim: date) -> list[dict]:
+    """
+    Seção 15 — Planejamento Criativo (próximos 3 meses).
+    Heading + 3 heading_3 com meses em português + callout placeholder em cada um.
+    """
+    meses_futuros = []
+    ano, mes = data_fim.year, data_fim.month
+    for _ in range(3):
+        mes += 1
+        if mes > 12:
+            mes = 1
+            ano += 1
+        meses_futuros.append(f"{_MESES_PT[mes]}/{ano}")
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "📅 Planejamento Criativo"}}]}},
+    ]
+    for mes_label in meses_futuros:
+        blocos.append({
+            "object": "block", "type": "heading_3",
+            "heading_3": {"rich_text": [{"text": {"content": mes_label}}]}
+        })
+        blocos.append({
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Planejamento criativo a ser preenchido pela equipe Guará."}}],
+                "icon": {"type": "emoji", "emoji": "📅"},
+                "color": "yellow_background",
+            }
+        })
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    return blocos
+
+
+def _blocos_proximos_passos() -> list[dict]:
+    """
+    Seção 16 — Próximos Passos.
+    Heading + heading_3 'Guará Marketing' e 'Source.Of' + 3 bullets cada.
+    """
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "✅ Próximos Passos"}}]}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Guará Marketing"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "[ ] A definir"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "[ ] A definir"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "[ ] A definir"}}]}},
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Source.Of"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "[ ] A definir"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "[ ] A definir"}}]}},
+        {"object": "block", "type": "bulleted_list_item",
+         "bulleted_list_item": {"rich_text": [{"text": {"content": "[ ] A definir"}}]}},
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
 # ── Função principal ──────────────────────────────────────────────────────────
 
 
@@ -1002,40 +1503,138 @@ def gerar_relatorio_semanal(
     else:
         titulo = f"📊 {cliente_nome} · Meta Ads · {titulo_periodo}"
 
-    blocos = []
-    blocos += _blocos_resumo(resumo, periodo_str)
-    # Aviso de qualidade de dados (se houver issues)
-    if val_report and (not val_report.ok or val_report.warnings):
-        issues_txt = "\n".join(
-            f"{'❌' if i.severity == 'ERROR' else '⚠️'} {i.check}: {i.message}"
-            for i in val_report.issues
+    # Callout de geração automática
+    callout_gerado = {
+        "object": "block", "type": "callout",
+        "callout": {
+            "rich_text": [{"text": {"content":
+                f"Relatório gerado automaticamente pelo Agente de Performance Guará · {periodo_str}"
+            }}],
+            "icon": {"type": "emoji", "emoji": "⚙️"},
+        }
+    }
+
+    if tipo == "mensal":
+        # ── Estrutura completa do relatório mensal (17 seções) ──────────────
+        blocos = [callout_gerado]
+
+        # 1. Análise da última semana
+        blocos += _blocos_analise_ultima_semana(data_inicio, data_fim, db_path)
+
+        # 2. Visão mensal dia a dia
+        blocos += _blocos_visao_mensal_diaria(data_inicio, data_fim, db_path)
+
+        # 3. Alocação budget canais
+        blocos += _blocos_alocacao_canais(resumo)
+
+        # 4. Alocação budget por anúncio
+        blocos += _blocos_alocacao_por_anuncio(data_inicio, data_fim, db_path)
+
+        # 5. Pedidos por SKU (placeholder)
+        blocos += _blocos_placeholder(
+            "Pedidos por SKU", "📦",
+            "⏳ Integração Shopify pendente — dados serão preenchidos automaticamente quando conectado.",
+            colunas=["SKU", "Pedidos", "Receita"],
         )
-        blocos.append({
-            "object": "block", "type": "callout",
-            "callout": {
-                "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{issues_txt}"}}],
-                "icon": {"type": "emoji", "emoji": "⚠️"},
-                "color": "yellow_background",
-            }
-        })
-    # Comparativo com período anterior (se tiver dados)
-    if resumo_anterior:
-        blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
-    # Tendência: semanal (WoW) ou mensal (MoM)
-    if tipo == "mensal":
+
+        # 6. Pedidos por Estado (placeholder)
+        blocos += _blocos_placeholder(
+            "Pedidos por Estado", "🗺️",
+            "⏳ Integração Shopify pendente.",
+            colunas=["Estado", "Pedidos"],
+        )
+
+        # 7. Recuperação de Carrinho (placeholder)
+        blocos += _blocos_placeholder(
+            "Recuperação de Carrinho Abandonado", "🔄",
+            "⏳ Dados de recuperação de carrinho pendentes (fonte: Shopify/e-mail marketing).",
+        )
+
+        # 8. Pedidos Orgânicos Instagram (placeholder)
+        blocos += _blocos_placeholder(
+            "Pedidos Orgânicos Instagram", "📸",
+            "⏳ Dados de pedidos orgânicos pendentes (fonte: UTM Instagram).",
+        )
+
+        # 9. Resumo executivo
+        blocos += _blocos_resumo(resumo, periodo_str)
+
+        # Aviso de qualidade de dados (se houver issues)
+        if val_report and (not val_report.ok or val_report.warnings):
+            issues_txt = "\n".join(
+                f"{'❌' if i.severity == 'ERROR' else '⚠️'} {i.check}: {i.message}"
+                for i in val_report.issues
+            )
+            blocos.append({
+                "object": "block", "type": "callout",
+                "callout": {
+                    "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{issues_txt}"}}],
+                    "icon": {"type": "emoji", "emoji": "⚠️"},
+                    "color": "yellow_background",
+                }
+            })
+
+        # 10. Comparativo mês anterior
+        if resumo_anterior:
+            blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
+
+        # 11. Tendência mensal (MoM)
         blocos += _blocos_tendencia_mensal(data_inicio, meses=4, db_path=db_path)
+
+        # 12. Desempenho por campanha
+        blocos += _blocos_tabela_campanhas(campanhas)
+
+        # 13. Top campanhas por ROAS
+        blocos += _blocos_top_campanhas(campanhas)
+
+        # 14. Onde estamos — Metas do mês
+        blocos += _blocos_metas_mes(resumo)
+
+        # 15. Base de Recompradoras (placeholder)
+        blocos += _blocos_placeholder(
+            "Base de Recompradoras", "👥",
+            "⏳ Dados de recompra pendentes (fonte: Shopify/CRM).",
+            colunas=["Mês", "Taxa de Recompra", "Volume de Recompras"],
+        )
+
+        # 16. Planejamento Criativo
+        blocos += _blocos_planejamento_criativo(data_fim)
+
+        # 17. Próximos Passos
+        blocos += _blocos_proximos_passos()
+
+        # 18. Funil de conversão
+        blocos += _blocos_funil(resumo)
+
+        # 19. Alertas automáticos
+        blocos += _blocos_alertas(alertas)
+
     else:
+        # ── Estrutura do relatório semanal (mantida igual) ──────────────────
+        blocos = []
+        blocos += _blocos_resumo(resumo, periodo_str)
+        # Aviso de qualidade de dados (se houver issues)
+        if val_report and (not val_report.ok or val_report.warnings):
+            issues_txt = "\n".join(
+                f"{'❌' if i.severity == 'ERROR' else '⚠️'} {i.check}: {i.message}"
+                for i in val_report.issues
+            )
+            blocos.append({
+                "object": "block", "type": "callout",
+                "callout": {
+                    "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{issues_txt}"}}],
+                    "icon": {"type": "emoji", "emoji": "⚠️"},
+                    "color": "yellow_background",
+                }
+            })
+        if resumo_anterior:
+            blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
         blocos += _blocos_tendencia_semanal()
-    blocos += _blocos_tabela_campanhas(campanhas)
-    blocos += _blocos_top_campanhas(campanhas)
-    # Alocação: no mensal, filtra campanhas com investimento == 0
-    if tipo == "mensal":
-        campanhas_com_gasto = [c for c in campanhas if float(c.get("investimento") or 0) > 0]
-        blocos += _blocos_alocacao(campanhas_com_gasto)
-    else:
+        blocos += _blocos_tabela_campanhas(campanhas)
+        blocos += _blocos_top_campanhas(campanhas)
         blocos += _blocos_alocacao(campanhas)
-    blocos += _blocos_funil(resumo)
-    blocos += _blocos_alertas(alertas)
+        blocos += _blocos_funil(resumo)
+        blocos += _blocos_alertas(alertas)
 
     # ── Publicação ─────────────────────────────────────────────────────────
     if not publicar:
