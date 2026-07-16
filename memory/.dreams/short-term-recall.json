@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-07-14T12:59:54.258Z",
+  "updatedAt": "2026-07-16T12:25:11.159Z",
   "entries": {
     "memory:memory/2026-06-22.md:1:30": {
       "key": "memory:memory/2026-06-22.md:1:30",
@@ -42,26 +42,28 @@
       "endLine": 37,
       "source": "memory",
       "snippet": "# Memory — 2026-06-24 ## Projetos ativos: Agente de Performance + Agente de Briefings (Guará Marketing) ### Identidade - Nome: Cesar - Role: Senior Lead Systems Engineer & Automation Architect - Configurado por Eros (Guará Marketing) para os projetos Flora e Agente de Performance ### Infraestrutura - Host: ip-172-26-10-132 (AWS Ubuntu) - Proxy HTTPS: 44.204.251.251 - Porta agente briefings: 8002 - URL externa briefings: https://44.204.251.251/briefings/slack/events - Venv: /home/ubuntu/.openclaw/workspace/Agente_briefing/venv - Serviço: agente-briefings.service (active) ### Agente de Performance - Diretório: /home/ubuntu/.openclaw/workspace/agente-performance/ - GitHub: https://github.co",
-      "recallCount": 5,
+      "recallCount": 6,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 5,
+      "totalScore": 6,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-07-13T02:58:15.378Z",
+      "lastRecalledAt": "2026-07-16T12:25:11.159Z",
       "queryHashes": [
         "eb94228f54b4",
         "6f2eb0360318",
         "8e44e9147f05",
         "232d5f91fa66",
-        "a4c58fc2a09b"
+        "a4c58fc2a09b",
+        "9aed56b80585"
       ],
       "recallDays": [
         "2026-06-24",
         "2026-06-26",
         "2026-07-01",
         "2026-07-03",
-        "2026-07-13"
+        "2026-07-13",
+        "2026-07-16"
       ],
       "conceptTags": [
         "ip-172-26-10-132",
@@ -81,20 +83,22 @@
       "endLine": 31,
       "source": "memory",
       "snippet": "# Memória — 2026-06-23 ## Projeto: Agente de Performance Guará ### Localização - Projeto: `/home/ubuntu/.openclaw/workspace/agente-performance` - Banco SQLite campanhas: `data/campanhas.db` (30.905 registros, 93 colunas, mai/2023–jun/2026) - Banco contexto: `data/context.db` (TTL 24h) - Banco logs: `data/logs.db` - Env virtual: `venv/` dentro do projeto - Serviço systemd: `agente-guara.service` (User=ubuntu, porta 8001) - Apache proxy: vhost `flora-webhook.conf`, rotas `/guara/` e `/guara/slack/events` - Repositório GitHub: https://github.com/Eroscv/Flora-Agente (privado) - Último commit pushado: `feat: comparativos WoW/MoM/antes-depois/períodos/ranking` ### Regras absolutas - **Flora é I",
-      "recallCount": 2,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 2,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-07-13T02:58:15.378Z",
+      "lastRecalledAt": "2026-07-16T12:25:11.159Z",
       "queryHashes": [
         "eb94228f54b4",
-        "a4c58fc2a09b"
+        "a4c58fc2a09b",
+        "9aed56b80585"
       ],
       "recallDays": [
         "2026-06-24",
-        "2026-07-13"
+        "2026-07-13",
+        "2026-07-16"
       ],
       "conceptTags": [
         "home/ubuntu",
@@ -114,20 +118,22 @@
       "endLine": 95,
       "source": "memory",
       "snippet": "- `ranking_comparativo` — ranking de todas as campanhas por qualquer métrica ### Pendências do usuário (Slack app) - Configurar no painel api.slack.com: - Event Subscriptions URL: `https://44.204.251.251/guara/slack/events` - Bot events: `app_mention`, `message.im` - OAuth Scopes: `chat:write`, `reactions:write`, `reactions:read`, `app_mentions:read`, `im:history` - Slash command `/ajuda` → mesma URL ### Pendências técnicas abertas - Integrar `agent/cache.py` e `agent/conversation_log.py` no fluxo principal do `engine.py` - Integrar handler Slack para export (detectar palavras \"excel\"/\"pdf\" e chamar `reports/exporter.py`) - Testar bot com perguntas reais no Slack - Exposição do",
-      "recallCount": 2,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 2,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-07-13T02:58:15.378Z",
+      "lastRecalledAt": "2026-07-16T12:25:11.159Z",
       "queryHashes": [
         "eb94228f54b4",
-        "a4c58fc2a09b"
+        "a4c58fc2a09b",
+        "9aed56b80585"
       ],
       "recallDays": [
         "2026-06-24",
-        "2026-07-13"
+        "2026-07-13",
+        "2026-07-16"
       ],
       "conceptTags": [
         "ranking-comparativo",
@@ -305,6 +311,68 @@
         "slack",
         "detecta",
         "texto"
+      ]
+    },
+    "memory:memory/2026-07-06.md:84:90": {
+      "key": "memory:memory/2026-07-06.md:84:90",
+      "path": "memory/2026-07-06.md",
+      "startLine": 84,
+      "endLine": 90,
+      "source": "memory",
+      "snippet": "- [ ] Hook no `LogisticaAgent` e `PagamentoAgent` para injetar dados reais do pedido - [ ] Corrigir credencial Google Sheets (PEM corrompido — `InvalidByte(1649, 61)`) — 118 erros no fim de semana - [ ] Migrar Flask dev → Gunicorn - [ ] Truncar histórico em `_build_messages` (300 chars por msg) — igual ao classificador - [ ] Combinar `greeted_today` + `count_emojis_sent` em uma única query SQLite - [ ] Testes unitários para os 3 regex grandes (price divergence, reenvio, agressividade)",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-16T12:25:11.159Z",
+      "lastRecalledAt": "2026-07-16T12:25:11.159Z",
+      "queryHashes": [
+        "9aed56b80585"
+      ],
+      "recallDays": [
+        "2026-07-16"
+      ],
+      "conceptTags": [
+        "build-messages",
+        "greeted-today",
+        "count-emojis-sent",
+        "hook",
+        "logisticaagent",
+        "pagamentoagent",
+        "injetar",
+        "dados"
+      ]
+    },
+    "memory:memory/2026-07-06.md:63:87": {
+      "key": "memory:memory/2026-07-06.md:63:87",
+      "path": "memory/2026-07-06.md",
+      "startLine": 63,
+      "endLine": 87,
+      "source": "memory",
+      "snippet": "- **Arquivo:** `prompt/prompts.py` — `GERAL_PROMPT` - Adicionada tabela completa de links: hidratante, gel creme, água micelar, gel termo, travel size - **Causa do problema:** mensagens da (17) 99609-5930 classificadas como GERAL (bug do classificador) — Flora GERAL só conhecia `https://sourceof.com.br` ### Casos específicos atendidos - **(47) 9981-6366 — Iraci:** se apresentando em conversa já iniciada → corrigido com `has_history` - **(17) 99609-5930:** resposta truncada + link errado (home em vez do produto) → corrigido + mensagem reenviada ### Testes realizados - **Arquivo criado:** `Flora-Agente-repo/testes-pedidos.md` (publicado no GitHub) - Testados 5 endpoints Shopify: listagem, bu",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-16T12:25:11.159Z",
+      "lastRecalledAt": "2026-07-16T12:25:11.159Z",
+      "queryHashes": [
+        "9aed56b80585"
+      ],
+      "recallDays": [
+        "2026-07-16"
+      ],
+      "conceptTags": [
+        "prompt/prompts.py",
+        "geral-prompt",
+        "99609-5930",
+        "sourceof.com.br",
+        "9981-6366",
+        "has-history",
+        "arquivo",
+        "prompt"
       ]
     }
   }

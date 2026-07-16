@@ -820,15 +820,106 @@ def _blocos_tendencia_semanal(semanas: int = 4) -> list[dict]:
     ]
 
 
+_MESES_PT = {
+    1: "Janeiro", 2: "Fevereiro", 3: "Março",    4: "Abril",
+    5: "Maio",    6: "Junho",     7: "Julho",    8: "Agosto",
+    9: "Setembro",10: "Outubro",  11: "Novembro", 12: "Dezembro",
+}
+
+
+def _blocos_tendencia_mensal(data_ref: date, meses: int = 4, db_path: Path = DB_PATH) -> list[dict]:
+    """
+    Tendência dos últimos N meses completos antes de data_ref (MoM).
+    Usa tabela Notion com colunas: Mês | Invest. | ROAS | Compras | Receita.
+    Dados calculados direto do SQLite agregando por mês.
+    """
+    from calendar import monthrange
+
+    # Monta lista de meses: os `meses` meses anteriores ao mês de data_ref
+    registros = []
+    ano, mes = data_ref.year, data_ref.month
+    for _ in range(meses):
+        mes -= 1
+        if mes == 0:
+            mes = 12
+            ano -= 1
+        _, ultimo_dia = monthrange(ano, mes)
+        ini = date(ano, mes, 1)
+        fim = date(ano, mes, ultimo_dia)
+        registros.append((ano, mes, ini, fim))
+
+    registros.reverse()  # ordem cronológica
+
+    # Busca dados para cada mês no SQLite
+    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    serie = []
+    for ano_m, mes_m, ini, fim in registros:
+        cur.execute("""
+            SELECT
+                SUM(investimento)         AS invest,
+                SUM(COALESCE(compras,0))  AS compras,
+                SUM(COALESCE(valor_compras,0)) AS receita
+            FROM campanhas
+            WHERE data_inicio >= ? AND data_fim <= ?
+        """, (ini.isoformat(), fim.isoformat()))
+        row = cur.fetchone()
+        invest  = float(row["invest"] or 0)
+        compras = int(row["compras"] or 0)
+        receita = float(row["receita"] or 0)
+        roas    = round(receita / invest, 2) if invest > 0 else None
+        serie.append({
+            "mes_label": f"{_MESES_PT[mes_m]}/{ano_m}",
+            "invest":    invest,
+            "roas":      roas,
+            "compras":   compras,
+            "receita":   receita,
+        })
+    conn.close()
+
+    if not any(s["invest"] > 0 for s in serie):
+        return []
+
+    header = ["Mês", "Invest.", "ROAS", "Compras", "Receita"]
+    table_rows = [
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+        ]}}
+    ]
+    for s in serie:
+        table_rows.append({"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": s["mes_label"]}}],
+            [{"text": {"content": _fmt_brl(s["invest"])}}],
+            [{"text": {"content": _fmt_x(s["roas"])}}],
+            [{"text": {"content": str(s["compras"]) if s["compras"] else "—"}}],
+            [{"text": {"content": _fmt_brl(s["receita"])}}],
+        ]}})
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": f"📅 Tendência — Últimos {meses} Meses"}}]}},
+        {"object": "block", "type": "table", "table": {
+            "table_width": len(header),
+            "has_column_header": True,
+            "has_row_header": False,
+            "children": table_rows,
+        }},
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
+
+
 def gerar_relatorio_semanal(
     cliente: str = "source_of",
     data_inicio: date = None,
     data_fim: date = None,
     publicar: bool = True,
     db_path: Path = DB_PATH,
+    tipo: str = "semanal",
 ) -> dict:
     """
-    Gera e publica o relatório semanal Meta Ads.
+    Gera e publica o relatório semanal (ou mensal) Meta Ads.
 
     Args:
         cliente:      chave do cliente (ex: 'source_of')
@@ -836,6 +927,8 @@ def gerar_relatorio_semanal(
         data_fim:     fim do período (default: domingo da semana passada)
         publicar:     se True, publica no Notion
         db_path:      caminho do SQLite
+        tipo:         "semanal" (padrão) ou "mensal" — altera comparativo, tendência,
+                      alocação e título
 
     Returns:
         dict com: page_id, url, resumo, num_campanhas, alertas
@@ -848,16 +941,31 @@ def gerar_relatorio_semanal(
         data_inicio = data_inicio or seg_ant
         data_fim    = data_fim    or dom_ant
 
-    periodo_str = f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}"
     cliente_nome = CLIENTES.get(cliente, cliente)
 
-    # ── Período anterior (mesma duração) ──────────────────────────────────
-    delta_dias = (data_fim - data_inicio).days + 1
-    ant_fim    = data_inicio - timedelta(days=1)
-    ant_inicio = ant_fim - timedelta(days=delta_dias - 1)
-    periodo_anterior_str = f"{ant_inicio.strftime('%d/%m/%Y')} → {ant_fim.strftime('%d/%m/%Y')}"
+    # ── Título e período anterior ─────────────────────────────────────────
+    if tipo == "mensal":
+        # Título: "📊 Source OF · Meta Ads Mensal · Junho/2026"
+        mes_pt = _MESES_PT[data_inicio.month]
+        periodo_str = f"{mes_pt}/{data_inicio.year}"
+        titulo_periodo = periodo_str
 
-    logger.info("[Builder] Gerando relatório %s · %s", cliente_nome, periodo_str)
+        # Período anterior = mês anterior completo
+        primeiro_atual = data_inicio  # já é dia 1
+        ant_fim = primeiro_atual - timedelta(days=1)       # último dia do mês anterior
+        ant_inicio = ant_fim.replace(day=1)                # primeiro dia do mês anterior
+        periodo_anterior_str = f"{_MESES_PT[ant_inicio.month]}/{ant_inicio.year}"
+    else:
+        periodo_str = f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}"
+        titulo_periodo = periodo_str
+
+        # Período anterior: mesma duração
+        delta_dias = (data_fim - data_inicio).days + 1
+        ant_fim    = data_inicio - timedelta(days=1)
+        ant_inicio = ant_fim - timedelta(days=delta_dias - 1)
+        periodo_anterior_str = f"{ant_inicio.strftime('%d/%m/%Y')} → {ant_fim.strftime('%d/%m/%Y')}"
+
+    logger.info("[Builder] Gerando relatório %s · %s · tipo=%s", cliente_nome, periodo_str, tipo)
 
     # ── Validação dos dados ──────────────────────────────────────────────────
     try:
@@ -889,7 +997,10 @@ def gerar_relatorio_semanal(
                 len(campanhas), _fmt_brl(resumo["total_invest"]), _fmt_x(resumo["roas"]))
 
     # ── Blocos Notion ──────────────────────────────────────────────────────
-    titulo = f"📊 {cliente_nome} · Meta Ads · {periodo_str}"
+    if tipo == "mensal":
+        titulo = f"📊 {cliente_nome} · Meta Ads Mensal · {titulo_periodo}"
+    else:
+        titulo = f"📊 {cliente_nome} · Meta Ads · {titulo_periodo}"
 
     blocos = []
     blocos += _blocos_resumo(resumo, periodo_str)
@@ -910,11 +1021,19 @@ def gerar_relatorio_semanal(
     # Comparativo com período anterior (se tiver dados)
     if resumo_anterior:
         blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
-    # Tendência das últimas 4 semanas
-    blocos += _blocos_tendencia_semanal()
+    # Tendência: semanal (WoW) ou mensal (MoM)
+    if tipo == "mensal":
+        blocos += _blocos_tendencia_mensal(data_inicio, meses=4, db_path=db_path)
+    else:
+        blocos += _blocos_tendencia_semanal()
     blocos += _blocos_tabela_campanhas(campanhas)
     blocos += _blocos_top_campanhas(campanhas)
-    blocos += _blocos_alocacao(campanhas)
+    # Alocação: no mensal, filtra campanhas com investimento == 0
+    if tipo == "mensal":
+        campanhas_com_gasto = [c for c in campanhas if float(c.get("investimento") or 0) > 0]
+        blocos += _blocos_alocacao(campanhas_com_gasto)
+    else:
+        blocos += _blocos_alocacao(campanhas)
     blocos += _blocos_funil(resumo)
     blocos += _blocos_alertas(alertas)
 
@@ -929,10 +1048,6 @@ def gerar_relatorio_semanal(
             "num_campanhas": len(campanhas),
             "blocos": blocos,
         }
-
-    # Detecta tipo (semanal vs mensal) pelo delta de dias
-    delta = (data_fim - data_inicio).days
-    tipo  = "mensal" if delta >= 25 else "semanal"
 
     resultado = criar_relatorio_no_historico(
         titulo=titulo,
@@ -997,6 +1112,7 @@ def gerar_relatorio_mensal(
         data_fim=data_fim,
         publicar=publicar,
         db_path=db_path,
+        tipo="mensal",
     )
 
 
