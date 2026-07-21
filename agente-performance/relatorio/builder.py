@@ -891,10 +891,13 @@ def _blocos_analise_ultima_semana(
             }
         }
 
-    # ── Tabela 1 — Métricas de Site/CRM (8 colunas) ───────────────────────
+    # ── Tabela 1 — Métricas de Site/CRM (9 colunas) ───────────────────────
+    # Receita Shopify: atualmente usa valor_compras do Meta (atribuição).
+    # Quando integração Shopify direta estiver disponível, substituir pela fonte nativa.
     headers_site = [
         "Semana", "% Conversão", "Ticket Médio",
-        "N. Usuários", "Novos Clientes", "CAC", "% Desconto", "Pedidos > R$300"
+        "N. Usuários", "Novos Clientes", "CAC", "% Desconto", "Pedidos > R$300",
+        "Receita Total Shopify",
     ]
     rows_site = [
         [
@@ -902,12 +905,14 @@ def _blocos_analise_ultima_semana(
             "—",
             _fmt_brl(s1["ticket"]),  # ticket calculado do SQLite
             "—", "—", "—", "—", "—",
+            _fmt_brl(s1["receita"]),  # valor_compras Meta (proxy Shopify)
         ],
         [
             label2,
             "—",
             _fmt_brl(s2["ticket"]),  # ticket calculado do SQLite
             "—", "—", "—", "—", "—",
+            _fmt_brl(s2["receita"]),  # valor_compras Meta (proxy Shopify)
         ],
     ]
 
