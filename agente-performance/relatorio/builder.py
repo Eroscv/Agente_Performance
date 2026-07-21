@@ -2614,9 +2614,6 @@ def gerar_relatorio_semanal(
         # 19. Funil de conversão
         blocos += _blocos_funil(resumo)
 
-        # 20. Alertas automáticos
-        blocos += _blocos_alertas(alertas)
-
     else:
         # ── Estrutura do relatório semanal (mantida igual) ──────────────────
         blocos = []
@@ -2639,7 +2636,6 @@ def gerar_relatorio_semanal(
         blocos += _blocos_tendencia_semanal()
         blocos += _blocos_alocacao(campanhas)
         blocos += _blocos_funil(resumo)
-        blocos += _blocos_alertas(alertas)
 
     # ── Publicação ─────────────────────────────────────────────────────────
     if not publicar:
