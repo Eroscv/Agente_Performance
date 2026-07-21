@@ -2574,9 +2574,6 @@ def gerar_relatorio_semanal(
             "⏳ Dados de pedidos orgânicos pendentes.",
         )
 
-        # 9. Resumo executivo
-        blocos += _blocos_resumo(resumo, periodo_str)
-
         # Aviso de qualidade de dados (se houver issues)
         if val_report and (not val_report.ok or val_report.warnings):
             issues_txt = "\n".join(
@@ -2599,13 +2596,7 @@ def gerar_relatorio_semanal(
         # 11. Tendência mensal (MoM)
         blocos += _blocos_tendencia_mensal(data_inicio, meses=4, db_path=db_path)
 
-        # 12. Desempenho por campanha
-        blocos += _blocos_tabela_campanhas(campanhas)
-
-        # 13. Top campanhas por ROAS
-        blocos += _blocos_top_campanhas(campanhas)
-
-        # 14. Planejamento Q3 2026 (nova seção)
+        # 12. Planejamento Q3 2026 (nova seção)
         blocos += _blocos_planejamento_q3(resumo)
 
         # 15. Onde estamos — Metas (expandido com histórico)
@@ -2629,7 +2620,6 @@ def gerar_relatorio_semanal(
     else:
         # ── Estrutura do relatório semanal (mantida igual) ──────────────────
         blocos = []
-        blocos += _blocos_resumo(resumo, periodo_str)
         # Aviso de qualidade de dados (se houver issues)
         if val_report and (not val_report.ok or val_report.warnings):
             issues_txt = "\n".join(
@@ -2647,8 +2637,6 @@ def gerar_relatorio_semanal(
         if resumo_anterior:
             blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
         blocos += _blocos_tendencia_semanal()
-        blocos += _blocos_tabela_campanhas(campanhas)
-        blocos += _blocos_top_campanhas(campanhas)
         blocos += _blocos_alocacao(campanhas)
         blocos += _blocos_funil(resumo)
         blocos += _blocos_alertas(alertas)
