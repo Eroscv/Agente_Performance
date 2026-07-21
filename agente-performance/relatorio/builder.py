@@ -714,9 +714,9 @@ def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anter
 
 def _blocos_funil(resumo: dict) -> list[dict]:
     """
-    Funil de conversão visual com quebra correta:
-    Alcance → Impressões (frequência) → Cliques (CTR) → Carrinho → Checkout → Compras.
-    Separa alcance de impressões para não misturar frequência com taxa de clique.
+    Funil de conversão em tabela:
+    Etapa | Volume | Taxa (entre etapas)
+    Alcance → Impressões → Cliques → Carrinho → Checkout → Compras.
     """
     r = resumo
     impressoes = r.get("total_impressoes") or 0
@@ -725,67 +725,52 @@ def _blocos_funil(resumo: dict) -> list[dict]:
     carrinho   = r.get("total_carrinho") or 0
     checkout   = r.get("total_checkout") or 0
     compras    = r.get("total_compras") or 0
-    ctr        = r.get("ctr")
     frequencia = r.get("frequencia_media")
 
     # Taxas entre etapas
-    pct_impr_clique      = round(cliques  / impressoes * 100, 2) if impressoes else None  # = CTR
-    pct_alcance_impr     = round(impressoes / alcance, 2) if alcance else None             # = frequência
-    pct_clique_carrinho  = round(carrinho / cliques  * 100, 1) if cliques   else None
-    pct_carrinho_checkout= round(checkout / carrinho * 100, 1) if carrinho  else None
-    pct_checkout_compra  = round(compras  / checkout * 100, 1) if checkout  else None
-    efic_geral           = round(compras  / impressoes * 100, 3) if impressoes else None
+    freq_str     = f"{float(frequencia):.2f}x" if frequencia else "—"
+    ctr_str      = f"{cliques / impressoes * 100:.2f}%" if impressoes and cliques else "—"
+    cliq_carr    = f"{carrinho / cliques * 100:.1f}%" if cliques and carrinho else "—"
+    carr_chk     = f"{checkout / carrinho * 100:.1f}%" if carrinho and checkout else "—"
+    chk_cmp      = f"{compras / checkout * 100:.1f}%" if checkout and compras else "—"
+    efic_geral   = f"{compras / alcance * 100:.3f}%" if alcance and compras else "—"
 
-    def _p(txt):
-        return {
-            "object": "block", "type": "paragraph",
-            "paragraph": {"rich_text": [{"text": {"content": txt}}]}
-        }
-
-    blocos = [
-        {"object": "block", "type": "heading_2",
-         "heading_2": {"rich_text": [{"text": {"content": "🔽 Funil de Conversão"}}]}},
+    header = ["Etapa", "Volume", "Taxa"]
+    etapas = [
+        ("👤 Alcance",            _fmt_n(alcance),    "—"),
+        ("👁️ Impressões",         _fmt_n(impressoes), f"freq. {freq_str}"),
+        ("🖱️ Cliques no Link",    _fmt_n(cliques),    f"CTR {ctr_str}"),
+        ("🛒 Adições ao Carrinho", _fmt_n(carrinho),   f"{cliq_carr} dos cliques"),
+        ("💳 Checkouts Iniciados", _fmt_n(checkout),   f"{carr_chk} do carrinho"),
+        ("✅ Compras",             _fmt_n(compras),    f"{chk_cmp} do checkout"),
+        ("🎯 Taxa Alcance→Compra", efic_geral,         "—"),
     ]
 
-    # Etapa 1: Alcance (pessoas únicas)
-    blocos.append(_p(f"👤 {_fmt_n(alcance)} pessoas alcançadas (alcance único)"))
+    table_rows = [
+        {"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+        ]}}
+    ]
+    for etapa, volume, taxa in etapas:
+        table_rows.append({"type": "table_row", "table_row": {"cells": [
+            [{"text": {"content": etapa}}],
+            [{"text": {"content": volume}}],
+            [{"text": {"content": taxa}}],
+        ]}})
 
-    # Etapa 2: Impressões (frequência = impr/alcance)
-    freq_str = f" — frequência média {_fmt_n(float(frequencia), 2)}x" if frequencia else ""
-    blocos.append(_p(f"   ↳ {_fmt_n(impressoes)} impressões{freq_str}"))
-
-    # Etapa 3: Cliques (CTR = cliques/impressões)
-    ctr_str = f" — CTR {_fmt_pct(pct_impr_clique)}" if pct_impr_clique else ""
-    blocos.append(_p(f"   ↳ {_fmt_n(cliques)} cliques no link{ctr_str}"))
-
-    # Etapa 4: Carrinho
-    carr_str = f" — {_fmt_pct(pct_clique_carrinho)} dos cliques" if pct_clique_carrinho else ""
-    blocos.append(_p(f"   ↳ {_fmt_n(carrinho)} adições ao carrinho{carr_str}"))
-
-    # Etapa 5: Checkout
-    chk_str = f" — {_fmt_pct(pct_carrinho_checkout)} do carrinho" if pct_carrinho_checkout else ""
-    blocos.append(_p(f"   ↳ {_fmt_n(checkout)} checkouts iniciados{chk_str}"))
-
-    # Etapa 6: Compras
-    cmp_str = f" — {_fmt_pct(pct_checkout_compra)} do checkout" if pct_checkout_compra else ""
-    blocos.append(_p(f"   ↳ {_fmt_n(compras)} compras{cmp_str}"))
-
-    # Callout com eficiência geral
-    efic_txt = (
-        f"Eficiência geral alcance→compra: {efic_geral:.3f}% "
-        f"({compras} compras para {_fmt_n(alcance)} pessoas alcançadas)"
-        if efic_geral is not None
-        else "Eficiência geral: —"
-    )
-    blocos.append({
-        "object": "block", "type": "callout",
-        "callout": {
-            "rich_text": [{"text": {"content": efic_txt}}],
-            "icon": {"type": "emoji", "emoji": "🔽"},
-        }
-    })
-    blocos.append({"object": "block", "type": "divider", "divider": {}})
-    return blocos
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🔽 Funil de Conversão"}}]}},
+        {
+            "object": "block", "type": "table", "table": {
+                "table_width": 3,
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": table_rows,
+            }
+        },
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
 
 
 # ── Novas funções para relatório mensal ─────────────────────────────────────
