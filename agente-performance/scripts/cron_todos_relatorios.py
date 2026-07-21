@@ -454,10 +454,13 @@ def main():
                         help="Chave do cliente (ex: source_of) ou 'todos'")
     parser.add_argument("--apenas-alertas", action="store_true",
                         help="Só checa alertas de ROAS, sem gerar relatório completo")
+    parser.add_argument("--apenas-loader", action="store_true",
+                        help="Só executa o loader (sincroniza dados), sem relatório nem alertas")
     args = parser.parse_args()
 
     publicar       = not args.no_notion
     apenas_alertas = args.apenas_alertas
+    apenas_loader  = args.apenas_loader
     data_inicio, data_fim = resolver_periodo(args.periodo)
     periodo_str  = f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}"
     tipo_label   = {"diario": "Diário", "semana": "Semanal", "mes": "Mensal"}.get(args.periodo, args.periodo.title())
@@ -479,6 +482,20 @@ def main():
 
     for i, (cliente_key, cfg) in enumerate(clientes.items(), 1):
         logger.info("--- [%d/%d] %s ---", i, len(clientes), cfg.get("nome", cliente_key))
+
+        # Modo apenas-loader: só sincroniza banco, sem relatório nem alertas
+        if apenas_loader:
+            try:
+                from db.registry import get_loader
+                loader_fn = get_loader(cliente_key)
+                loader_fn()
+                logger.info("[%s] Loader OK", cliente_key)
+                resultados[cliente_key] = {"ok": True}
+            except Exception as e:
+                logger.error("[%s] Loader falhou: %s", cliente_key, e)
+                erros[cliente_key] = str(e)
+            continue
+
         res = executar_cliente(
             cliente_key=cliente_key, cfg=cfg,
             periodo=args.periodo,
