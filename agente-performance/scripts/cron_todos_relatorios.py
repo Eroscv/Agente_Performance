@@ -414,6 +414,40 @@ def executar_cliente(
         url = resultado.get("url", "—")
         logger.info("[%s] Slack: %s | Notion: %s", cliente_key, "OK" if ok_slack else "FALHOU", url)
 
+        # ── Relatório semanal embutido no diário ──────────────────────────
+        # Sempre que o cron for diário, dispara também o relatório semanal
+        # com publicação no Notion e posta o link no Slack
+        if periodo == "diario":
+            try:
+                seg_ini, seg_fim = resolver_periodo("semana")
+                seg_str = f"{seg_ini.strftime('%d/%m/%Y')} → {seg_fim.strftime('%d/%m/%Y')}"
+                logger.info("[%s] Disparando relatório semanal embutido (%s)", cliente_key, seg_str)
+
+                import os as _ose
+                _ose.environ["SKIP_SHEETS_SYNC"] = "1"  # loader já rodou
+                builder_sem = get_builder(cliente_key, "semanal")
+                res_sem = builder_sem(data_inicio=seg_ini, data_fim=seg_fim, publicar=True)
+                _ose.environ.pop("SKIP_SHEETS_SYNC", None)
+
+                url_sem = res_sem.get("url", "")
+                if res_sem.get("erro"):
+                    logger.warning("[%s] Semanal embutido — erro: %s", cliente_key, res_sem["erro"])
+                else:
+                    delta_sem = _calcular_delta(res_sem, seg_ini, seg_fim, cliente_key)
+                    from slack.poster import postar_relatorio as _pr
+                    _pr(res_sem, seg_str, "Semanal", cliente=cliente_key, delta=delta_sem)
+
+                    # Posta link do Notion como mensagem standalone no canal
+                    if url_sem:
+                        postar_slack_fallback(
+                            f"{emoji} *{label} · Relatório Semanal publicado no Notion*\n"
+                            f"_{seg_str}_\n"
+                            f"📎 <{url_sem}|Abrir relatório semanal completo>"
+                        )
+                        logger.info("[%s] Semanal embutido OK: %s", cliente_key, url_sem)
+            except Exception as _e_sem:
+                logger.warning("[%s] Semanal embutido falhou: %s", cliente_key, _e_sem)
+
         registrar_run(
             cliente_key=cliente_key,
             periodo=periodo,
