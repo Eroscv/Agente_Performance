@@ -2596,9 +2596,6 @@ def gerar_relatorio_semanal(
         # 11. Tendência mensal (MoM)
         blocos += _blocos_tendencia_mensal(data_inicio, meses=4, db_path=db_path)
 
-        # 12. Planejamento Q3 2026 (nova seção)
-        blocos += _blocos_planejamento_q3(resumo)
-
         # 15. Onde estamos — Metas (expandido com histórico)
         blocos += _blocos_metas_mes(resumo)
 
