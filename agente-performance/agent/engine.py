@@ -447,7 +447,57 @@ def consultar(
     }
 
     # 4. Executa queries
+    # Detecta se pede breakdown diário (mesma lógica do POD)
+    _SEMANA_PARCIAL_SOF = re.compile(
+        r"(essa\s+semana|esta\s+semana|semana\s+at[eé]\s+agora|semana\s+atual"
+        r"|at[eé]\s+agora|at[eé]\s+hoje|semana\s+corrente)",
+        re.IGNORECASE,
+    )
+    pedir_breakdown_sof = bool(_SEMANA_PARCIAL_SOF.search(pergunta))
+
     dados = _executar_intent(intents[0], campanha, data_inicio, data_fim, limit, meta)
+
+    # Item 1: Breakdown diário Source OF via ads_diario
+    if pedir_breakdown_sof and isinstance(dados, (list, dict)):
+        try:
+            import sqlite3 as _sql3
+            from db.connection import DB_PATH as _DB_PATH
+            _conn = get_conn()
+            _conn.row_factory = _sql3.Row
+            _DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+            _dias = _conn.execute("""
+                SELECT
+                    data_inicio                                     AS dia,
+                    SUM(investimento)                               AS invest,
+                    SUM(valor_compras)                              AS receita,
+                    CASE WHEN SUM(investimento) > 0
+                         THEN SUM(valor_compras) / SUM(investimento) END AS roas,
+                    SUM(compras)                                    AS conversoes,
+                    CASE WHEN SUM(impressoes) > 0
+                         THEN CAST(SUM(cliques_link) AS REAL)
+                              / SUM(impressoes) * 100 END AS ctr
+                FROM ads_diario
+                WHERE data_inicio BETWEEN ? AND ?
+                GROUP BY data_inicio
+                ORDER BY data_inicio ASC
+            """, (data_inicio, data_fim)).fetchall()
+            if _dias:
+                bd_sof = []
+                for _d in _dias:
+                    _dd = dict(_d)
+                    try:
+                        from datetime import date as _ddate
+                        _obj = _ddate.fromisoformat(_dd["dia"])
+                        _dd["dia_nome"] = _DIAS_PT[_obj.weekday()]
+                    except Exception:
+                        _dd["dia_nome"] = ""
+                    bd_sof.append(_dd)
+                if isinstance(dados, dict):
+                    dados["breakdown_diario"] = bd_sof
+                else:
+                    meta["breakdown_diario"] = bd_sof
+        except Exception as _e:
+            logger.debug("[SOF] Breakdown diário falhou: %s", _e)
 
     dados_extra = {}
     for intent_extra in intents[1:]:
@@ -464,6 +514,48 @@ def consultar(
     if dados_principais_vazios:
         dados_vazios_msg = _dados_vazios_sugestao(intents[0], campanha, data_inicio, data_fim)
 
+    # Item 2: Delta vs período anterior (só quando não é consulta de campanha específica)
+    delta_consulta = {}
+    if not campanha and data_inicio and data_fim and not dados_principais_vazios:
+        try:
+            from datetime import date as _ddate, timedelta as _dtd
+            _d0 = _ddate.fromisoformat(data_inicio)
+            _d1 = _ddate.fromisoformat(data_fim)
+            _span = (_d1 - _d0).days + 1
+            _ant0 = _d0 - _dtd(days=_span)
+            _ant1 = _d1 - _dtd(days=_span)
+            import sqlite3 as _sql3
+            _c = get_conn()
+            _c.row_factory = _sql3.Row
+            _row_ant = _c.execute("""
+                SELECT
+                    SUM(investimento) AS invest,
+                    CASE WHEN SUM(investimento)>0
+                         THEN SUM(valor_compras)/SUM(investimento) END AS roas,
+                    SUM(compras) AS conversoes
+                FROM ads_diario
+                WHERE data_inicio BETWEEN ? AND ?
+            """, (str(_ant0), str(_ant1))).fetchone()
+            # Extrai atuais
+            _invest_a = None; _roas_a = None; _conv_a = None
+            if isinstance(dados, dict):
+                _invest_a = dados.get("invest") or dados.get("total_invest")
+                _roas_a   = dados.get("roas")
+                _conv_a   = dados.get("compras") or dados.get("conversoes")
+            elif isinstance(dados, list) and dados:
+                _invest_a = sum((r.get("investimento") or 0) for r in dados if isinstance(r, dict))
+                _roas_a   = sum((r.get("roas") or 0) for r in dados if isinstance(r, dict)) / len(dados) if dados else None
+            if _row_ant and _row_ant["invest"]:
+                def _pct(a, b): return ((a - b) / b * 100) if b else None
+                if _invest_a and _row_ant["invest"]:
+                    delta_consulta["invest"] = (_invest_a, _row_ant["invest"], _pct(_invest_a, _row_ant["invest"]))
+                if _roas_a and _row_ant["roas"]:
+                    delta_consulta["roas"] = (_roas_a, _row_ant["roas"], _pct(_roas_a, _row_ant["roas"]))
+                if _conv_a and _row_ant["conversoes"]:
+                    delta_consulta["conversoes"] = (_conv_a, _row_ant["conversoes"], _pct(_conv_a, _row_ant["conversoes"]))
+        except Exception as _e:
+            logger.debug("[Delta consulta] Falhou: %s", _e)
+
     resultado = {
         "intent":          intents[0],
         "intents":         intents,
@@ -471,6 +563,7 @@ def consultar(
         "dados_extra":     dados_extra,
         "meta":            meta,
         "aviso_vazio":     dados_vazios_msg,
+        "delta":           delta_consulta,  # item 2: comparativo vs período anterior
     }
 
     # 6. Salva no cache (não cacheia resultados vazios)
@@ -659,6 +752,20 @@ def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, 
         logger.error("[POD] Erro ao consultar banco: %s", e)
         dados = {"cliente": "POD Kombucha", "erro": str(e)}
 
+    # Item 5: Resposta graciosa quando sem dados
+    if not dados.get("erro") and dados.get("num_campanhas", 0) == 0:
+        from datetime import date as _dg, timedelta as _tdg
+        _hoje = _dg.today()
+        # Sugere semana passada como alternativa
+        _seg = _hoje - _tdg(days=_hoje.weekday() + 7)
+        _dom = _seg + _tdg(days=6)
+        dados["_sem_dados"] = True
+        aviso_periodo = (
+            f"⚠️ _Nenhum dado encontrado para POD Kombucha no período "
+            f"{data_inicio} → {data_fim}._\n"
+            f"Tente: `@agente POD semana passada` ({_seg.strftime('%d/%m')} a {_dom.strftime('%d/%m')})"
+        )
+
     # ── Histórico de thread (item 11) ─────────────────────────────────────
     if thread_ts:
         try:
@@ -666,6 +773,40 @@ def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, 
             append_history(thread_ts, "pod", "user", pergunta)
         except Exception:
             pass
+
+    # Item 2: Delta vs período anterior para POD
+    delta_pod = {}
+    if dados.get("num_campanhas", 0) > 0 and data_inicio and data_fim:
+        try:
+            from datetime import date as _ddate2, timedelta as _dtd2
+            import sqlite3 as _sql3b
+            _d0p = _ddate2.fromisoformat(data_inicio)
+            _d1p = _ddate2.fromisoformat(data_fim)
+            _span_p = (_d1p - _d0p).days + 1
+            _ant0p = _d0p - _dtd2(days=_span_p)
+            _ant1p = _d1p - _dtd2(days=_span_p)
+            from db.connection import get_conn as _gcpod
+            _cp = _gcpod()
+            _cp.row_factory = _sql3b.Row
+            _rp = _cp.execute("""
+                SELECT
+                    SUM(investimento) AS invest,
+                    CASE WHEN SUM(investimento)>0
+                         THEN SUM(valor_conversao)/SUM(investimento) END AS roas,
+                    SUM(conversoes) AS conversoes
+                FROM pod_gads_diario
+                WHERE data_inicio BETWEEN ? AND ?
+            """, (str(_ant0p), str(_ant1p))).fetchone()
+            if _rp and _rp["invest"]:
+                def _ppct(a, b): return ((a - b) / b * 100) if b else None
+                if dados.get("invest") and _rp["invest"]:
+                    delta_pod["invest"] = (dados["invest"], _rp["invest"], _ppct(dados["invest"], _rp["invest"]))
+                if dados.get("roas") and _rp["roas"]:
+                    delta_pod["roas"] = (dados["roas"], _rp["roas"], _ppct(dados["roas"], _rp["roas"]))
+                if dados.get("conversoes") and _rp["conversoes"]:
+                    delta_pod["conversoes"] = (dados["conversoes"], _rp["conversoes"], _ppct(dados["conversoes"], _rp["conversoes"]))
+        except Exception as _ep:
+            logger.debug("[Delta POD] Falhou: %s", _ep)
 
     resultado = {
         "intent":      intents[0] if intents else "resumo_geral",
@@ -679,10 +820,11 @@ def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, 
             "data_inicio":  data_inicio,
             "data_fim":     data_fim,
             "limit":        10,
-            "periodo_nota": periodo_nota,  # item 13: propagado para claude_client
+            "periodo_nota": periodo_nota,
         },
-        "aviso_vazio":  aviso_periodo,  # item 13: exibido antes da resposta
-        "contexto":     contexto,       # item 2: passado para gerar_resposta
+        "aviso_vazio":  aviso_periodo,
+        "contexto":     contexto,
+        "delta":        delta_pod,  # item 2: comparativo vs período anterior
     }
 
     # Cache (item 10) — só cacheia se teve dados válidos

@@ -323,6 +323,7 @@ async def _processar_e_responder(
             resposta_final = gerar_resposta(
                 pergunta=text, dados=dados, intent=intent, meta=meta,
                 dados_extra=dados_extra, contexto=contexto,
+                delta=resultado.get("delta", {}),  # item 2: comparativo vs período anterior
             )
 
             # Prefixo de aviso de período ajustado (POD, item 13)
@@ -703,6 +704,7 @@ async def handle_relatorio(ack, respond, command, client):
 async def handle_pod(ack, respond, command, client):
     """
     /pod                     — resumo semanal POD Kombucha
+    /pod status              — KPIs do dia mais recente disponível (item 4)
     /pod essa semana         — semana atual
     /pod mes                 — mês atual
     /pod qual campanha...    — pergunta livre
@@ -712,6 +714,53 @@ async def handle_pod(ack, respond, command, client):
     user_id   = command["user_id"]
     arg       = command.get("text", "").strip() or "como foi essa semana?"
     thread_ts = str(__import__("time").time())
+
+    # /pod status — resposta instantânea sem Claude (item 4)
+    if arg.strip().lower() in ("status", "hoje", "agora"):
+        try:
+            import sqlite3 as _sq
+            from db.connection import get_conn as _gcc
+            _c = _gcc()
+            _c.row_factory = _sq.Row
+            _last = _c.execute(
+                "SELECT MAX(data_inicio) AS ultimo FROM pod_gads_diario"
+            ).fetchone()
+            _ultimo = _last["ultimo"] if _last else None
+            if _ultimo:
+                from datetime import date as _d
+                _obj = _d.fromisoformat(_ultimo)
+                _DIAS = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"]
+                _nome = _DIAS[_obj.weekday()]
+                _row = _c.execute("""
+                    SELECT
+                        SUM(investimento)   AS invest,
+                        SUM(valor_conversao) AS receita,
+                        CASE WHEN SUM(investimento)>0
+                             THEN SUM(valor_conversao)/SUM(investimento) END AS roas,
+                        SUM(conversoes) AS conversoes,
+                        CASE WHEN SUM(impressoes)>0
+                             THEN CAST(SUM(cliques) AS REAL)/SUM(impressoes)*100 END AS ctr
+                    FROM pod_gads_diario WHERE data_inicio = ?
+                """, (_ultimo,)).fetchone()
+                def _brl(v): return f"R$ {v:,.2f}".replace(",","X").replace(".",",").replace("X",".") if v else "—"
+                def _x(v): return f"{v:.2f}x" if v else "—"
+                msg = (
+                    f"📊 *POD Kombucha · Status — {_nome} {_obj.strftime('%d/%m/%Y')}*\n"
+                    f"```\n"
+                    f"Investimento  │ {_brl(_row['invest'])}\n"
+                    f"Receita       │ {_brl(_row['receita'])}\n"
+                    f"ROAS          │ {_x(_row['roas'])}\n"
+                    f"Conversões    │ {_row['conversoes'] or 0:.1f}\n"
+                    f"CTR           │ {_row['ctr'] or 0:.2f}%\n"
+                    f"```\n"
+                    f"_Dado mais recente disponível no banco_"
+                )
+            else:
+                msg = "⚠️ Nenhum dado POD encontrado no banco."
+            await client.chat_postMessage(channel=channel, thread_ts=thread_ts, text=msg, mrkdwn=True)
+        except Exception as _e:
+            await client.chat_postMessage(channel=channel, text=f"⚠️ Erro: {_e}")
+        return
 
     await respond(text=f"⏳ Consultando POD Kombucha: _{arg}_...", response_type="ephemeral")
     await _processar_e_responder(

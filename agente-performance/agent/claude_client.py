@@ -134,6 +134,8 @@ def gerar_resposta(
     dados_extra: dict = None,
     contexto:    str  = "",
     usar_kb:     bool = True,
+    delta:       dict = None,  # item 2: comparativo vs período anterior
+    **kwargs,
 ) -> str:
     """
     Gera resposta conversacional com Claude a partir dos dados das queries.
@@ -173,6 +175,19 @@ def gerar_resposta(
         if periodo_nota else ""
     )
 
+    # Item 2: Delta vs período anterior
+    delta_str = ""
+    _delta = delta or {}
+    if _delta:
+        _SETAS = {True: "↑", False: "↓", None: "↔"}
+        partes_delta = []
+        for metrica, (atual, anterior, pct) in _delta.items():
+            if pct is None: continue
+            seta = "↑" if pct > 0 else ("↓" if pct < 0 else "↔")
+            partes_delta.append(f"{metrica}: {pct:+.1f}% {seta} (ant. {anterior:.2f})")
+        if partes_delta:
+            delta_str = "\n\n[Comparativo vs período anterior]\n  " + " | ".join(partes_delta)
+
     # Memória de longo prazo — injeta exemplos aprovados do Notion KB
     # (só para Source OF, KB não tem entradas POD ainda)
     kb_contexto = ""
@@ -196,7 +211,7 @@ Intenção detectada: {intent}
 {periodo_str}
 
 Dados retornados do banco:
-{dados_str}{extras_str}
+{dados_str}{extras_str}{delta_str}
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.{periodo_nota_str}"""
 

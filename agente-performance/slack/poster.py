@@ -160,6 +160,90 @@ def _bloco_context(txt: str) -> dict:
     return {"type": "context", "elements": [{"type": "mrkdwn", "text": txt}]}
 
 
+def _blocos_breakdown_diario(resultado: dict) -> list[dict]:
+    """
+    Item 6: Gera bloco de evolução diária para o relatório semanal.
+    Lê os dados do banco agrupados por dia no período do resultado.
+    """
+    try:
+        import sqlite3 as _sq3
+        from db.connection import DB_PATH as _DBP
+        from datetime import date as _dobj
+        _DIAS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+
+        meta = resultado.get("meta", resultado)
+        d0 = meta.get("data_inicio") or resultado.get("data_inicio")
+        d1 = meta.get("data_fim")    or resultado.get("data_fim")
+        plataforma = meta.get("plataforma", "") or ""
+
+        if not d0 or not d1:
+            return []
+
+        conn = _sq3.connect(str(_DBP))
+        conn.row_factory = _sq3.Row
+
+        if "google" in plataforma.lower() or "gads" in plataforma.lower():
+            tabela = "pod_gads_diario"
+            col_receita = "valor_conversao"
+            col_conv = "conversoes"
+        else:
+            tabela = "ads_diario"
+            col_receita = "valor_compras"
+            col_conv = "compras"
+
+        dias = conn.execute(f"""
+            SELECT
+                data_inicio AS dia,
+                SUM(investimento)    AS invest,
+                SUM({col_receita})   AS receita,
+                SUM({col_conv})      AS conversoes,
+                CASE WHEN SUM(investimento)>0
+                     THEN SUM({col_receita})/SUM(investimento) END AS roas
+            FROM {tabela}
+            WHERE data_inicio BETWEEN ? AND ?
+            GROUP BY data_inicio
+            ORDER BY data_inicio ASC
+        """, (d0, d1)).fetchall()
+        conn.close()
+
+        if not dias:
+            return []
+
+        rows_tabela = []
+        best_roas = max((d["roas"] or 0) for d in dias)
+        worst_roas = min((d["roas"] or 0) for d in dias if (d["roas"] or 0) > 0)
+        for d in dias:
+            try:
+                _obj = _dobj.fromisoformat(d["dia"])
+                dia_label = f"{_DIAS[_obj.weekday()]} {_obj.strftime('%d/%m')}"
+            except Exception:
+                dia_label = d["dia"]
+            roas_v = d["roas"] or 0
+            marker = " 🔥" if roas_v == best_roas else (" 📉" if roas_v == worst_roas else "")
+            rows_tabela.append([
+                dia_label + marker,
+                _fmt_brl(d["invest"]),
+                _fmt_brl(d["receita"]),
+                _fmt_x(roas_v) if roas_v else "—",
+                str(round(d["conversoes"] or 0, 1)),
+            ])
+
+        blocos = [
+            _bloco_divider(),
+            _bloco_section("*📅 Evolução Diária*"),
+            _bloco_section(_tabela_txt(
+                ["Dia", "Invest.", "Receita", "ROAS", "Conv."],
+                rows_tabela,
+            )),
+        ]
+        return blocos
+
+    except Exception as _e:
+        import logging as _l
+        _l.getLogger(__name__).debug("[Breakdown diário] Falhou: %s", _e)
+        return []
+
+
 def _chunks(blocks: list, size: int = 49):
     """Divide lista de blocos em fatias (limite Slack: 50/msg)."""
     for i in range(0, len(blocks), size):
@@ -256,6 +340,13 @@ def _blocos_source_of(resultado: dict, periodo_str: str, tipo_label: str) -> lis
             ),
         ]
 
+
+    # ── Item 6: Evolução diária Source OF ─────────────────────────────────────
+    _meta_sof = {"data_inicio": resultado.get("data_inicio") or resultado.get("meta", {}).get("data_inicio"),
+                 "data_fim":    resultado.get("data_fim")    or resultado.get("meta", {}).get("data_fim"),
+                 "plataforma": "meta_ads"}
+    blocks += _blocos_breakdown_diario({**resultado, "meta": _meta_sof})
+
     # ── Link Notion ───────────────────────────────────────────────────────
     blocks += [
         _bloco_divider(),
@@ -334,6 +425,11 @@ def _blocos_pod(resultado: dict, periodo_str: str, tipo_label: str) -> list[dict
     ]
 
     # ── Campanhas do período ───────────────────────────────────────────────
+
+    # ── Item 6: Evolução diária (POD) — antes das campanhas ─────────────────────
+    _meta_pod = {"data_inicio": resultado.get("data_inicio"), "data_fim": resultado.get("data_fim"), "plataforma": "google_ads"}
+    blocks += _blocos_breakdown_diario({**resultado, "meta": _meta_pod})
+
     campanhas = resultado.get("campanhas", [])
     if campanhas:
         camp_rows = []
