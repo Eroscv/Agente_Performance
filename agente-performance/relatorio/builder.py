@@ -1094,19 +1094,31 @@ def _blocos_alocacao_canais(resumo: dict) -> list[dict]:
     """
     Seção 3 — Alocação Budget por Canal.
     Meta Ads com valor real + Google Ads como placeholder.
+    Inclui coluna % do Total calculada sobre canais com dados reais.
     """
-    header = ["Canal", "Investimento"]
+    meta_invest  = float(resumo.get("total_invest") or 0)
+    # Total considera apenas canais com dados reais (Google pendente = 0)
+    total_canais = meta_invest  # expandir quando Google Ads integrado
+
+    def _pct(valor: float) -> str:
+        if total_canais == 0 or valor == 0:
+            return "—"
+        return f"{valor / total_canais * 100:.1f}%"
+
+    header = ["Canal", "Investimento", "% do Total"]
     table_rows = [
         {"type": "table_row", "table_row": {"cells": [
             [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
         ]}},
         {"type": "table_row", "table_row": {"cells": [
             [{"text": {"content": "Meta Ads"}}],
-            [{"text": {"content": _fmt_brl(resumo.get("total_invest"))}}],
+            [{"text": {"content": _fmt_brl(meta_invest)}}],
+            [{"text": {"content": _pct(meta_invest)}}],
         ]}},
         {"type": "table_row", "table_row": {"cells": [
             [{"text": {"content": "Google Ads"}}],
             [{"text": {"content": "— (integração pendente)"}}],
+            [{"text": {"content": "—"}}],
         ]}},
     ]
 
