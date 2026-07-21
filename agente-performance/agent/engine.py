@@ -548,7 +548,9 @@ def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, 
     # ── Item 13: Aviso quando período foi ajustado ───────────────────────────
     aviso_periodo = None
     if periodo_nota:
-        aviso_periodo = f"⚠️ _{periodo_nota}_"
+        # Remove ⚠️ do início caso o NLP já tenha adicionado
+        nota_limpa = periodo_nota.replace('\u26a0\ufe0f', '').replace('\u26a0', '').strip()
+        aviso_periodo = f"⚠️ _{nota_limpa}_"
 
     # ── Queries SQLite (item 4: CPC + CPM) ────────────────────────────────
     try:
@@ -597,7 +599,8 @@ def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, 
             GROUP BY campanha, tipo_campanha
             ORDER BY invest DESC
         """, (data_inicio, data_fim)).fetchall()
-        conn.close()
+        # Não fechar conexão singleton (get_conn() reutiliza a mesma instância global)
+        # conn.close() — removido para evitar "Cannot operate on a closed database"
 
         def _v(r, k): return r[k] if r and r[k] is not None else None
 
