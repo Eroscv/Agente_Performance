@@ -782,6 +782,72 @@ def _blocos_funil(resumo: dict) -> list[dict]:
 # ── Novas funções para relatório mensal ─────────────────────────────────────
 
 
+def _blocos_metricas_site_semanal(
+    data_inicio: date,
+    data_fim: date,
+    shopify: dict = None,
+    invest_meta: float = None,
+) -> list[dict]:
+    """
+    Seção Métricas de Site para o relatório semanal.
+    Usa dados reais do Shopify quando disponíveis.
+
+    Colunas: Semana | % Conversão | Ticket Médio | N. Usuários |
+             Novos Clientes | CAC | % Desconto | Pedidos > R$300 | Receita Total Shopify
+    """
+    periodo_str = f"{data_inicio.strftime('%d/%m')} a {data_fim.strftime('%d/%m/%Y')}"
+
+    if shopify:
+        receita      = shopify.get("receita_total")
+        ticket       = shopify.get("ticket_medio")
+        novos        = shopify.get("novos_clientes")
+        pct_desc     = shopify.get("pct_desconto")
+        ped_300      = shopify.get("pedidos_acima_300")
+        usuarios     = shopify.get("usuarios")        # None (requer read_analytics)
+        pct_conv     = shopify.get("pct_conversao")   # None (requer read_analytics)
+        # CAC = Invest. Meta ajustado / Novos Clientes
+        from relatorio.regras import spend_com_imposto
+        cac = round(spend_com_imposto(invest_meta) / novos, 2) if (invest_meta and novos) else None
+
+        row = [
+            periodo_str,
+            f"{pct_conv:.2f}%" if pct_conv is not None else "—",
+            _fmt_brl(ticket),
+            str(usuarios) if usuarios is not None else "—",
+            str(novos) if novos is not None else "—",
+            _fmt_brl(cac),
+            f"{pct_desc:.1f}%" if pct_desc is not None else "—",
+            str(ped_300) if ped_300 is not None else "—",
+            _fmt_brl(receita),
+        ]
+        callout = None
+    else:
+        row = [periodo_str, "—", "—", "—", "—", "—", "—", "—", "—"]
+        callout = {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Métricas de site indisponíveis (Shopify offline)."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
+        }
+
+    header = [
+        "Semana", "% Conversão", "Ticket Médio", "N. Usuários",
+        "Novos Clientes", "CAC", "% Desconto", "Pedidos > R$300", "Receita Total Shopify",
+    ]
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "📊 Métricas de Site"}}]}},
+    ]
+    if callout:
+        blocos.append(callout)
+    blocos.append(_mk_table_notion(header, [row]))
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    return blocos
+
+
 def _blocos_analise_ultima_semana(
     data_inicio: date,
     data_fim: date,
@@ -891,29 +957,39 @@ def _blocos_analise_ultima_semana(
             }
         }
 
-    # ── Tabela 1 — Métricas de Site/CRM (9 colunas) ───────────────────────
-    # Receita Shopify: atualmente usa valor_compras do Meta (atribuição).
-    # Quando integração Shopify direta estiver disponível, substituir pela fonte nativa.
+    # ── Tabela 1 — Métricas de Site/CRM (9 colunas) — dados reais Shopify ──
     headers_site = [
         "Semana", "% Conversão", "Ticket Médio",
         "N. Usuários", "Novos Clientes", "CAC", "% Desconto", "Pedidos > R$300",
         "Receita Total Shopify",
     ]
+
+    def _row_site_shopify(label: str, ini: date, fim: date, invest_meta: float) -> list:
+        """Busca métricas de site reais do Shopify para o período."""
+        try:
+            from shopify.client import metricas_site as _ms
+            from relatorio.regras import spend_com_imposto
+            ms   = _ms(ini, fim)
+            novos = ms.get("novos_clientes")
+            cac   = round(spend_com_imposto(invest_meta) / novos, 2) if (invest_meta and novos) else None
+            return [
+                label,
+                f"{ms['pct_conversao']:.2f}%" if ms.get("pct_conversao") is not None else "—",
+                _fmt_brl(ms.get("ticket_medio")),
+                str(ms["usuarios"]) if ms.get("usuarios") is not None else "—",
+                str(novos) if novos is not None else "—",
+                _fmt_brl(cac),
+                f"{ms['pct_desconto']:.1f}%" if ms.get("pct_desconto") is not None else "—",
+                str(ms.get("pedidos_acima_300", "—")),
+                _fmt_brl(ms.get("receita_total")),
+            ]
+        except Exception as _e:
+            logger.warning("[Builder] Shopify metricas_site falhou (%s → %s): %s", ini, fim, _e)
+            return [label, "—", "—", "—", "—", "—", "—", "—", "—"]
+
     rows_site = [
-        [
-            label1,
-            "—",
-            _fmt_brl(s1["ticket"]),  # ticket calculado do SQLite
-            "—", "—", "—", "—", "—",
-            _fmt_brl(s1["receita"]),  # valor_compras Meta (proxy Shopify)
-        ],
-        [
-            label2,
-            "—",
-            _fmt_brl(s2["ticket"]),  # ticket calculado do SQLite
-            "—", "—", "—", "—", "—",
-            _fmt_brl(s2["receita"]),  # valor_compras Meta (proxy Shopify)
-        ],
+        _row_site_shopify(label1, sem1_ini, sem1_fim, s1.get("invest")),
+        _row_site_shopify(label2, sem2_ini, sem2_fim, s2.get("invest")),
     ]
 
     # ── Tabela 2 — Meta Ads por semana (7 colunas) ────────────────────────
@@ -2710,16 +2786,26 @@ def gerar_relatorio_semanal(
                 pedidos_por_estado   as _shopify_estado,
                 recompras_por_sku    as _shopify_recompras,
                 assiduidade_clientes as _shopify_assiduidade,
+                metricas_site        as _shopify_metricas_site,
             )
             logger.info('[Builder] Buscando dados Shopify %s → %s', data_inicio, data_fim)
-            dados_sku         = _shopify_sku(data_inicio, data_fim)
-            dados_estado      = _shopify_estado(data_inicio, data_fim)
-            dados_recompras   = _shopify_recompras(data_inicio, data_fim)
-            dados_assiduidade = _shopify_assiduidade(data_inicio, data_fim)
+            dados_sku            = _shopify_sku(data_inicio, data_fim)
+            dados_estado         = _shopify_estado(data_inicio, data_fim)
+            dados_recompras      = _shopify_recompras(data_inicio, data_fim)
+            dados_assiduidade    = _shopify_assiduidade(data_inicio, data_fim)
+            dados_metricas_site  = _shopify_metricas_site(data_inicio, data_fim)
             logger.info('[Builder] Shopify OK — %d SKUs, %d estados', len(dados_sku), len(dados_estado))
         except Exception as _e:
             logger.warning('[Builder] Shopify indisponível: %s — usando placeholder', _e)
-            dados_sku = dados_estado = dados_recompras = dados_assiduidade = None
+            dados_sku = dados_estado = dados_recompras = dados_assiduidade = dados_metricas_site = None
+
+        # Métricas de Site (Shopify)
+        blocos += _blocos_metricas_site_semanal(
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            shopify=dados_metricas_site,
+            invest_meta=resumo.get('total_invest'),
+        )
 
         # Pedidos por SKU
         blocos += _blocos_pedidos_sku(dados_sku)

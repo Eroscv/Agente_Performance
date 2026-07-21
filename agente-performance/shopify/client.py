@@ -330,6 +330,76 @@ def assiduidade_clientes(
     return resultado
 
 
+def metricas_site(
+    data_inicio: date,
+    data_fim: date,
+) -> dict:
+    """
+    Métricas de site/loja para a tabela 'Métricas de Site' do relatório.
+
+    Calcula diretamente dos pedidos Shopify:
+      - receita_total, total_pedidos, ticket_medio
+      - novos_clientes, recompradores, taxa_recompra_pct
+      - pct_desconto (% da receita que veio com desconto)
+      - pedidos_acima_300
+      - cac (calculado externamente: invest_meta / novos_clientes)
+
+    N. Usuários e % Conversão não estão disponíveis via REST API Shopify
+    (só via Analytics/GraphQL Admin com permissão read_analytics).
+    """
+    receita        = 0.0
+    total_pedidos  = 0
+    total_desconto = 0.0
+    pedidos_300    = 0
+    clientes_unicos: set[int] = set()
+    pedidos_buffer: list[dict] = []
+
+    for pedido in _paginar_pedidos(
+        data_inicio, data_fim,
+        campos="id,total_price,total_discounts,customer",
+    ):
+        total_pedidos  += 1
+        preco           = float(pedido.get("total_price") or 0)
+        desconto        = float(pedido.get("total_discounts") or 0)
+        receita        += preco
+        total_desconto += desconto
+        if preco > 300:
+            pedidos_300 += 1
+
+        cid = (pedido.get("customer") or {}).get("id")
+        if cid:
+            clientes_unicos.add(cid)
+            pedidos_buffer.append(pedido)
+
+    # Lookup orders_count real
+    oc_map        = _orders_count_por_cliente(list(clientes_unicos))
+    novos         = sum(1 for p in pedidos_buffer if oc_map.get((p.get("customer") or {}).get("id"), 1) == 1)
+    recompradores = sum(1 for p in pedidos_buffer if oc_map.get((p.get("customer") or {}).get("id"), 1) > 1)
+
+    ticket_medio     = round(receita / total_pedidos, 2) if total_pedidos else None
+    taxa_recompra    = round(recompradores / total_pedidos * 100, 2) if total_pedidos else None
+    pct_desconto     = round(total_desconto / receita * 100, 2) if receita else None
+
+    logger.info(
+        "[Shopify] metricas_site: %d pedidos | receita R$%.2f | novos %d | recompra %.1f%%",
+        total_pedidos, receita, novos, taxa_recompra or 0,
+    )
+    return {
+        "receita_total":     round(receita, 2),
+        "total_pedidos":     total_pedidos,
+        "ticket_medio":      ticket_medio,
+        "novos_clientes":    novos,
+        "recompradores":     recompradores,
+        "taxa_recompra_pct": taxa_recompra,
+        "pct_desconto":      pct_desconto,
+        "pedidos_acima_300": pedidos_300,
+        "total_desconto":    round(total_desconto, 2),
+        # N. Usuários e % Conversão: indisponíveis via REST (requer read_analytics)
+        "usuarios":          None,
+        "pct_conversao":     None,
+    }
+
+
 def receita_total(
     data_inicio: date,
     data_fim: date,
