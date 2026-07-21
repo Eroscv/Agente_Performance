@@ -216,8 +216,10 @@ def main():
                 raise RuntimeError(res_source["erro"])
 
             resultados["source_of"] = res_source
-            msg = _resumo_source_of(res_source, periodo_str, tipo_label)
-            ok = postar_slack(msg)
+            from slack.poster import postar_relatorio, postar_webhook_fallback
+            ok = postar_relatorio(res_source, periodo_str, tipo_label, cliente="source_of")
+            if not ok:
+                ok = postar_webhook_fallback(_resumo_source_of(res_source, periodo_str, tipo_label))
             logger.info("[Source OF] Slack: %s | Notion: %s",
                         "OK" if ok else "FALHOU", res_source.get("url", "—"))
 
@@ -246,8 +248,10 @@ def main():
                 raise RuntimeError(res_pod["erro"])
 
             resultados["pod_kombucha"] = res_pod
-            msg = _resumo_pod(res_pod, periodo_str, tipo_label)
-            ok = postar_slack(msg)
+            from slack.poster import postar_relatorio, postar_webhook_fallback
+            ok = postar_relatorio(res_pod, periodo_str, tipo_label, cliente="pod_kombucha")
+            if not ok:
+                ok = postar_webhook_fallback(_resumo_pod(res_pod, periodo_str, tipo_label))
             logger.info("[POD] Slack: %s | Notion: %s",
                         "OK" if ok else "FALHOU", res_pod.get("url", "—"))
 

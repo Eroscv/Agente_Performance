@@ -519,6 +519,7 @@ def gerar_relatorio_pod(
             "titulo": titulo,
             "periodo": periodo_str,
             "resumo": resumo,
+            "campanhas": campanhas,
             "blocos": blocos,
             "erro": None,
         }
@@ -534,12 +535,13 @@ def gerar_relatorio_pod(
             cliente_key="pod_kombucha",
         )
         return {
-            "titulo":  titulo,
-            "periodo": periodo_str,
-            "resumo":  resumo,
-            "page_id": resultado.get("page_id"),
-            "url":     resultado.get("url"),
-            "erro":    None,
+            "titulo":    titulo,
+            "periodo":   periodo_str,
+            "resumo":    resumo,
+            "campanhas": campanhas,
+            "page_id":   resultado.get("page_id"),
+            "url":       resultado.get("url"),
+            "erro":      None,
         }
     except Exception as e:
         logger.error("[POD] Erro ao publicar no Notion: %s", e)
