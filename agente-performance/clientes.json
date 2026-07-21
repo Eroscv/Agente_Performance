@@ -1,0 +1,41 @@
+{
+  "_comentario": "Registry de clientes do Agente de Performance Guará. Adicionar novo cliente = novo bloco aqui, sem mexer em código.",
+  "clientes": {
+    "source_of": {
+      "nome":           "Source OF",
+      "ativo":          true,
+      "plataforma":     "meta_ads",
+      "loader":         "db.loader_sheets",
+      "loader_fn":      "carregar_sheets",
+      "builder":        "relatorio.builder",
+      "builder_semanal":"gerar_relatorio_semanal",
+      "builder_mensal": "gerar_relatorio_mensal",
+      "notion_key":     "source_of",
+      "slack_emoji":    "🔵",
+      "slack_label":    "Source OF · Meta Ads",
+      "tabela_db":      "campanhas",
+      "schedules": {
+        "semanal": "0 8 * * 1",
+        "mensal":  "0 8 1 * *"
+      }
+    },
+    "pod_kombucha": {
+      "nome":           "POD Kombucha",
+      "ativo":          true,
+      "plataforma":     "google_ads",
+      "loader":         "db.loader_pod",
+      "loader_fn":      "carregar_pod",
+      "builder":        "relatorio.builder_pod",
+      "builder_semanal":"gerar_relatorio_semanal_pod",
+      "builder_mensal": "gerar_relatorio_mensal_pod",
+      "notion_key":     "pod_kombucha",
+      "slack_emoji":    "🟢",
+      "slack_label":    "POD Kombucha · Google Ads",
+      "tabela_db":      "pod_gads_diario",
+      "schedules": {
+        "semanal": "0 8 * * 1",
+        "mensal":  "0 8 1 * *"
+      }
+    }
+  }
+}

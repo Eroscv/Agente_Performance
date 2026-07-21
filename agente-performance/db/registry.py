@@ -1,0 +1,89 @@
+"""
+db/registry.py
+
+Registry de clientes — carrega clientes.json e expõe funções de acesso.
+
+Para adicionar um novo cliente:
+  1. Adicionar bloco em clientes.json
+  2. Criar loader e builder correspondentes
+  3. Pronto — nenhum script precisa ser alterado
+
+Uso:
+    from db.registry import listar_clientes, get_cliente, get_clientes_ativos
+"""
+
+import json
+import logging
+from importlib import import_module
+from pathlib import Path
+from typing import Callable
+
+logger = logging.getLogger(__name__)
+
+_REGISTRY_FILE = Path(__file__).parent.parent / "clientes.json"
+_cache: dict | None = None
+
+
+def _load() -> dict:
+    global _cache
+    if _cache is None:
+        try:
+            _cache = json.loads(_REGISTRY_FILE.read_text(encoding="utf-8"))
+        except Exception as e:
+            logger.error("[Registry] Falha ao carregar clientes.json: %s", e)
+            _cache = {"clientes": {}}
+    return _cache
+
+
+def listar_clientes() -> dict:
+    """Retorna todos os clientes (ativos e inativos)."""
+    return _load().get("clientes", {})
+
+
+def get_clientes_ativos() -> dict:
+    """Retorna apenas clientes com ativo=true."""
+    return {k: v for k, v in listar_clientes().items() if v.get("ativo", True)}
+
+
+def get_cliente(cliente_key: str) -> dict:
+    """Retorna configuração de um cliente específico. Lança KeyError se não encontrado."""
+    clientes = listar_clientes()
+    if cliente_key not in clientes:
+        raise KeyError(f"Cliente '{cliente_key}' não encontrado. Disponíveis: {list(clientes)}")
+    return clientes[cliente_key]
+
+
+def get_builder(cliente_key: str, tipo: str = "semanal") -> Callable:
+    """
+    Importa e retorna a função builder do cliente.
+
+    Args:
+        cliente_key: chave do cliente (ex: 'source_of')
+        tipo:        'semanal' ou 'mensal'
+
+    Returns:
+        Função builder pronta para chamar
+    """
+    cfg = get_cliente(cliente_key)
+    fn_name = cfg.get(f"builder_{tipo}")
+    modulo_path = cfg.get("builder")
+    if not fn_name or not modulo_path:
+        raise ValueError(f"Builder '{tipo}' não configurado para '{cliente_key}'")
+    modulo = import_module(modulo_path)
+    return getattr(modulo, fn_name)
+
+
+def get_loader(cliente_key: str) -> Callable:
+    """
+    Importa e retorna a função loader do cliente.
+
+    Returns:
+        Função loader pronta para chamar (sem argumentos)
+    """
+    cfg = get_cliente(cliente_key)
+    modulo_path = cfg.get("loader")
+    fn_name = cfg.get("loader_fn")
+    if not modulo_path or not fn_name:
+        raise ValueError(f"Loader não configurado para '{cliente_key}'")
+    modulo = import_module(modulo_path)
+    return getattr(modulo, fn_name)
