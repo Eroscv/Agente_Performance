@@ -1803,11 +1803,18 @@ def _blocos_rentabilidade_aquisicao(
     ]
 
 
-def _blocos_pedidos_sku() -> list[dict]:
+def _blocos_pedidos_sku(
+    dados_sku: list[dict] = None,
+) -> list[dict]:
     """
-    Seção — Pedidos por SKU (hardcoded, ordem de popularidade histórica).
+    Seção — Pedidos por SKU.
+
+    Tabela completa: SKU | Pedidos | Receita | % Pedidos | % Receita
+
+    dados_sku: lista de dicts com chaves sku, pedidos, receita.
+               Se None ou vazio, exibe estrutura com placeholder (integração Shopify pendente).
     """
-    skus = [
+    SKUS_HISTORICOS = [
         "Kit Completo Source of",
         "Duo - Água Micelar Demaquilante 200 ml",
         "Trio - Hidratação Corporal",
@@ -1828,21 +1835,56 @@ def _blocos_pedidos_sku() -> list[dict]:
         "Gel Creme Facial 50g",
         "Trio - 3 Águas Micelar Demaquilante 200 ml cada",
     ]
-    rows = [[s] for s in skus]
-    return [
-        {"object": "block", "type": "heading_2",
-         "heading_2": {"rich_text": [{"text": {"content": "📦 Pedidos por SKU"}}]}},
-        {
+
+    header = ["SKU", "Pedidos", "Receita", "% Pedidos", "% Receita"]
+
+    tem_dados = bool(dados_sku)
+
+    if tem_dados:
+        total_pedidos = sum(int(d.get("pedidos") or 0) for d in dados_sku)
+        total_receita = sum(float(d.get("receita") or 0) for d in dados_sku)
+        # Ordena por pedidos desc
+        dados_sku = sorted(dados_sku, key=lambda d: int(d.get("pedidos") or 0), reverse=True)
+        rows = [
+            [
+                d.get("sku", "—"),
+                str(int(d.get("pedidos") or 0)),
+                _fmt_brl(d.get("receita")),
+                f"{int(d.get('pedidos') or 0) / total_pedidos * 100:.1f}%" if total_pedidos else "—",
+                f"{float(d.get('receita') or 0) / total_receita * 100:.1f}%" if total_receita else "—",
+            ]
+            for d in dados_sku
+        ]
+        # Linha de total
+        rows.append([
+            "TOTAL",
+            str(total_pedidos),
+            _fmt_brl(total_receita),
+            "100.0%",
+            "100.0%",
+        ])
+        callout = None
+    else:
+        # Placeholder: SKUs históricos sem volumes
+        rows = [[sku, "—", "—", "—", "—"] for sku in SKUS_HISTORICOS]
+        callout = {
             "object": "block", "type": "callout",
             "callout": {
                 "rich_text": [{"text": {"content": "⏳ Volumes de pedidos pendentes de integração Shopify. SKUs listados por ordem de popularidade histórica."}}],
                 "icon": {"type": "emoji", "emoji": "⏳"},
                 "color": "yellow_background",
             }
-        },
-        _mk_table_notion(["SKU"], rows),
-        {"object": "block", "type": "divider", "divider": {}},
+        }
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "📦 Pedidos por SKU"}}]}},
     ]
+    if callout:
+        blocos.append(callout)
+    blocos.append(_mk_table_notion(header, rows))
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    return blocos
 
 
 def _blocos_pedidos_estado() -> list[dict]:
