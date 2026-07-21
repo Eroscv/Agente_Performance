@@ -377,30 +377,39 @@ def postar_relatorio(
     resultado: dict,
     periodo_str: str,
     tipo_label: str,
-    cliente: str,          # "source_of" | "pod_kombucha"
+    cliente: str,          # chave do registry (ex: "source_of", "pod_kombucha")
     channel: str = None,
+    delta: dict = None,    # dict com {metrica: (atual, anterior, maior_melhor)} para delta na âncora
 ) -> bool:
     """
     Posta relatório no Slack em 2 etapas:
-      1. Mensagem âncora no canal
+      1. Mensagem âncora no canal (label e emoji do registry + delta se fornecido)
       2. Relatório DETALHADO como reply na thread da âncora
-
-    Args:
-        resultado:   dict retornado por gerar_relatorio_* (resumo, url, campanhas, shopify)
-        periodo_str: ex: "13/07/2026 → 19/07/2026"
-        tipo_label:  "Semanal" | "Mensal" | "Diário"
-        cliente:     "source_of" | "pod_kombucha"
-        channel:     canal Slack (usa env se None)
     """
+    from db.registry import get_cliente as _get_cfg
+    try:
+        cfg = _get_cfg(cliente)
+        icon      = cfg.get("slack_emoji", "📊")
+        label     = cfg.get("slack_label", cfg.get("nome", cliente))
+    except KeyError:
+        # Fallback se cliente não estiver no registry
+        icon  = "📊"
+        label = cliente.replace("_", " ").title()
+
     ch = (channel or _channel()).lstrip("#")
 
     # ── 1. Mensagem âncora ────────────────────────────────────────────────
-    if cliente == "source_of":
-        ancora_txt = f"📊 *Relatório {tipo_label} · Source OF · Meta Ads*\n_{periodo_str}_"
-        icon = "🔵"
-    else:
-        ancora_txt = f"📊 *Relatório {tipo_label} · POD Kombucha · Google Ads*\n_{periodo_str}_"
-        icon = "🟢"
+    ancora_txt = f"📊 *Relatório {tipo_label} · {label}*\n_{periodo_str}_"
+
+    # Adiciona delta de KPIs na âncora (ex: ROAS 5,52x ↑ +12% vs semana anterior)
+    if delta:
+        linhas_delta = []
+        for metrica, (atual, anterior, maior_melhor) in delta.items():
+            d = _delta(atual, anterior, maior_melhor)
+            if d:
+                linhas_delta.append(f"{metrica}: *{_fmt_x(atual) if isinstance(atual, float) else atual}* {d}")
+        if linhas_delta:
+            ancora_txt += "\n" + " · ".join(linhas_delta[:3])  # máx 3 KPIs na âncora
 
     ancora_resp = _post_api("chat.postMessage", {
         "channel": ch,
@@ -416,10 +425,18 @@ def postar_relatorio(
     logger.info("[Slack] Âncora postada: ts=%s canal=%s", thread_ts, ch)
 
     # ── 2. Relatório detalhado na thread ──────────────────────────────────
-    if cliente == "source_of":
-        blocks = _blocos_source_of(resultado, periodo_str, tipo_label)
-    else:
+    # Escolhe builder por plataforma (extensível via registry)
+    plataforma = ""
+    try:
+        from db.registry import get_cliente as _get_cfg2
+        plataforma = _get_cfg2(cliente).get("plataforma", "")
+    except Exception:
+        pass
+
+    if plataforma == "google_ads":
         blocks = _blocos_pod(resultado, periodo_str, tipo_label)
+    else:
+        blocks = _blocos_source_of(resultado, periodo_str, tipo_label)
 
     # Slack permite 50 blocos/mensagem — envia em fatias se necessário
     primeira = True

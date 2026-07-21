@@ -361,8 +361,19 @@ def consultar(
 ) -> dict[str, Any]:
     """
     Processa uma pergunta em linguagem natural.
+    Detecta automaticamente o cliente (Source OF vs POD Kombucha) pelo contexto da pergunta.
     Usa cache, log, validação de campanha e sugestão de vazio.
     """
+    import re as _re
+
+    # ── Item 8: Detecta cliente POD Kombucha na pergunta ────────────────────────
+    # Se a pergunta mencionar POD, Kombucha, Google Ads do POD etc., roteia para banco POD
+    _POD_PATTERN = _re.compile(
+        r"\b(pod|kombucha|pod kombucha|gads pod|google ads.{0,10}pod|pod.{0,10}google)\b",
+        _re.IGNORECASE,
+    )
+    if _POD_PATTERN.search(pergunta):
+        return _consultar_pod(pergunta, thread_ts=thread_ts)
     import time
     t_inicio = time.time()
 
@@ -476,3 +487,105 @@ def consultar_sql(sql: str) -> list[dict]:
     if not sql_clean.upper().startswith("SELECT"):
         raise ValueError("Apenas SELECT é permitido via consultar_sql()")
     return raw_query(sql_clean)
+
+
+def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, Any]:
+    """
+    Item 8 — Consulta dados do POD Kombucha (Google Ads) em linguagem natural.
+    Detecta período via NLP e retorna métricas do banco pod_gads_diario.
+    """
+    import re as _re
+    from datetime import date, timedelta
+
+    hoje = date.today()
+
+    # NLP leve de período (reutiliza padrões do NLP principal)
+    try:
+        from agent.nlp import interpretar
+        params      = interpretar(pergunta, [], "")
+        data_inicio = params.get("data_inicio") or str(hoje - timedelta(days=hoje.weekday() + 7))
+        data_fim    = params.get("data_fim")    or str(hoje - timedelta(days=hoje.weekday() + 1))
+    except Exception:
+        data_inicio = str(hoje - timedelta(days=7))
+        data_fim    = str(hoje)
+
+    try:
+        from db.connection import get_conn, DB_PATH
+        import sqlite3 as _sqlite3
+        conn = get_conn()
+        conn.row_factory = _sqlite3.Row
+
+        # Resumo geral do período
+        row = conn.execute("""
+            SELECT
+                COUNT(DISTINCT campanha)          AS num_campanhas,
+                SUM(investimento)                  AS invest,
+                SUM(impressoes)                    AS impressoes,
+                SUM(cliques)                       AS cliques,
+                SUM(conversoes)                    AS conversoes,
+                SUM(valor_conversao)               AS receita,
+                CASE WHEN SUM(investimento) > 0
+                     THEN SUM(valor_conversao) / SUM(investimento) END AS roas,
+                CASE WHEN SUM(conversoes) > 0
+                     THEN SUM(investimento) / SUM(conversoes) END AS cpa,
+                CASE WHEN SUM(impressoes) > 0
+                     THEN CAST(SUM(cliques) AS REAL) / SUM(impressoes) * 100 END AS ctr
+            FROM pod_gads_diario
+            WHERE data_inicio BETWEEN ? AND ?
+        """, (data_inicio, data_fim)).fetchone()
+
+        # Campanhas do período
+        campanhas = conn.execute("""
+            SELECT
+                campanha,
+                tipo_campanha,
+                SUM(investimento) AS invest,
+                SUM(cliques) AS cliques,
+                SUM(conversoes) AS conversoes,
+                SUM(valor_conversao) AS receita,
+                CASE WHEN SUM(investimento) > 0
+                     THEN SUM(valor_conversao) / SUM(investimento) END AS roas
+            FROM pod_gads_diario
+            WHERE data_inicio BETWEEN ? AND ?
+              AND investimento > 0
+            GROUP BY campanha, tipo_campanha
+            ORDER BY invest DESC
+        """, (data_inicio, data_fim)).fetchall()
+        conn.close()
+
+        dados = {
+            "cliente":      "POD Kombucha",
+            "plataforma":   "Google Ads",
+            "data_inicio":  data_inicio,
+            "data_fim":     data_fim,
+            "num_campanhas": row["num_campanhas"] if row else 0,
+            "invest":       row["invest"]       if row else None,
+            "impressoes":   row["impressoes"]   if row else None,
+            "cliques":      row["cliques"]      if row else None,
+            "conversoes":   row["conversoes"]   if row else None,
+            "receita":      row["receita"]      if row else None,
+            "roas":         row["roas"]         if row else None,
+            "cpa":          row["cpa"]          if row else None,
+            "ctr":          row["ctr"]          if row else None,
+            "campanhas":    [dict(c) for c in campanhas],
+        }
+
+    except Exception as e:
+        logger.error("[POD] Erro ao consultar banco: %s", e)
+        dados = {"cliente": "POD Kombucha", "erro": str(e)}
+
+    return {
+        "intent":      "resumo_geral",
+        "intents":     ["resumo_geral"],
+        "dados":       dados,
+        "dados_extra": {},
+        "meta": {
+            "intent":      "resumo_geral",
+            "intents":     ["resumo_geral"],
+            "cliente":     "pod_kombucha",
+            "data_inicio": data_inicio,
+            "data_fim":    data_fim,
+            "limit":       10,
+        },
+        "aviso_vazio": None,
+    }
