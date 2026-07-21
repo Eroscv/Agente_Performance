@@ -646,24 +646,33 @@ def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anter
         return f"{sign}{var:.1f}%"
 
     metricas = [
-        ("ROAS",     resumo_atual.get("roas"),          resumo_anterior.get("roas"),          _fmt_x),
-        ("Invest.",  resumo_atual.get("total_invest"),   resumo_anterior.get("total_invest"),  _fmt_brl),
-        ("Receita",  resumo_atual.get("total_receita"),  resumo_anterior.get("total_receita"), _fmt_brl),
-        ("Compras",  resumo_atual.get("total_compras"),  resumo_anterior.get("total_compras"), lambda v: str(int(v)) if v is not None else "—"),
-        ("CPA",      resumo_atual.get("cpa"),            resumo_anterior.get("cpa"),           _fmt_brl),
-        ("CTR",      resumo_atual.get("ctr"),            resumo_anterior.get("ctr"),           _fmt_pct),
-        ("CPC",      resumo_atual.get("cpc_medio"),      resumo_anterior.get("cpc_medio"),     _fmt_brl),
-        ("CPM",      resumo_atual.get("cpm_medio"),      resumo_anterior.get("cpm_medio"),     _fmt_brl),
+        ("ROAS",           resumo_atual.get("roas"),          resumo_anterior.get("roas"),          _fmt_x),
+        ("Invest. Meta",   resumo_atual.get("total_invest"),   resumo_anterior.get("total_invest"),  _fmt_brl),
+        ("Invest. Meta + Imposto", resumo_atual.get("invest_imp"), resumo_anterior.get("invest_imp"), _fmt_brl),
+        ("Invest. Total (Meta+Google)",
+            (resumo_atual.get("invest_imp") or 0) + (resumo_atual.get("invest_google") or 0) or None,
+            (resumo_anterior.get("invest_imp") or 0) + (resumo_anterior.get("invest_google") or 0) or None,
+            _fmt_brl),
+        ("Receita Meta",   resumo_atual.get("total_receita"),  resumo_anterior.get("total_receita"), _fmt_brl),
+        ("Receita Shopify",resumo_atual.get("receita_shopify"),resumo_anterior.get("receita_shopify"),_fmt_brl),
+        ("MER",
+            round((resumo_atual.get("receita_shopify") or 0) /
+                  ((resumo_atual.get("invest_imp") or 0) + (resumo_atual.get("invest_google") or 0))
+                  , 2)
+            if ((resumo_atual.get("invest_imp") or 0) + (resumo_atual.get("invest_google") or 0)) > 0
+               and resumo_atual.get("receita_shopify") else None,
+            round((resumo_anterior.get("receita_shopify") or 0) /
+                  ((resumo_anterior.get("invest_imp") or 0) + (resumo_anterior.get("invest_google") or 0))
+                  , 2)
+            if ((resumo_anterior.get("invest_imp") or 0) + (resumo_anterior.get("invest_google") or 0)) > 0
+               and resumo_anterior.get("receita_shopify") else None,
+            _fmt_x),
+        ("Compras",        resumo_atual.get("total_compras"),  resumo_anterior.get("total_compras"), lambda v: str(int(v)) if v is not None else "—"),
+        ("CPA",            resumo_atual.get("cpa"),            resumo_anterior.get("cpa"),           _fmt_brl),
+        ("CTR",            resumo_atual.get("ctr"),            resumo_anterior.get("ctr"),           _fmt_pct),
+        ("CPC",            resumo_atual.get("cpc_medio"),      resumo_anterior.get("cpc_medio"),     _fmt_brl),
+        ("CPM",            resumo_atual.get("cpm_medio"),      resumo_anterior.get("cpm_medio"),     _fmt_brl),
     ]
-
-    receita_atrib = resumo_atual.get("receita_atribuida", 0) or 0
-    if receita_atrib > 0:
-        metricas.append((
-            "Receita Atribuída (cross)",
-            receita_atrib,
-            resumo_anterior.get("receita_atribuida", 0) or 0,
-            _fmt_brl,
-        ))
 
     header = ["Métrica", "Atual", "Anterior", "Variação", "Tendência"]
     table_rows = [
@@ -2493,60 +2502,95 @@ _MESES_PT = {
 
 def _blocos_tendencia_mensal(data_ref: date, meses: int = 4, db_path: Path = DB_PATH) -> list[dict]:
     """
-    Tendência dos últimos N meses completos antes de data_ref (MoM).
-    Usa tabela Notion com colunas: Mês | Invest. | ROAS | Compras | Receita.
-    Dados calculados direto do SQLite agregando por mês.
+    Evolução mensal desde Jan/2026 até o mês anterior a data_ref.
+    Colunas: Mês | Invest. Meta | Invest.+Imposto | Receita Meta | Receita Shopify | MER | ROAS | Compras
+    Dados Meta: SQLite. Receita Shopify: Shopify API (com fallback para —).
     """
     from calendar import monthrange
 
-    # Monta lista de meses: os `meses` meses anteriores ao mês de data_ref
+    # Sempre de Jan/2026 até o mês anterior a data_ref
+    ano_ini, mes_ini = 2026, 1
+    ano_fim, mes_fim = data_ref.year, data_ref.month
+    mes_fim -= 1
+    if mes_fim == 0:
+        mes_fim = 12
+        ano_fim -= 1
+
     registros = []
-    ano, mes = data_ref.year, data_ref.month
-    for _ in range(meses):
-        mes -= 1
-        if mes == 0:
-            mes = 12
-            ano -= 1
+    ano, mes = ano_ini, mes_ini
+    while (ano, mes) <= (ano_fim, mes_fim):
         _, ultimo_dia = monthrange(ano, mes)
         ini = date(ano, mes, 1)
         fim = date(ano, mes, ultimo_dia)
         registros.append((ano, mes, ini, fim))
+        mes += 1
+        if mes > 12:
+            mes = 1
+            ano += 1
 
-    registros.reverse()  # ordem cronológica
+    if not registros:
+        return []
 
-    # Busca dados para cada mês no SQLite
+    # Busca receita Shopify em paralelo para todos os meses (reduz latência N*serial → ~1 chamada paralela)
+    shopify_receitas: dict[tuple, float] = {}
+    try:
+        from shopify.client import receita_total as _shopify_receita
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        def _fetch_shopify(ini_fim):
+            ini_m, fim_m = ini_fim
+            return ini_fim, _shopify_receita(ini_m, fim_m)
+        with ThreadPoolExecutor(max_workers=4) as ex:
+            futures = {ex.submit(_fetch_shopify, (ini, fim)): (ini, fim) for _, _, ini, fim in registros}
+            for fut in as_completed(futures):
+                try:
+                    key, val = fut.result()
+                    shopify_receitas[key] = val
+                except Exception:
+                    pass
+    except Exception:
+        pass  # Shopify indisponível — colunas ficarão com —
+
     conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
     conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
+    cur  = conn.cursor()
 
     serie = []
     for ano_m, mes_m, ini, fim in registros:
         cur.execute("""
             SELECT
-                SUM(investimento)         AS invest,
-                SUM(COALESCE(compras,0))  AS compras,
-                SUM(COALESCE(valor_compras,0)) AS receita
+                SUM(investimento)              AS invest,
+                SUM(COALESCE(compras,0))       AS compras,
+                SUM(COALESCE(valor_compras,0)) AS receita_meta
             FROM campanhas
             WHERE data_inicio >= ? AND data_fim <= ?
         """, (ini.isoformat(), fim.isoformat()))
-        row = cur.fetchone()
-        invest  = float(row["invest"] or 0)
-        compras = int(row["compras"] or 0)
-        receita = float(row["receita"] or 0)
-        roas    = round(receita / invest, 2) if invest > 0 else None
+        row          = cur.fetchone()
+        invest       = float(row["invest"] or 0)
+        compras      = int(row["compras"] or 0)
+        receita_meta = float(row["receita_meta"] or 0)
+        invest_imp   = spend_com_imposto(invest)
+        roas         = round(receita_meta / invest, 2) if invest > 0 else None
+
+        receita_shopify = shopify_receitas.get((ini, fim))
+        invest_total    = invest_imp  # Google: 0 por ora
+        mer = round(receita_shopify / invest_total, 2) if (receita_shopify and invest_total > 0) else None
+
         serie.append({
-            "mes_label": f"{_MESES_PT[mes_m]}/{ano_m}",
-            "invest":    invest,
-            "roas":      roas,
-            "compras":   compras,
-            "receita":   receita,
+            "mes_label":       f"{_MESES_PT[mes_m]}/{ano_m}",
+            "invest":          invest,
+            "invest_imp":      invest_imp,
+            "receita_meta":    receita_meta,
+            "receita_shopify": receita_shopify,
+            "mer":             mer,
+            "roas":            roas,
+            "compras":         compras,
         })
     conn.close()
 
     if not any(s["invest"] > 0 for s in serie):
         return []
 
-    header = ["Mês", "Invest.", "ROAS", "Compras", "Receita"]
+    header = ["Mês", "Invest. Meta", "Invest.+Imposto", "Receita Meta", "Receita Shopify", "MER", "ROAS", "Compras"]
     table_rows = [
         {"type": "table_row", "table_row": {"cells": [
             [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
@@ -2556,14 +2600,18 @@ def _blocos_tendencia_mensal(data_ref: date, meses: int = 4, db_path: Path = DB_
         table_rows.append({"type": "table_row", "table_row": {"cells": [
             [{"text": {"content": s["mes_label"]}}],
             [{"text": {"content": _fmt_brl(s["invest"])}}],
+            [{"text": {"content": _fmt_brl(s["invest_imp"])}}],
+            [{"text": {"content": _fmt_brl(s["receita_meta"])}}],
+            [{"text": {"content": _fmt_brl(s["receita_shopify"]) if s["receita_shopify"] is not None else "—"}}],
+            [{"text": {"content": _fmt_x(s["mer"]) if s["mer"] is not None else "—"}}],
             [{"text": {"content": _fmt_x(s["roas"])}}],
             [{"text": {"content": str(s["compras"]) if s["compras"] else "—"}}],
-            [{"text": {"content": _fmt_brl(s["receita"])}}],
         ]}})
 
+    n_meses = len(serie)
     return [
         {"object": "block", "type": "heading_2",
-         "heading_2": {"rich_text": [{"text": {"content": f"📅 Tendência — Últimos {meses} Meses"}}]}},
+         "heading_2": {"rich_text": [{"text": {"content": f"📅 Evolução Mensal — Jan/2026 ({n_meses} meses)"}}]}},
         {"object": "block", "type": "table", "table": {
             "table_width": len(header),
             "has_column_header": True,
@@ -2779,6 +2827,7 @@ def gerar_relatorio_semanal(
         if resumo_anterior:
             blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
         blocos += _blocos_tendencia_semanal()
+        blocos += _blocos_tendencia_mensal(data_fim, db_path=db_path)
         blocos += _blocos_alocacao(campanhas)
 
         # ── Dados Shopify (reais) ─────────────────────────────────────
