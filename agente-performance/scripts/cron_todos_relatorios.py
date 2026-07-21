@@ -252,17 +252,87 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
         conn.close()
 
         if rows:
-            linhas = [f"{emoji} *{nome} · ⚠️ Alerta de ROAS — {data_inicio.strftime('%d/%m')} a {data_fim.strftime('%d/%m/%Y')}*"]
-            linhas.append(f"_Campanhas com ROAS < {threshold}x:_\n")
-            for r in rows:
-                roas_str = f"{r['roas']:.2f}x" if r["roas"] else "—"
-                linhas.append(f"• *{r['campanha'][:40]}* — Invest.: {_fmt_brl(r['invest'])} · ROAS: {roas_str}")
-            alertas.append("\n".join(linhas))
+            alertas.append({
+                "cliente_key": cliente_key,
+                "nome":        nome,
+                "emoji":       emoji,
+                "threshold":   threshold,
+                "periodo":     f"{data_inicio.strftime('%d/%m')} a {data_fim.strftime('%d/%m/%Y')}",
+                "campanhas":   [dict(r) for r in rows],
+            })
 
     except Exception as e:
         logger.warning("[Alertas] Erro ao verificar alertas para %s: %s", cliente_key, e)
 
     return alertas
+
+
+def postar_alerta_ancorado(alerta: dict, channel: str = None) -> bool:
+    """
+    Posta alerta de ROAS com estrutura âncora + thread:
+      - Âncora: ⚠️ Alerta ROAS · Source OF · 13/07 → 19/07
+      - Thread: tabela com campanhas problemáticas detalhada
+    """
+    import requests as _req
+    from slack.poster import _post_api, _channel, _tabela_txt, _bloco_header, _bloco_section, _bloco_divider, _bloco_context, _chunks
+    import time
+
+    ch       = (channel or _channel()).lstrip("#")
+    nome     = alerta["nome"]
+    emoji    = alerta["emoji"]
+    periodo  = alerta["periodo"]
+    thresh   = alerta["threshold"]
+    camps    = alerta["campanhas"]
+
+    # ── 1. Âncora ──────────────────────────────────────────────────────────
+    ancora = f"⚠️ *Alerta de ROAS · {nome}*\n_{periodo} · {len(camps)} campanha(s) abaixo de {thresh}x_"
+    resp = _post_api("chat.postMessage", {"channel": ch, "text": ancora, "mrkdwn": True})
+    if not resp.get("ok"):
+        logger.error("[Alerta] Falha ao postar âncora: %s", resp.get("error"))
+        return False
+
+    thread_ts = resp["ts"]
+    logger.info("[Alerta] Âncora postada: ts=%s", thread_ts)
+
+    # ── 2. Detalhes na thread ───────────────────────────────────────────────
+    rows_tabela = []
+    for c in camps:
+        roas_str = f"{c['roas']:.2f}x" if c.get("roas") else "—"
+        rows_tabela.append([
+            c["campanha"][:35],
+            _fmt_brl(c.get("invest")),
+            _fmt_brl(c.get("receita")),
+            roas_str,
+        ])
+
+    blocks = [
+        _bloco_header(f"⚠️ Alerta ROAS — {nome} · {periodo}"),
+        _bloco_divider(),
+        _bloco_section(f"*Campanhas com ROAS abaixo de {thresh}x:*"),
+        _bloco_section(_tabela_txt(
+            ["Campanha", "Invest.", "Receita", "ROAS"],
+            rows_tabela,
+        )),
+        _bloco_divider(),
+        _bloco_context(
+            f"_Threshold configurado: {thresh}x · "
+            f"Verifique criativos, segmentação e orçamento das campanhas acima._"
+        ),
+    ]
+
+    payload = {
+        "channel":   ch,
+        "thread_ts": thread_ts,
+        "blocks":    blocks,
+        "text":      f"Detalhes do alerta ROAS — {nome}",
+    }
+    resp2 = _post_api("chat.postMessage", payload)
+    if not resp2.get("ok"):
+        logger.error("[Alerta] Falha ao postar thread: %s", resp2.get("error"))
+    else:
+        logger.info("[Alerta] Thread detalhada postada ts=%s", thread_ts)
+
+    return True
 
 
 # ── Pipeline por cliente ──────────────────────────────────────────────────────
@@ -294,8 +364,8 @@ def executar_cliente(
     # ── Item 10: Alertas proativos ────────────────────────────────────────
     alertas = verificar_alertas(cliente_key, data_inicio, data_fim)
     for alerta in alertas:
-        ok = _postar_slack_api(alerta)
-        logger.info("[%s] Alerta postado: %s", cliente_key, "OK" if ok else "FALHOU")
+        ok = postar_alerta_ancorado(alerta)  # âncora + thread detalhada
+        logger.info("[%s] Alerta postado (ancorado): %s", cliente_key, "OK" if ok else "FALHOU")
 
     if apenas_alertas:
         if not alertas:
