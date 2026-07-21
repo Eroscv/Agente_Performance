@@ -2793,107 +2793,134 @@ def gerar_relatorio_semanal(
     }
 
     if tipo == "mensal":
-        # ── Estrutura completa do relatório mensal ───────────────────────────
+        # ── Estrutura do relatório mensal ────────────────────────────────────
+        # Última semana do mês (igual ao semanal) + consolidado do mês
         blocos = [callout_gerado]
 
-        # 1. Análise da última semana
-        blocos += _blocos_analise_ultima_semana(data_inicio, data_fim, db_path)
+        # Aviso de qualidade de dados
+        if val_report and (not val_report.ok or val_report.warnings):
+            issues_txt = "\n".join(
+                f"{'❌' if i.severity == 'ERROR' else '⚠️'} {i.check}: {i.message}"
+                for i in val_report.issues
+            )
+            blocos.append({
+                "object": "block", "type": "callout",
+                "callout": {
+                    "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{issues_txt}"}}],
+                    "icon": {"type": "emoji", "emoji": "⚠️"},
+                    "color": "yellow_background",
+                }
+            })
 
-        # 1b. Buscar dados diários — compartilhado pela narrativa e pela tabela
-        _dados_diarios_mes = _buscar_dados_diarios(data_inicio, data_fim, db_path)
-        _nome_mes_pt = _MESES_PT[data_inicio.month]
-
-        # 2a. Visão Mensal — narrativa estratégica (RESUMO, fases, correlação invest×ROAS)
-        blocos += _blocos_visao_mensal_narrativa(resumo, _dados_diarios_mes, _nome_mes_pt, data_inicio.year)
-
-        # 2b. Visão mensal dia a dia (tabela — reutiliza dados já buscados)
-        blocos += _blocos_visao_mensal_diaria(data_inicio, data_fim, db_path, dados_diarios=_dados_diarios_mes)
-
-        # 2c. Rentabilidade de Aquisição Mensal (nova seção)
-        blocos += _blocos_rentabilidade_aquisicao(data_inicio, data_fim, db_path)
-
-        # 3. Alocação budget canais
-        blocos += _blocos_alocacao_canais(resumo)
-
-        # 4. Alocação budget por anúncio
-        blocos += _blocos_alocacao_por_anuncio(data_inicio, data_fim, db_path)
-
-        # ── Dados Shopify (reais) — mensal ────────────────────────────────
+        # ── Dados Shopify — última semana do mês ─────────────────────────
+        sem_fim = data_fim
+        sem_ini = data_fim - timedelta(days=6)
         try:
             from shopify.client import (
                 pedidos_por_sku      as _shopify_sku_m,
                 pedidos_por_estado   as _shopify_estado_m,
                 recompras_por_sku    as _shopify_recompras_m,
                 assiduidade_clientes as _shopify_assiduidade_m,
+                metricas_site        as _shopify_metricas_m,
             )
-            logger.info('[Builder] Buscando dados Shopify mensal %s → %s', data_inicio, data_fim)
-            dados_sku_m         = _shopify_sku_m(data_inicio, data_fim)
-            dados_estado_m      = _shopify_estado_m(data_inicio, data_fim)
-            dados_recompras_m   = _shopify_recompras_m(data_inicio, data_fim)
-            dados_assiduidade_m = _shopify_assiduidade_m(data_inicio, data_fim)
+            logger.info('[Builder] Shopify mensal — última semana %s → %s', sem_ini, sem_fim)
+            dados_sku_m         = _shopify_sku_m(sem_ini, sem_fim)
+            dados_estado_m      = _shopify_estado_m(sem_ini, sem_fim)
+            dados_recompras_m   = _shopify_recompras_m(sem_ini, sem_fim)
+            dados_assiduidade_m = _shopify_assiduidade_m(sem_ini, sem_fim)
+            dados_metricas_m    = _shopify_metricas_m(sem_ini, sem_fim)
             logger.info('[Builder] Shopify mensal OK — %d SKUs, %d estados', len(dados_sku_m), len(dados_estado_m))
         except Exception as _e:
-            logger.warning('[Builder] Shopify mensal indisponível: %s — usando placeholder', _e)
-            dados_sku_m = dados_estado_m = dados_recompras_m = dados_assiduidade_m = None
+            logger.warning('[Builder] Shopify mensal indisponível: %s — placeholder', _e)
+            dados_sku_m = dados_estado_m = dados_recompras_m = dados_assiduidade_m = dados_metricas_m = None
 
-        # 5. Pedidos por SKU
+        # Resumo da última semana (Meta) para seções semanais
+        _campanhas_sem = _buscar_campanhas(sem_ini, sem_fim, db_path)
+        resumo_sem     = _resumo_geral(_campanhas_sem) if _campanhas_sem else resumo
+
+        # ════════════════════════════════════════════════════════════════
+        # PARTE 1 — ANÁLISE SEMANAL (última semana do mês)
+        # ════════════════════════════════════════════════════════════════
+        blocos.append({"object": "block", "type": "heading_1",
+            "heading_1": {"rich_text": [{"text": {"content":
+                f"📋 Análise Semanal — {sem_ini.strftime('%d/%m')} a {sem_fim.strftime('%d/%m/%Y')}"
+            }}]}})
+
+        # S1. Funil de Conversão
+        blocos += _blocos_funil(resumo_sem)
+
+        # S2. Métricas de Site (última semana)
+        blocos += _blocos_metricas_site_semanal(
+            data_inicio=sem_ini,
+            data_fim=sem_fim,
+            shopify=dados_metricas_m,
+            invest_meta=resumo_sem.get("total_invest"),
+        )
+
+        # S3. Alocação Budget por Canal
+        blocos += _blocos_alocacao_canais(resumo_sem)
+
+        # S4. Alocação Budget por Anúncio
+        blocos += _blocos_alocacao_por_anuncio(sem_ini, sem_fim, db_path)
+
+        # S5. Pedidos por SKU (última semana)
         blocos += _blocos_pedidos_sku(dados_sku_m)
 
-        # 6. Pedidos por Estado
+        # S6. Pedidos por Estado (última semana)
         blocos += _blocos_pedidos_estado(dados_estado_m)
 
-        # 7. Recuperação de Carrinho (placeholder)
+        # S7. Recuperação de Carrinho (placeholder)
         blocos += _blocos_placeholder(
             "Recuperação de Carrinho Abandonado", "🔄",
             "⏳ Dados de recuperação de carrinho pendentes.",
         )
 
-        # 8. Pedidos Orgânicos Instagram (placeholder)
+        # S8. Pedidos Orgânicos Instagram (placeholder)
         blocos += _blocos_placeholder(
             "Pedidos Orgânicos Instagram", "📸",
             "⏳ Dados de pedidos orgânicos pendentes.",
         )
 
-        # Aviso de qualidade de dados (se houver issues)
-        if val_report and (not val_report.ok or val_report.warnings):
-            issues_txt = "\n".join(
-                f"{'❌' if i.severity == 'ERROR' else '⚠️'} {i.check}: {i.message}"
-                for i in val_report.issues
-            )
-            blocos.append({
-                "object": "block", "type": "callout",
-                "callout": {
-                    "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{issues_txt}"}}],
-                    "icon": {"type": "emoji", "emoji": "⚠️"},
-                    "color": "yellow_background",
-                }
-            })
-
-        # 10. Comparativo mês anterior
-        if resumo_anterior:
-            blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
-
-        # 11. Tendência mensal (MoM)
-        blocos += _blocos_tendencia_mensal(data_inicio, meses=4, db_path=db_path)
-
-        # 15. Onde estamos — Metas (expandido com histórico)
-        blocos += _blocos_metas_mes(resumo)
-
-        # 16. Base de Recompradoras (dados reais Shopify)
+        # S9. Base de Recompradoras (última semana)
         blocos += _blocos_recompradoras(
             dados_recompras_sku=dados_recompras_m,
             dados_assiduidade=dados_assiduidade_m,
         )
 
-        # 18. Próximos Passos
+        # S10. Comparativo com semana anterior
+        if resumo_anterior:
+            blocos += _blocos_comparativo(resumo_sem, resumo_anterior, periodo_anterior_str)
+
+        # ════════════════════════════════════════════════════════════════
+        # PARTE 2 — ANÁLISE MENSAL (consolidado do mês)
+        # ════════════════════════════════════════════════════════════════
+        blocos.append({"object": "block", "type": "heading_1",
+            "heading_1": {"rich_text": [{"text": {"content":
+                f"📅 Análise Mensal — {_MESES_PT[data_inicio.month]}/{data_inicio.year}"
+            }}]}})
+
+        # M1. Visão Mensal (narrativa + 3 tabelas diárias)
+        _dados_diarios_mes = _buscar_dados_diarios(data_inicio, data_fim, db_path)
+        _nome_mes_pt = _MESES_PT[data_inicio.month]
+        blocos += _blocos_visao_mensal_narrativa(resumo, _dados_diarios_mes, _nome_mes_pt, data_inicio.year)
+        blocos += _blocos_visao_mensal_diaria(data_inicio, data_fim, db_path, dados_diarios=_dados_diarios_mes)
+
+        # M2. Análise da última semana do mês (comparativo semana a semana)
+        blocos += _blocos_analise_ultima_semana(data_inicio, data_fim, db_path)
+
+        # M3. Evolução Mensal Jan/2026
+        blocos += _blocos_tendencia_mensal(data_inicio, meses=4, db_path=db_path)
+
+        # M4. Metas do mês
+        blocos += _blocos_metas_mes(resumo)
+
+        # M5. Próximos Passos
         blocos += _blocos_proximos_passos()
 
-        # 19. Funil de conversão
-        blocos += _blocos_funil(resumo)
-
     else:
-        # ── Estrutura do relatório semanal (mantida igual) ──────────────────
+        # ── Estrutura do relatório semanal ──────────────────────────────────
         blocos = []
+
         # Aviso de qualidade de dados (se houver issues)
         if val_report and (not val_report.ok or val_report.warnings):
             issues_txt = "\n".join(
@@ -2908,13 +2935,6 @@ def gerar_relatorio_semanal(
                     "color": "yellow_background",
                 }
             })
-        # 1. Funil de conversão (análise semanal — posição de destaque)
-        blocos += _blocos_funil(resumo)
-
-        if resumo_anterior:
-            blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
-        blocos += _blocos_tendencia_mensal(data_fim, db_path=db_path)
-        blocos += _blocos_alocacao(campanhas)
 
         # ── Dados Shopify (reais) ─────────────────────────────────────
         try:
@@ -2936,7 +2956,10 @@ def gerar_relatorio_semanal(
             logger.warning('[Builder] Shopify indisponível: %s — usando placeholder', _e)
             dados_sku = dados_estado = dados_recompras = dados_assiduidade = dados_metricas_site = None
 
-        # Métricas de Site (Shopify)
+        # 1. Funil de Conversão
+        blocos += _blocos_funil(resumo)
+
+        # 2. Métricas de Site (Shopify)
         blocos += _blocos_metricas_site_semanal(
             data_inicio=data_inicio,
             data_fim=data_fim,
@@ -2944,17 +2967,39 @@ def gerar_relatorio_semanal(
             invest_meta=resumo.get('total_invest'),
         )
 
-        # Pedidos por SKU
+        # 3. Alocação Budget por Canal
+        blocos += _blocos_alocacao_canais(resumo)
+
+        # 4. Alocação Budget por Anúncio
+        blocos += _blocos_alocacao(campanhas)
+
+        # 5. Pedidos por SKU
         blocos += _blocos_pedidos_sku(dados_sku)
 
-        # Pedidos por Estado
+        # 6. Pedidos por Estado
         blocos += _blocos_pedidos_estado(dados_estado)
 
-        # Base de Recompradoras
+        # 7. Recuperação de Carrinho (placeholder)
+        blocos += _blocos_placeholder(
+            "Recuperação de Carrinho Abandonado", "🔄",
+            "⏳ Dados de recuperação de carrinho pendentes.",
+        )
+
+        # 8. Pedidos Orgânicos Instagram (placeholder)
+        blocos += _blocos_placeholder(
+            "Pedidos Orgânicos Instagram", "📸",
+            "⏳ Dados de pedidos orgânicos pendentes.",
+        )
+
+        # 9. Base de Recompradoras
         blocos += _blocos_recompradoras(
             dados_recompras_sku=dados_recompras,
             dados_assiduidade=dados_assiduidade,
         )
+
+        # 10. Comparativo com Período Anterior
+        if resumo_anterior:
+            blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
 
     # ── Publicação ─────────────────────────────────────────────────────────
     if not publicar:
