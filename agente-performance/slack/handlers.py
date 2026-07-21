@@ -215,9 +215,6 @@ async def _processar_e_responder(
     async def _executar():
         nonlocal resposta_final, erro_final, cache_hit
         try:
-            # Verifica cache antes de tudo (para marcar cache_hit no log)
-            cache_hit = cache_get(text) is not None
-
             append_history(thread_ts, channel, "user", text)
             # Constrói contexto uma única vez e reutiliza em consultar() e gerar_resposta()
             contexto = build_context_summary(thread_ts)
@@ -230,6 +227,15 @@ async def _processar_e_responder(
             erro        = resultado.get("erro")
             aviso_vazio = resultado.get("aviso_vazio")
 
+            # cache_hit baseado no cliente correto (POD usa prefixo "pod::")
+            is_pod_result = meta.get("cliente") == "pod_kombucha"
+            _ck = f"pod::{text}" if is_pod_result else text
+            cache_hit = cache_get(_ck) is not None
+
+            # Usa contexto do resultado POD (quando disponível) em vez do da thread Source OF
+            if resultado.get("contexto"):
+                contexto = resultado["contexto"]
+
             # Campanha não encontrada — responde diretamente sem chamar Claude
             if erro:
                 resposta_final = erro
@@ -241,13 +247,20 @@ async def _processar_e_responder(
                 return
 
             # Dados vazios com sugestão de período
+            # Para POD: aviso_vazio pode ser apenas nota de período ajustado (não interrompe a resposta)
+            aviso_periodo_pod = None
             if aviso_vazio:
-                resposta_final = aviso_vazio
-                await client.chat_postMessage(
-                    channel=channel, thread_ts=thread_ts,
-                    text=aviso_vazio, mrkdwn=True,
-                )
-                return
+                if is_pod_result and aviso_vazio.startswith("⚠️"):
+                    # Aviso de período ajustado: adiciona como nota, não substitui a resposta
+                    aviso_periodo_pod = aviso_vazio
+                    aviso_vazio = None  # não interrompe o fluxo
+                else:
+                    resposta_final = aviso_vazio
+                    await client.chat_postMessage(
+                        channel=channel, thread_ts=thread_ts,
+                        text=aviso_vazio, mrkdwn=True,
+                    )
+                    return
 
             # ── Exportação de arquivo (excel / pdf) ────────────────────────────────
             fmt_arquivo = formato_export if formato_export in ("excel", "pdf") else None
@@ -311,6 +324,10 @@ async def _processar_e_responder(
                 pergunta=text, dados=dados, intent=intent, meta=meta,
                 dados_extra=dados_extra, contexto=contexto,
             )
+
+            # Prefixo de aviso de período ajustado (POD, item 13)
+            if aviso_periodo_pod:
+                resposta_final = aviso_periodo_pod + "\n\n" + resposta_final
 
             append_history(thread_ts, channel, "agent", resposta_final[:500], meta)
 
