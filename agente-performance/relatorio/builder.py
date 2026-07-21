@@ -1995,11 +1995,20 @@ def _blocos_recompradoras() -> list[dict]:
         {"object": "block", "type": "heading_3",
          "heading_3": {"rich_text": [{"text": {"content": "SKU de Entrada"}}]}},
     ]
-    for sku in skus_entrada:
-        blocos.append({
-            "object": "block", "type": "bulleted_list_item",
-            "bulleted_list_item": {"rich_text": [{"text": {"content": sku}}]}
-        })
+
+    # Tabela SKU de Entrada com dados de recompra por SKU
+    # Volume de recompras por SKU pendente de integração Shopify — estrutura já preparada
+    headers_sku_entrada = ["SKU de Entrada", "Recompras", "% das Recompras"]
+    rows_sku_entrada = [[sku, "—", "—"] for sku in skus_entrada]
+    blocos.append({
+        "object": "block", "type": "callout",
+        "callout": {
+            "rich_text": [{"text": {"content": "⏳ Volume de recompras por SKU pendente de integração Shopify."}}],
+            "icon": {"type": "emoji", "emoji": "⏳"},
+            "color": "yellow_background",
+        }
+    })
+    blocos.append(_mk_table_notion(headers_sku_entrada, rows_sku_entrada))
     blocos.append({"object": "block", "type": "divider", "divider": {}})
     blocos.append({
         "object": "block", "type": "heading_3",
