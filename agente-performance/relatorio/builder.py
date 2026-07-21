@@ -2760,11 +2760,29 @@ def gerar_relatorio_semanal(
         # 4. Alocação budget por anúncio
         blocos += _blocos_alocacao_por_anuncio(data_inicio, data_fim, db_path)
 
-        # 5. Pedidos por SKU (dados reais hardcoded)
-        blocos += _blocos_pedidos_sku()
+        # ── Dados Shopify (reais) — mensal ────────────────────────────────
+        try:
+            from shopify.client import (
+                pedidos_por_sku      as _shopify_sku_m,
+                pedidos_por_estado   as _shopify_estado_m,
+                recompras_por_sku    as _shopify_recompras_m,
+                assiduidade_clientes as _shopify_assiduidade_m,
+            )
+            logger.info('[Builder] Buscando dados Shopify mensal %s → %s', data_inicio, data_fim)
+            dados_sku_m         = _shopify_sku_m(data_inicio, data_fim)
+            dados_estado_m      = _shopify_estado_m(data_inicio, data_fim)
+            dados_recompras_m   = _shopify_recompras_m(data_inicio, data_fim)
+            dados_assiduidade_m = _shopify_assiduidade_m(data_inicio, data_fim)
+            logger.info('[Builder] Shopify mensal OK — %d SKUs, %d estados', len(dados_sku_m), len(dados_estado_m))
+        except Exception as _e:
+            logger.warning('[Builder] Shopify mensal indisponível: %s — usando placeholder', _e)
+            dados_sku_m = dados_estado_m = dados_recompras_m = dados_assiduidade_m = None
 
-        # 6. Pedidos por Estado (dados reais hardcoded)
-        blocos += _blocos_pedidos_estado()
+        # 5. Pedidos por SKU
+        blocos += _blocos_pedidos_sku(dados_sku_m)
+
+        # 6. Pedidos por Estado
+        blocos += _blocos_pedidos_estado(dados_estado_m)
 
         # 7. Recuperação de Carrinho (placeholder)
         blocos += _blocos_placeholder(
@@ -2803,8 +2821,11 @@ def gerar_relatorio_semanal(
         # 15. Onde estamos — Metas (expandido com histórico)
         blocos += _blocos_metas_mes(resumo)
 
-        # 16. Base de Recompradoras (dados reais)
-        blocos += _blocos_recompradoras()
+        # 16. Base de Recompradoras (dados reais Shopify)
+        blocos += _blocos_recompradoras(
+            dados_recompras_sku=dados_recompras_m,
+            dados_assiduidade=dados_assiduidade_m,
+        )
 
         # 18. Próximos Passos
         blocos += _blocos_proximos_passos()
