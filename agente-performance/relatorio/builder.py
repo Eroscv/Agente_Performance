@@ -1949,73 +1949,136 @@ def _blocos_pedidos_estado(
     return blocos
 
 
-def _blocos_recompradoras() -> list[dict]:
+def _blocos_recompradoras(
+    dados_recompras_sku: list[dict] = None,
+    dados_assiduidade: list[dict] = None,
+) -> list[dict]:
     """
-    Seção — Base de Recompradoras (dados hardcoded).
+    Seção — Base de Recompradoras.
+
+    dados_recompras_sku: [{sku, recompras, pct_recompras}] via shopify.client
+    dados_assiduidade:   [{faixa, clientes, pct}] via shopify.client
     """
-    # Tabela histórico
+    # Tabela histórico mensal (hardcoded — vem do CRM)
     headers_hist = ["Mês", "Taxa de Recompra", "Volume de Recompras"]
     rows_hist = [[m, t, str(v)] for m, t, v in _RECOMPRAS_HISTORICO]
 
-    skus_entrada = [
-        "Duo - Hidratante Corporal 300 ml",
-        "Trio - 2 Gel Creme Facial 50g cada + 1 Água Micelar 200ml",
-        "Sérum Facial Noturno 30ml",
-        "Rotina Completa - 1 Hidratante Corporal + 1 Gel Creme Facial + 1 Água Micelar",
-        "Água Micelar Demaquilante 200ml",
-        "Água Micelar Demaquilante TRAVEL SIZE",
-        "Kit Travel Size Source of",
-        "Gel Creme Facial 50g",
-        "Hidratante Corporal Travel Size",
-        "Hidratante Corporal + Travel Size",
-        "Duo - 2 Gel Creme Facial 50g cada",
-        "Kit Completo Source of",
-        "Hidratante Corporal 300 ml",
-        "Trio - Hidratação Corporal",
-        "Duo - Facial 1 Gel Creme Facial + 1 Água Micelar",
-        "Duo - 1 Água Micelar 200 ml + 1 Hidratante Corporal 300 ml",
-        "Sacola de presente",
-        "Duo - 1 Hidratante Corporal e 1 Gel Creme Facial",
-        "LEVE 4 PAGUE 3 - Hidratação Corporal",
-        "Embalagem de presente",
-    ]
+    # ── SKU de Entrada com recompras reais (Shopify) ──────────────────────
+    headers_sku_entrada = ["SKU de Entrada", "Recompras", "% das Recompras"]
+    if dados_recompras_sku:
+        total_recompras = sum(d.get("recompras", 0) for d in dados_recompras_sku)
+        rows_sku_entrada = [
+            [
+                d.get("sku", "—"),
+                str(d.get("recompras", 0)),
+                f"{d.get('pct_recompras', 0):.1f}%",
+            ]
+            for d in dados_recompras_sku
+        ]
+        if total_recompras:
+            rows_sku_entrada.append(["TOTAL", str(total_recompras), "100.0%"])
+        callout_sku = None
+    else:
+        SKUS_ENTRADA_HISTORICOS = [
+            "Duo - Hidratante Corporal 300 ml",
+            "Trio - 2 Gel Creme Facial 50g cada + 1 Água Micelar 200ml",
+            "Sérum Facial Noturno 30ml",
+            "Rotina Completa - 1 Hidratante Corporal + 1 Gel Creme Facial + 1 Água Micelar",
+            "Água Micelar Demaquilante 200ml",
+            "Água Micelar Demaquilante TRAVEL SIZE",
+            "Kit Travel Size Source of",
+            "Gel Creme Facial 50g",
+            "Hidratante Corporal Travel Size",
+            "Hidratante Corporal + Travel Size",
+            "Duo - 2 Gel Creme Facial 50g cada",
+            "Kit Completo Source of",
+            "Hidratante Corporal 300 ml",
+            "Trio - Hidratação Corporal",
+            "Duo - Facial 1 Gel Creme Facial + 1 Água Micelar",
+            "Duo - 1 Água Micelar 200 ml + 1 Hidratante Corporal 300 ml",
+            "Sacola de presente",
+            "Duo - 1 Hidratante Corporal e 1 Gel Creme Facial",
+            "LEVE 4 PAGUE 3 - Hidratação Corporal",
+            "Embalagem de presente",
+        ]
+        rows_sku_entrada = [[sku, "—", "—"] for sku in SKUS_ENTRADA_HISTORICOS]
+        callout_sku = {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Volume de recompras por SKU pendente de integração Shopify."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
+        }
 
-    # Tabela estados
+    # ── Assiduidade de clientes (Shopify) ─────────────────────────────────
+    headers_assid = ["Faixa de Pedidos", "Clientes", "% dos Clientes"]
+    if dados_assiduidade:
+        rows_assid = [
+            [d.get("faixa", "—"), str(d.get("clientes", 0)), f"{d.get('pct', 0):.1f}%"]
+            for d in dados_assiduidade
+        ]
+        callout_assid = None
+    else:
+        rows_assid = [
+            ["1 pedido",    "—", "—"],
+            ["2 pedidos",   "—", "—"],
+            ["3 pedidos",   "—", "—"],
+            ["4-5 pedidos", "—", "—"],
+            ["6+ pedidos",  "—", "—"],
+        ]
+        callout_assid = {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Dados de assiduidade pendentes de integração Shopify."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
+        }
+
+    # ── Recompras por Estado (hardcoded) ──────────────────────────────────
     headers_estados = ["Estado", "Número de Recompras"]
     rows_estados = [[e, str(n)] for e, n in _RECOMPRAS_ESTADOS]
 
+    # ── Monta blocos ──────────────────────────────────────────────────────
     blocos = [
         {"object": "block", "type": "heading_2",
          "heading_2": {"rich_text": [{"text": {"content": "👥 Base de Recompradoras"}}]}},
         {"object": "block", "type": "divider", "divider": {}},
+
+        # Histórico mensal
         {"object": "block", "type": "heading_3",
          "heading_3": {"rich_text": [{"text": {"content": "Histórico de Recompra"}}]}},
         _mk_table_notion(headers_hist, rows_hist),
         {"object": "block", "type": "divider", "divider": {}},
+
+        # SKU de Entrada
         {"object": "block", "type": "heading_3",
          "heading_3": {"rich_text": [{"text": {"content": "SKU de Entrada"}}]}},
     ]
-
-    # Tabela SKU de Entrada com dados de recompra por SKU
-    # Volume de recompras por SKU pendente de integração Shopify — estrutura já preparada
-    headers_sku_entrada = ["SKU de Entrada", "Recompras", "% das Recompras"]
-    rows_sku_entrada = [[sku, "—", "—"] for sku in skus_entrada]
-    blocos.append({
-        "object": "block", "type": "callout",
-        "callout": {
-            "rich_text": [{"text": {"content": "⏳ Volume de recompras por SKU pendente de integração Shopify."}}],
-            "icon": {"type": "emoji", "emoji": "⏳"},
-            "color": "yellow_background",
-        }
-    })
+    if callout_sku:
+        blocos.append(callout_sku)
     blocos.append(_mk_table_notion(headers_sku_entrada, rows_sku_entrada))
     blocos.append({"object": "block", "type": "divider", "divider": {}})
+
+    # Assiduidade
+    blocos.append({
+        "object": "block", "type": "heading_3",
+        "heading_3": {"rich_text": [{"text": {"content": "Assiduidade de Clientes"}}]}
+    })
+    if callout_assid:
+        blocos.append(callout_assid)
+    blocos.append(_mk_table_notion(headers_assid, rows_assid))
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+
+    # Recompras por Estado
     blocos.append({
         "object": "block", "type": "heading_3",
         "heading_3": {"rich_text": [{"text": {"content": "Recompras por Estado"}}]}
     })
     blocos.append(_mk_table_notion(headers_estados, rows_estados))
     blocos.append({"object": "block", "type": "divider", "divider": {}})
+
     return blocos
 
 
@@ -2639,6 +2702,36 @@ def gerar_relatorio_semanal(
         blocos += _blocos_tendencia_semanal()
         blocos += _blocos_alocacao(campanhas)
         blocos += _blocos_funil(resumo)
+
+        # ── Dados Shopify (reais) ─────────────────────────────────────
+        try:
+            from shopify.client import (
+                pedidos_por_sku      as _shopify_sku,
+                pedidos_por_estado   as _shopify_estado,
+                recompras_por_sku    as _shopify_recompras,
+                assiduidade_clientes as _shopify_assiduidade,
+            )
+            logger.info('[Builder] Buscando dados Shopify %s → %s', data_inicio, data_fim)
+            dados_sku         = _shopify_sku(data_inicio, data_fim)
+            dados_estado      = _shopify_estado(data_inicio, data_fim)
+            dados_recompras   = _shopify_recompras(data_inicio, data_fim)
+            dados_assiduidade = _shopify_assiduidade(data_inicio, data_fim)
+            logger.info('[Builder] Shopify OK — %d SKUs, %d estados', len(dados_sku), len(dados_estado))
+        except Exception as _e:
+            logger.warning('[Builder] Shopify indisponível: %s — usando placeholder', _e)
+            dados_sku = dados_estado = dados_recompras = dados_assiduidade = None
+
+        # Pedidos por SKU
+        blocos += _blocos_pedidos_sku(dados_sku)
+
+        # Pedidos por Estado
+        blocos += _blocos_pedidos_estado(dados_estado)
+
+        # Base de Recompradoras
+        blocos += _blocos_recompradoras(
+            dados_recompras_sku=dados_recompras,
+            dados_assiduidade=dados_assiduidade,
+        )
 
     # ── Publicação ─────────────────────────────────────────────────────────
     if not publicar:
