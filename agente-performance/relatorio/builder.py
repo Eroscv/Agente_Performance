@@ -2645,6 +2645,14 @@ def gerar_relatorio_semanal(
     Returns:
         dict com: page_id, url, resumo, num_campanhas, alertas
     """
+    # ── Atualiza dados da planilha Google Sheets antes de gerar ──────────────────
+    try:
+        from db.loader_sheets import carregar_sheets
+        linhas, periodo = carregar_sheets(db_path=db_path)
+        logger.info("[Builder] Planilha atualizada: %d linhas | período: %s", linhas, periodo)
+    except Exception as _e:
+        logger.warning("[Builder] Atualização da planilha falhou: %s — usando dados locais", _e)
+
     # ── Período ───────────────────────────────────────────────────────────
     if data_inicio is None or data_fim is None:
         hoje    = date.today()

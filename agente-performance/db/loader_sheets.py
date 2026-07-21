@@ -243,6 +243,42 @@ def carregar(rows: list[dict], append: bool = False) -> int:
         inserted += 1
 
     conn.commit()
+
+    # Sincroniza tabela `campanhas` com os dados da planilha (ads_diario)
+    # Remove entradas da planilha (identificação: data_inicio == data_fim, colunas da planilha)
+    # e reinserere a partir da view v_campanhas_sheets
+    conn.execute("""
+        DELETE FROM campanhas
+        WHERE data_inicio >= (
+            SELECT MIN(data_inicio) FROM ads_diario
+        )
+        AND data_inicio = data_fim
+    """)
+    conn.execute("""
+        INSERT OR REPLACE INTO campanhas (
+            campanha, data_inicio, data_fim,
+            impressoes, investimento, cliques_link,
+            compras, valor_compras,
+            roas_compras, custo_por_compra
+        )
+        SELECT
+            campanha, data_inicio, data_inicio AS data_fim,
+            impressoes, investimento, cliques_link,
+            compras, valor_compras,
+            roas_calculado AS roas_compras,
+            cpa_calculado  AS custo_por_compra
+        FROM v_campanhas_sheets
+    """)
+    conn.commit()
+
+    # Verifica range após sync
+    r = conn.execute("""
+        SELECT MIN(data_inicio), MAX(data_inicio)
+        FROM campanhas
+        WHERE data_inicio = data_fim
+    """).fetchone()
+    logger.info("campanhas sincronizadas com planilha: %s → %s", r[0], r[1])
+
     conn.close()
     logger.info("%d linhas carregadas em ads_diario", inserted)
     return inserted
@@ -258,6 +294,22 @@ def resumo_banco() -> dict:
     """).fetchone()
     conn.close()
     return dict(r)
+
+
+def carregar_sheets(db_path: Path = None, append: bool = False):
+    """
+    Wrapper programático: baixa planilha e carrega no SQLite.
+    Chamado automaticamente pelo builder antes de gerar relatórios.
+
+    Returns:
+        (linhas_inseridas: int, periodo: str)
+    """
+    rows   = baixar_csv()
+    linhas = carregar(rows, append=append)
+    info   = resumo_banco()
+    periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
+    logger.info("[Sheets] %d linhas | período: %s", linhas, periodo)
+    return linhas, periodo
 
 
 def main():
