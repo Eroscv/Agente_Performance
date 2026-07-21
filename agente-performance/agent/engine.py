@@ -491,60 +491,106 @@ def consultar_sql(sql: str) -> list[dict]:
 
 def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, Any]:
     """
-    Item 8 — Consulta dados do POD Kombucha (Google Ads) em linguagem natural.
-    Detecta período via NLP e retorna métricas do banco pod_gads_diario.
+    Consulta dados do POD Kombucha (Google Ads) em linguagem natural.
+
+    Melhorias:
+      - Item 2:  Contexto de thread passado para o Claude
+      - Item 3:  Multi-intenção via NLP (não só resumo_geral fixo)
+      - Item 4:  CPC e CPM calculados
+      - Item 10: Cache igual ao Source OF
+      - Item 11: Histórico de thread salvo no context_store
+      - Item 13: Aviso ao usuário quando período foi ajustado
     """
-    import re as _re
     from datetime import date, timedelta
+    import sqlite3 as _sqlite3
 
+    # ── Cache (item 10) ────────────────────────────────────────────────
+    cache_key = f"pod::{pergunta}"
+    cached = cache_get(cache_key)
+    if cached:
+        return cached
+
+    # ── Contexto de thread (item 2 + 11) ─────────────────────────────────
+    contexto = build_context_summary(thread_ts) if thread_ts else ""
+
+    # ── NLP completo (item 3: multi-intenção) ─────────────────────────────
     hoje = date.today()
-
-    # NLP leve de período (reutiliza padrões do NLP principal)
     try:
         from agent.nlp import interpretar
-        params      = interpretar(pergunta, [], "")
-        data_inicio = params.get("data_inicio") or str(hoje - timedelta(days=hoje.weekday() + 7))
-        data_fim    = params.get("data_fim")    or str(hoje - timedelta(days=hoje.weekday() + 1))
-    except Exception:
-        data_inicio = str(hoje - timedelta(days=7))
-        data_fim    = str(hoje)
+        # Lista campanhas POD para o NLP (fuzzy match de nome)
+        try:
+            from db.connection import get_conn as _gc
+            _c = _gc()
+            _rows = _c.execute(
+                "SELECT DISTINCT campanha FROM pod_gads_diario ORDER BY campanha"
+            ).fetchall()
+            campanhas_pod = [r[0] for r in _rows]
+        except Exception:
+            campanhas_pod = []
 
+        params      = interpretar(pergunta, campanhas_pod, contexto)
+        intents     = params.get("intents", ["resumo_geral"])
+        data_inicio = params.get("data_inicio")
+        data_fim    = params.get("data_fim")
+        periodo_nota = params.get("periodo_nota")
+    except Exception:
+        intents      = ["resumo_geral"]
+        data_inicio  = None
+        data_fim     = None
+        periodo_nota = None
+
+    # Fallback de período: semana passada
+    if not data_inicio or not data_fim:
+        seg = hoje - timedelta(days=hoje.weekday() + 7)
+        data_inicio = str(seg)
+        data_fim    = str(seg + timedelta(days=6))
+
+    # ── Item 13: Aviso quando período foi ajustado ───────────────────────────
+    aviso_periodo = None
+    if periodo_nota:
+        aviso_periodo = f"⚠️ _{periodo_nota}_"
+
+    # ── Queries SQLite (item 4: CPC + CPM) ────────────────────────────────
     try:
-        from db.connection import get_conn, DB_PATH
-        import sqlite3 as _sqlite3
+        from db.connection import get_conn
         conn = get_conn()
         conn.row_factory = _sqlite3.Row
 
-        # Resumo geral do período
         row = conn.execute("""
             SELECT
-                COUNT(DISTINCT campanha)          AS num_campanhas,
-                SUM(investimento)                  AS invest,
-                SUM(impressoes)                    AS impressoes,
-                SUM(cliques)                       AS cliques,
-                SUM(conversoes)                    AS conversoes,
-                SUM(valor_conversao)               AS receita,
+                COUNT(DISTINCT campanha)    AS num_campanhas,
+                SUM(investimento)           AS invest,
+                SUM(impressoes)             AS impressoes,
+                SUM(cliques)               AS cliques,
+                SUM(conversoes)            AS conversoes,
+                SUM(valor_conversao)       AS receita,
                 CASE WHEN SUM(investimento) > 0
                      THEN SUM(valor_conversao) / SUM(investimento) END AS roas,
                 CASE WHEN SUM(conversoes) > 0
                      THEN SUM(investimento) / SUM(conversoes) END AS cpa,
                 CASE WHEN SUM(impressoes) > 0
-                     THEN CAST(SUM(cliques) AS REAL) / SUM(impressoes) * 100 END AS ctr
+                     THEN CAST(SUM(cliques) AS REAL) / SUM(impressoes) * 100 END AS ctr,
+                CASE WHEN SUM(cliques) > 0
+                     THEN SUM(investimento) / SUM(cliques) END AS cpc,
+                CASE WHEN SUM(impressoes) > 0
+                     THEN SUM(investimento) / SUM(impressoes) * 1000 END AS cpm
             FROM pod_gads_diario
             WHERE data_inicio BETWEEN ? AND ?
         """, (data_inicio, data_fim)).fetchone()
 
-        # Campanhas do período
         campanhas = conn.execute("""
             SELECT
                 campanha,
                 tipo_campanha,
-                SUM(investimento) AS invest,
-                SUM(cliques) AS cliques,
-                SUM(conversoes) AS conversoes,
+                SUM(investimento)    AS invest,
+                SUM(impressoes)      AS impressoes,
+                SUM(cliques)         AS cliques,
+                SUM(conversoes)      AS conversoes,
                 SUM(valor_conversao) AS receita,
                 CASE WHEN SUM(investimento) > 0
-                     THEN SUM(valor_conversao) / SUM(investimento) END AS roas
+                     THEN SUM(valor_conversao) / SUM(investimento) END AS roas,
+                CASE WHEN SUM(cliques) > 0
+                     THEN SUM(investimento) / SUM(cliques) END AS cpc
             FROM pod_gads_diario
             WHERE data_inicio BETWEEN ? AND ?
               AND investimento > 0
@@ -553,39 +599,59 @@ def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, 
         """, (data_inicio, data_fim)).fetchall()
         conn.close()
 
+        def _v(r, k): return r[k] if r and r[k] is not None else None
+
         dados = {
-            "cliente":      "POD Kombucha",
-            "plataforma":   "Google Ads",
-            "data_inicio":  data_inicio,
-            "data_fim":     data_fim,
-            "num_campanhas": row["num_campanhas"] if row else 0,
-            "invest":       row["invest"]       if row else None,
-            "impressoes":   row["impressoes"]   if row else None,
-            "cliques":      row["cliques"]      if row else None,
-            "conversoes":   row["conversoes"]   if row else None,
-            "receita":      row["receita"]      if row else None,
-            "roas":         row["roas"]         if row else None,
-            "cpa":          row["cpa"]          if row else None,
-            "ctr":          row["ctr"]          if row else None,
-            "campanhas":    [dict(c) for c in campanhas],
+            "cliente":       "POD Kombucha",
+            "plataforma":    "Google Ads",
+            "data_inicio":   data_inicio,
+            "data_fim":      data_fim,
+            "num_campanhas": _v(row, "num_campanhas") or 0,
+            "invest":        _v(row, "invest"),
+            "impressoes":    _v(row, "impressoes"),
+            "cliques":       _v(row, "cliques"),
+            "conversoes":    _v(row, "conversoes"),
+            "receita":       _v(row, "receita"),
+            "roas":          _v(row, "roas"),
+            "cpa":           _v(row, "cpa"),
+            "ctr":           _v(row, "ctr"),
+            "cpc":           _v(row, "cpc"),   # item 4
+            "cpm":           _v(row, "cpm"),   # item 4
+            "campanhas":     [dict(c) for c in campanhas],
         }
 
     except Exception as e:
         logger.error("[POD] Erro ao consultar banco: %s", e)
         dados = {"cliente": "POD Kombucha", "erro": str(e)}
 
-    return {
-        "intent":      "resumo_geral",
-        "intents":     ["resumo_geral"],
+    # ── Histórico de thread (item 11) ─────────────────────────────────────
+    if thread_ts:
+        try:
+            from agent.context_store import append_history
+            append_history(thread_ts, "pod", "user", pergunta)
+        except Exception:
+            pass
+
+    resultado = {
+        "intent":      intents[0] if intents else "resumo_geral",
+        "intents":     intents,
         "dados":       dados,
         "dados_extra": {},
         "meta": {
-            "intent":      "resumo_geral",
-            "intents":     ["resumo_geral"],
-            "cliente":     "pod_kombucha",
-            "data_inicio": data_inicio,
-            "data_fim":    data_fim,
-            "limit":       10,
+            "intent":       intents[0] if intents else "resumo_geral",
+            "intents":      intents,
+            "cliente":      "pod_kombucha",
+            "data_inicio":  data_inicio,
+            "data_fim":     data_fim,
+            "limit":        10,
+            "periodo_nota": periodo_nota,  # item 13: propagado para claude_client
         },
-        "aviso_vazio": None,
+        "aviso_vazio":  aviso_periodo,  # item 13: exibido antes da resposta
+        "contexto":     contexto,       # item 2: passado para gerar_resposta
     }
+
+    # Cache (item 10) — só cacheia se teve dados válidos
+    if dados.get("num_campanhas", 0) > 0:
+        cache_set(cache_key, resultado)
+
+    return resultado

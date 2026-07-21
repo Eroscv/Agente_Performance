@@ -575,9 +575,11 @@ async def handle_compare(ack, respond, command, client):
 @app.command("/relatorio")
 async def handle_relatorio(ack, respond, command, client):
     """
-    /relatorio                  — relatório semanal padrão (semana passada) no Notion
-    /relatorio semana           — semana passada
-    /relatorio mes              — mês passado completo
+    /relatorio                  — relatório semanal Source OF (semana passada)
+    /relatorio pod              — relatório semanal POD Kombucha  (item 7)
+    /relatorio pod mes          — relatório mensal POD Kombucha
+    /relatorio semana           — semana passada Source OF
+    /relatorio mes              — mês passado Source OF
     /relatorio hoje             — dia de hoje
     /relatorio 2026-06-01 2026-06-30  — período customizado
     """
@@ -586,24 +588,27 @@ async def handle_relatorio(ack, respond, command, client):
     user_id   = command["user_id"]
     arg       = command.get("text", "").strip().lower()
 
+    # Detecta cliente POD pelo argumento
+    import re as _re
+    is_pod    = bool(_re.search(r"\b(pod|kombucha)\b", arg))
+    arg_clean = _re.sub(r"\b(pod|kombucha)\b", "", arg).strip()
+    cliente_nome = "POD Kombucha" if is_pod else "Source OF"
+
     await respond(
-        text="⏳ Gerando relatório e publicando no Notion...",
+        text=f"⏳ Gerando relatório *{cliente_nome}* e publicando no Notion...",
         response_type="ephemeral",
     )
 
     try:
         import asyncio
         from datetime import date, timedelta
-        from relatorio.builder import gerar_relatorio_semanal, gerar_relatorio_mensal
 
-        # Resolve período
         hoje = date.today()
         data_inicio = data_fim = None
         usar_mensal = False
 
-        partes = arg.split()
+        partes = arg_clean.split()
         if len(partes) == 2:
-            # Período customizado: 2026-06-01 2026-06-30
             try:
                 data_inicio = date.fromisoformat(partes[0])
                 data_fim    = date.fromisoformat(partes[1])
@@ -611,30 +616,37 @@ async def handle_relatorio(ack, respond, command, client):
                 pass
 
         if not data_inicio:
-            if "mes" in arg or "mês" in arg:
-                # Mês passado completo
+            if "mes" in arg_clean or "mês" in arg_clean:
                 usar_mensal = True
-            elif "hoje" in arg:
+            elif "hoje" in arg_clean:
                 data_inicio = data_fim = hoje
-            elif "ontem" in arg:
+            elif "ontem" in arg_clean:
                 data_inicio = data_fim = hoje - timedelta(days=1)
             else:
-                # padrão: semana passada
                 seg = hoje - timedelta(days=hoje.weekday() + 7)
                 data_inicio = seg
                 data_fim    = seg + timedelta(days=6)
 
-        # Executa em thread separada para não bloquear o event loop
         loop = asyncio.get_event_loop()
-        if usar_mensal:
+
+        if is_pod:
+            from relatorio.builder_pod import gerar_relatorio_pod
             resultado = await loop.run_in_executor(
                 None,
-                lambda: gerar_relatorio_mensal(
-                    cliente="source_of",
+                lambda: gerar_relatorio_pod(
+                    data_inicio=data_inicio,
+                    data_fim=data_fim,
+                    tipo="mensal" if usar_mensal else "semanal",
                     publicar=True,
                 )
             )
+        elif usar_mensal:
+            from relatorio.builder import gerar_relatorio_mensal
+            resultado = await loop.run_in_executor(
+                None, lambda: gerar_relatorio_mensal(cliente="source_of", publicar=True)
+            )
         else:
+            from relatorio.builder import gerar_relatorio_semanal
             resultado = await loop.run_in_executor(
                 None,
                 lambda: gerar_relatorio_semanal(
@@ -665,6 +677,30 @@ async def handle_relatorio(ack, respond, command, client):
 
 
 # ── /campanhas — lista todas as campanhas ─────────────────────────────────────
+
+
+
+# ── /pod — consulta POD Kombucha diretamente (item 9) ────────────────────────
+
+@app.command("/pod")
+async def handle_pod(ack, respond, command, client):
+    """
+    /pod                     — resumo semanal POD Kombucha
+    /pod essa semana         — semana atual
+    /pod mes                 — mês atual
+    /pod qual campanha...    — pergunta livre
+    """
+    await ack()
+    channel   = command["channel_id"]
+    user_id   = command["user_id"]
+    arg       = command.get("text", "").strip() or "como foi essa semana?"
+    thread_ts = str(__import__("time").time())
+
+    await respond(text=f"⏳ Consultando POD Kombucha: _{arg}_...", response_type="ephemeral")
+    await _processar_e_responder(
+        text=f"POD Kombucha {arg}",
+        channel=channel, thread_ts=thread_ts, client=client, user_id=user_id,
+    )
 
 @app.command("/campanhas")
 async def handle_campanhas(ack, respond):

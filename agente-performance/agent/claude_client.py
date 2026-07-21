@@ -77,6 +77,43 @@ SEMPRE estruture as respostas assim:
 - Nunca responda com menos de 10 linhas — sempre analise em profundidade
 """
 
+# ── Prompt específico para POD Kombucha (Google Ads) ────────────────────────
+
+SYSTEM_PROMPT_POD = """Você é o Agente de Performance Guará, especialista sênior em Google Ads.
+
+Você está analisando dados de campanhas do *POD Kombucha* — marca de kombuchá artesanal.
+Dados exclusivos do Google Ads. NUNCA mencione Source OF, Meta Ads ou Facebook.
+
+## Sua missão
+- Analisar campanhas Google Ads do *POD Kombucha* e entregar insights acionáveis
+- Falar em português brasileiro, direto e objetivo
+- Nunca inventar dados — só analise o que foi fornecido
+- Sinalizar problemas com ⚠️ e pontos positivos com ✅
+- Sempre se referir ao cliente como *POD Kombucha*
+
+## Métricas Google Ads
+- *ROAS*: Receita ÷ Investimento (> 3 = bom, > 5 = excelente, < 1 = prejuízo)
+- *CPC*: Custo por clique (menor = melhor)
+- *CTR*: Taxa de cliques sobre impressões
+- *CPM*: Custo por mil impressões
+- *Conversões*: Número de compras/leads rastreados
+- *CPA*: Invest. ÷ Conversões
+- *PMAX / Search / Shopping / Demand Gen*: tipos de campanha Google
+
+## FORMATO OBRIGATÓRIO
+
+1. **Título** — emoji + período + "POD Kombucha · Google Ads"
+2. **Tabela KPI** em ```código``` (Métrica | Valor | Status)
+3. **Tabela de campanhas** quando houver múltiplas (Campanha | Tipo | Invest. | ROAS | Conv.)
+4. **Insights** — máx 4 bullets com emoji
+5. **Recomendação** — 1-2 linhas concretas
+
+### Regras
+- Tabelas em ```código``` com | separador, máx 4 colunas
+- Números: R$ com vírgula decimal, ROAS com 2 casas
+- Comprimento: 15-50 linhas dependendo da complexidade
+"""
+
 
 def get_client() -> anthropic.Anthropic:
     global _client
@@ -133,8 +170,12 @@ def gerar_resposta(
     )
 
     # Memória de longo prazo — injeta exemplos aprovados do Notion KB
+    # (só para Source OF, KB não tem entradas POD ainda)
     kb_contexto = ""
-    if usar_kb:
+    cliente_key = meta.get("cliente", "source_of")
+    is_pod = cliente_key == "pod_kombucha" or (isinstance(dados, dict) and dados.get("plataforma") == "Google Ads")
+
+    if usar_kb and not is_pod:
         try:
             from notion.knowledge_base import buscar_contexto, formatar_contexto_para_prompt
             campanha = meta.get("campanha")
@@ -155,8 +196,11 @@ Dados retornados do banco:
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.{periodo_nota_str}"""
 
-    # Monta system prompt com memória KB (se disponível)
-    system = SYSTEM_PROMPT + ("\n\n" + kb_contexto if kb_contexto else "")
+    # Escolhe system prompt pelo cliente (item 1)
+    if is_pod:
+        system = SYSTEM_PROMPT_POD
+    else:
+        system = SYSTEM_PROMPT + ("\n\n" + kb_contexto if kb_contexto else "")
 
     try:
         model = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")

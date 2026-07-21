@@ -284,7 +284,8 @@ def truncar_blocos(blocks: list[dict], max_blocks: int = 49) -> list[dict]:
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": f"_...{omitidos} bloco(s) de detalhes técnicos omitidos (limite Slack). Ver relatório completo no Notion._",
+            "text": f"⚠️ _{omitidos} bloco(s) omitidos (limite do Slack: 50 blocos/mensagem). "
+                    f"Todos os dados estão no relatório completo do Notion._",
         },
     })
     return result
