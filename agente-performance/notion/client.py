@@ -45,6 +45,11 @@ _RETRY_STATUSES = {429, 500, 502, 503, 504}
 # database_id    → para criar páginas (parent)
 
 DATABASES = {
+    "pod_kombucha": {
+        "nome":           "Relatórios — POD Kombucha",
+        "data_source_id": "37a8a727-a8ff-81ba-900c-000b7df87c7c",  # mesmo database da Source OF
+        "database_id":    None,
+    },
     "consorcio_sorteado": {
         "nome":           "Relatórios — Consórcio Sorteado",
         "data_source_id": "37a8a727-a8ff-8110-b005-000bf0126f94",

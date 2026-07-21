@@ -531,7 +531,7 @@ def gerar_relatorio_pod(
             blocos=blocos,
             periodo_str=periodo_str,
             tipo=tipo,
-            cliente="pod_kombucha",
+            cliente_key="pod_kombucha",
         )
         return {
             "titulo":  titulo,

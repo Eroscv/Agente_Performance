@@ -160,13 +160,13 @@ def _obter_ou_criar_pagina_mae(cliente_key: str = "source_of") -> str:
 
 # ── Página de ano ─────────────────────────────────────────────────────────────
 
-def _obter_ou_criar_pagina_ano(pagina_mae_id: str, ano: int) -> str:
+def _obter_ou_criar_pagina_ano(pagina_mae_id: str, ano: int, cliente_key: str = "source_of") -> str:
     """
     Retorna o page_id da subpágina do ano dentro da página-mãe.
     Cria se não existir.
     """
     cache     = _load_cache()
-    cache_key = f"pagina_ano_{ano}"
+    cache_key = f"pagina_ano_{cliente_key}_{ano}"
 
     if cache.get(cache_key):
         pid = cache[cache_key]
@@ -418,7 +418,7 @@ def criar_relatorio_no_historico(
     else:
         # 2. Garante página-mãe e página do ano
         pagina_mae_id = _obter_ou_criar_pagina_mae(cliente_key)
-        pagina_ano_id = _obter_ou_criar_pagina_ano(pagina_mae_id, ano)
+        pagina_ano_id = _obter_ou_criar_pagina_ano(pagina_mae_id, ano, cliente_key)
 
         # 3. Verifica na API do Notion (cobre caso de cache apagado)
         emoji = "📊" if tipo == "semanal" else "📆"
