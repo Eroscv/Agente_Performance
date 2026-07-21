@@ -240,11 +240,19 @@ def _formatar_dados(dados: Any, intent: str) -> str:
 
         # Injeta tabela de breakdown diário quando presente
         if breakdown:
+            from datetime import date as _date
+            _DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
             resultado += "\n\n[Evolução Diária da Semana]"
-            resultado += "\n  Dia        | Invest.    | Receita    | ROAS  | Conv. | CTR%"
-            resultado += "\n  -----------|------------|------------|-------|-------|-----"
+            resultado += "\n  Dia              | Invest.    | Receita    | ROAS  | Conv. | CTR%"
+            resultado += "\n  -----------------|------------|------------|-------|-------|-----"
             for d in breakdown:
-                dia    = d.get("dia", "?")[:10]
+                dia_str = d.get("dia", "?")[:10]
+                try:
+                    _d = _date.fromisoformat(dia_str)
+                    nome_dia = _DIAS_PT[_d.weekday()]
+                    dia_label = f"{nome_dia} {_d.strftime('%d/%m')}"
+                except Exception:
+                    dia_label = dia_str
                 invest = d.get("invest") or 0
                 receita= d.get("receita") or 0
                 roas   = d.get("roas")
@@ -252,7 +260,7 @@ def _formatar_dados(dados: Any, intent: str) -> str:
                 ctr    = d.get("ctr") or 0
                 roas_s = f"{roas:.2f}x" if roas else "—"
                 resultado += (
-                    f"\n  {dia} | R$ {invest:>8.2f} | R$ {receita:>8.2f} "
+                    f"\n  {dia_label:<16} | R$ {invest:>8.2f} | R$ {receita:>8.2f} "
                     f"| {roas_s:>5} | {conv:>5.1f} | {ctr:>4.2f}%"
                 )
         return resultado
@@ -277,12 +285,25 @@ def _formatar_dados(dados: Any, intent: str) -> str:
 
 
 def _formatar_periodo(meta: dict) -> str:
+    from datetime import date as _date
+    _DIAS_PT = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+
+    def _fmt(d_str: str) -> str:
+        """Formata data com nome do dia: 'Domingo 19/07'."""
+        try:
+            d = _date.fromisoformat(d_str)
+            return f"{_DIAS_PT[d.weekday()]} {d.strftime('%d/%m/%Y')}"
+        except Exception:
+            return d_str
+
     inicio = meta.get("data_inicio")
     fim    = meta.get("data_fim")
     if inicio and fim:
-        return f"Período filtrado: {inicio} a {fim}"
+        if inicio == fim:
+            return f"Período filtrado: {_fmt(inicio)}"
+        return f"Período filtrado: {_fmt(inicio)} a {_fmt(fim)}"
     if inicio:
-        return f"A partir de: {inicio}"
+        return f"A partir de: {_fmt(inicio)}"
     if fim:
-        return f"Até: {fim}"
+        return f"Até: {_fmt(fim)}"
     return "Período: todos os dados disponíveis"
