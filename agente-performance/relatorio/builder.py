@@ -2611,9 +2611,6 @@ def gerar_relatorio_semanal(
         # 16. Base de Recompradoras (dados reais)
         blocos += _blocos_recompradoras()
 
-        # 17. Planejamento Criativo
-        blocos += _blocos_planejamento_criativo(data_fim)
-
         # 18. Próximos Passos
         blocos += _blocos_proximos_passos()
 
