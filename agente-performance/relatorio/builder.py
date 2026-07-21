@@ -1092,90 +1092,163 @@ def _blocos_visao_mensal_diaria(
     dados_diarios: list = None,
 ) -> list[dict]:
     """
-    Seção 2 — Visão Mensal (tabela dia a dia).
-    Se dados_diarios fornecidos (lista de dicts do _buscar_dados_diarios), usa-os
-    diretamente para evitar dupla query no banco. Caso contrário busca no SQLite.
+    Seção Visão Mensal — 3 tabelas separadas:
+    1. Consolidado: Data | Invest. Meta+Imposto | Receita Shopify | MER
+    2. Meta Ads:    Data | Investimento | Compras | CPA | Receita Meta | ROAS
+    3. Google Ads:  Data | Investimento | Compras | CPA | Receita | ROAS (placeholder)
     """
     if dados_diarios is None:
         dados_diarios = _buscar_dados_diarios(data_inicio, data_fim, db_path)
 
-    rows = dados_diarios  # alias para manter o loop original inalterado
+    # Busca receita Shopify por dia (com fallback para None)
+    shopify_por_dia: dict[str, float] = {}
+    try:
+        from shopify.client import _paginar_pedidos
+        from collections import defaultdict
+        _rec_dia: dict[str, float] = defaultdict(float)
+        for pedido in _paginar_pedidos(data_inicio, data_fim, campos="id,created_at,total_price"):
+            dia_iso = pedido.get("created_at", "")[:10]
+            _rec_dia[dia_iso] += float(pedido.get("total_price") or 0)
+        shopify_por_dia = dict(_rec_dia)
+    except Exception as _e:
+        logger.warning("[Builder] Shopify diário indisponível: %s", _e)
 
-    header = ["Data", "Gasto", "Compras Meta", "Receita Meta", "ROAS Meta", "Ticket Médio Meta"]
-    table_rows = [
-        {"type": "table_row", "table_row": {"cells": [
-            [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
-        ]}}
-    ]
-
-    total_invest = 0.0
-    total_compras = 0
-    total_receita = 0.0
-
-    for row in rows:
-        invest  = float(row.get("invest", row.get("invest", 0)) or 0)
-        compras = int(row.get("compras", 0) or 0)
-        receita = float(row.get("receita", 0) or 0)
-        roas    = round(receita / invest, 2) if invest > 0 else None
-        ticket  = round(receita / compras, 2) if compras else None
-
-        # Campo "data" vem de _buscar_dados_diarios (lista de dicts)
-        dia_raw = row.get("data") or row.get("dia", "")
-        try:
-            if isinstance(dia_raw, date):
-                dia_str = dia_raw.strftime("%d/%m")
-            else:
-                dia_str = date.fromisoformat(str(dia_raw)).strftime("%d/%m")
-        except Exception:
-            dia_str = str(dia_raw)
-
-        table_rows.append({"type": "table_row", "table_row": {"cells": [
-            [{"text": {"content": dia_str}}],
-            [{"text": {"content": _fmt_brl(invest)}}],
-            [{"text": {"content": str(compras) if compras else "—"}}],
-            [{"text": {"content": _fmt_brl(receita)}}],
-            [{"text": {"content": _fmt_x(roas)}}],
-            [{"text": {"content": _fmt_brl(ticket)}}],
-        ]}})
-
-        total_invest  += invest
-        total_compras += compras
-        total_receita += receita
-
-    # Se não houver dados, pelo menos 1 linha de dados (regra Notion)
-    if not rows:
-        table_rows.append({"type": "table_row", "table_row": {"cells": [
-            [{"text": {"content": "—"}}],
-            [{"text": {"content": "—"}}],
-            [{"text": {"content": "—"}}],
-            [{"text": {"content": "—"}}],
-            [{"text": {"content": "—"}}],
-            [{"text": {"content": "—"}}],
-        ]}})
-
-    # Linha de total
-    roas_total   = round(total_receita / total_invest, 2) if total_invest > 0 else None
-    ticket_total = round(total_receita / total_compras, 2) if total_compras else None
-    table_rows.append({"type": "table_row", "table_row": {"cells": [
-        [{"text": {"content": "TOTAL"}, "annotations": {"bold": True}}],
-        [{"text": {"content": _fmt_brl(total_invest)}, "annotations": {"bold": True}}],
-        [{"text": {"content": str(total_compras) if total_compras else "—"}, "annotations": {"bold": True}}],
-        [{"text": {"content": _fmt_brl(total_receita)}, "annotations": {"bold": True}}],
-        [{"text": {"content": _fmt_x(roas_total)}, "annotations": {"bold": True}}],
-        [{"text": {"content": _fmt_brl(ticket_total)}, "annotations": {"bold": True}}],
-    ]}})
-
-    return [
-        {"object": "block", "type": "heading_2",
-         "heading_2": {"rich_text": [{"text": {"content": "📊 Visão Mensal"}}]}},
-        {
+    # ── Helper: monta tabela Notion ──────────────────────────────────────
+    def _mk_table(header, rows_data):
+        table_rows = [
+            {"type": "table_row", "table_row": {"cells": [
+                [{"text": {"content": h}, "annotations": {"bold": True}}] for h in header
+            ]}}
+        ]
+        for r in rows_data:
+            table_rows.append({"type": "table_row", "table_row": {"cells": [
+                [{"text": {"content": str(v)}}] for v in r
+            ]}})
+        return {
             "object": "block", "type": "table", "table": {
                 "table_width": len(header),
                 "has_column_header": True,
                 "has_row_header": False,
                 "children": table_rows,
             }
+        }
+
+    # ── Tabela 1 — Consolidado ───────────────────────────────────────────
+    header_cons = ["Data", "Invest. Meta+Imposto", "Receita Shopify", "MER"]
+    rows_cons   = []
+    tot_invest_imp = 0.0
+    tot_rec_shopify = 0.0
+
+    for row in dados_diarios:
+        dia_raw  = row.get("data") or row.get("dia", "")
+        try:
+            dia_date = date.fromisoformat(str(dia_raw)) if not isinstance(dia_raw, date) else dia_raw
+            dia_str  = dia_date.strftime("%d/%m")
+            dia_iso  = dia_date.isoformat()
+        except Exception:
+            dia_str = str(dia_raw); dia_iso = str(dia_raw)
+
+        invest_imp   = spend_com_imposto(float(row.get("invest", 0) or 0))
+        rec_shopify  = shopify_por_dia.get(dia_iso)
+        mer          = round(rec_shopify / invest_imp, 2) if (rec_shopify and invest_imp > 0) else None
+
+        tot_invest_imp  += invest_imp
+        if rec_shopify:
+            tot_rec_shopify += rec_shopify
+
+        rows_cons.append([
+            dia_str,
+            _fmt_brl(invest_imp),
+            _fmt_brl(rec_shopify) if rec_shopify is not None else "—",
+            _fmt_x(mer) if mer is not None else "—",
+        ])
+
+    # Linha total consolidado
+    mer_total = round(tot_rec_shopify / tot_invest_imp, 2) if (tot_rec_shopify and tot_invest_imp > 0) else None
+    rows_cons.append([
+        "TOTAL",
+        _fmt_brl(tot_invest_imp),
+        _fmt_brl(tot_rec_shopify) if tot_rec_shopify else "—",
+        _fmt_x(mer_total) if mer_total else "—",
+    ])
+
+    # ── Tabela 2 — Meta Ads ──────────────────────────────────────────────
+    header_meta = ["Data", "Investimento", "Compras", "CPA", "Receita Meta", "ROAS"]
+    rows_meta   = []
+    tot_m_invest = tot_m_compras = tot_m_receita = 0.0
+
+    for row in dados_diarios:
+        dia_raw = row.get("data") or row.get("dia", "")
+        try:
+            dia_str = date.fromisoformat(str(dia_raw)).strftime("%d/%m") if not isinstance(dia_raw, date) else dia_raw.strftime("%d/%m")
+        except Exception:
+            dia_str = str(dia_raw)
+
+        invest  = float(row.get("invest", 0) or 0)
+        compras = int(row.get("compras", 0) or 0)
+        receita = float(row.get("receita", 0) or 0)
+        cpa     = calcular_cpa(invest, compras)
+        roas    = round(receita / invest, 2) if invest > 0 else None
+
+        tot_m_invest  += invest
+        tot_m_compras += compras
+        tot_m_receita += receita
+
+        rows_meta.append([
+            dia_str,
+            _fmt_brl(invest),
+            str(compras) if compras else "—",
+            _fmt_brl(cpa),
+            _fmt_brl(receita),
+            _fmt_x(roas),
+        ])
+
+    cpa_total_m  = calcular_cpa(tot_m_invest, int(tot_m_compras))
+    roas_total_m = round(tot_m_receita / tot_m_invest, 2) if tot_m_invest > 0 else None
+    rows_meta.append([
+        "TOTAL",
+        _fmt_brl(tot_m_invest),
+        str(int(tot_m_compras)) if tot_m_compras else "—",
+        _fmt_brl(cpa_total_m),
+        _fmt_brl(tot_m_receita),
+        _fmt_x(roas_total_m),
+    ])
+
+    # ── Tabela 3 — Google Ads (placeholder) ─────────────────────────────
+    header_google = ["Data", "Investimento", "Compras", "CPA", "Receita", "ROAS"]
+    rows_google   = [[row.get("data") or row.get("dia",""), "—", "—", "—", "—", "—"] for row in dados_diarios]
+    rows_google.append(["TOTAL", "—", "—", "—", "—", "—"])
+    # Formata datas
+    for r in rows_google:
+        try:
+            r[0] = date.fromisoformat(str(r[0])).strftime("%d/%m")
+        except Exception:
+            pass
+
+    return [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "📊 Visão Mensal"}}]}},
+
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Consolidado (Mídia Total)"}}]}},
+        _mk_table(header_cons, rows_cons),
+
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Meta Ads"}}]}},
+        _mk_table(header_meta, rows_meta),
+
+        {"object": "block", "type": "heading_3",
+         "heading_3": {"rich_text": [{"text": {"content": "Google Ads"}}]}},
+        {
+            "object": "block", "type": "callout",
+            "callout": {
+                "rich_text": [{"text": {"content": "⏳ Dados Google Ads pendentes de integração."}}],
+                "icon": {"type": "emoji", "emoji": "⏳"},
+                "color": "yellow_background",
+            }
         },
+        _mk_table(header_google, rows_google),
+
         {"object": "block", "type": "divider", "divider": {}},
     ]
 
