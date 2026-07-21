@@ -1887,11 +1887,18 @@ def _blocos_pedidos_sku(
     return blocos
 
 
-def _blocos_pedidos_estado() -> list[dict]:
+def _blocos_pedidos_estado(
+    dados_estado: list[dict] = None,
+) -> list[dict]:
     """
-    Seção — Pedidos por Estado (hardcoded, ordem de presença histórica).
+    Seção — Pedidos por Estado.
+
+    Tabela completa: Estado | Pedidos | Receita | % Pedidos | % Receita
+
+    dados_estado: lista de dicts com chaves estado, pedidos, receita.
+                  Se None ou vazio, exibe estrutura com placeholder.
     """
-    estados = [
+    ESTADOS_HISTORICOS = [
         "São Paulo", "Paraíba", "Distrito Federal", "Goiás", "Sergipe",
         "Tocantins", "Alagoas", "Acre", "Piauí", "Rondônia", "Amapá",
         "Rio Grande do Sul", "Mato Grosso", "Bahia", "Espírito Santo",
@@ -1899,21 +1906,47 @@ def _blocos_pedidos_estado() -> list[dict]:
         "Paraná", "Mato Grosso do Sul", "Rio Grande do Norte", "Pará",
         "Amazonas", "Santa Catarina", "Ceará",
     ]
-    rows = [[e] for e in estados]
-    return [
-        {"object": "block", "type": "heading_2",
-         "heading_2": {"rich_text": [{"text": {"content": "🗺️ Pedidos por Estado"}}]}},
-        {
+
+    header = ["Estado", "Pedidos", "Receita", "% Pedidos", "% Receita"]
+
+    tem_dados = bool(dados_estado)
+
+    if tem_dados:
+        total_pedidos = sum(int(d.get("pedidos") or 0) for d in dados_estado)
+        total_receita = sum(float(d.get("receita") or 0) for d in dados_estado)
+        dados_estado  = sorted(dados_estado, key=lambda d: int(d.get("pedidos") or 0), reverse=True)
+        rows = [
+            [
+                d.get("estado", "—"),
+                str(int(d.get("pedidos") or 0)),
+                _fmt_brl(d.get("receita")),
+                f"{int(d.get('pedidos') or 0) / total_pedidos * 100:.1f}%" if total_pedidos else "—",
+                f"{float(d.get('receita') or 0) / total_receita * 100:.1f}%" if total_receita else "—",
+            ]
+            for d in dados_estado
+        ]
+        rows.append(["TOTAL", str(total_pedidos), _fmt_brl(total_receita), "100.0%", "100.0%"])
+        callout = None
+    else:
+        rows    = [[e, "—", "—", "—", "—"] for e in ESTADOS_HISTORICOS]
+        callout = {
             "object": "block", "type": "callout",
             "callout": {
                 "rich_text": [{"text": {"content": "⏳ Volumes de pedidos por estado pendentes de integração Shopify. Estados listados por presença histórica."}}],
                 "icon": {"type": "emoji", "emoji": "⏳"},
                 "color": "yellow_background",
             }
-        },
-        _mk_table_notion(["Estado"], rows),
-        {"object": "block", "type": "divider", "divider": {}},
+        }
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "🗺️ Pedidos por Estado"}}]}},
     ]
+    if callout:
+        blocos.append(callout)
+    blocos.append(_mk_table_notion(header, rows))
+    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    return blocos
 
 
 def _blocos_recompradoras() -> list[dict]:
