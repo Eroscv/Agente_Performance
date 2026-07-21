@@ -552,6 +552,15 @@ def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, 
         nota_limpa = periodo_nota.replace('\u26a0\ufe0f', '').replace('\u26a0', '').strip()
         aviso_periodo = f"⚠️ _{nota_limpa}_"
 
+    # ── Detecta se pede breakdown diário ("essa semana até agora", "essa semana", "semana atual") ──
+    _SEMANA_PARCIAL = re.compile(
+        r"(essa\s+semana|esta\s+semana|semana\s+até\s+agora|semana\s+atual"
+        r"|até\s+agora|até\s+hoje|semana\s+corrente"
+        r"|how\s+this\s+week|this\s+week\s+so\s+far)",
+        re.IGNORECASE,
+    )
+    pedir_breakdown = bool(_SEMANA_PARCIAL.search(pergunta))
+
     # ── Queries SQLite (item 4: CPC + CPM) ────────────────────────────────
     try:
         from db.connection import get_conn
@@ -622,6 +631,29 @@ def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, 
             "cpm":           _v(row, "cpm"),   # item 4
             "campanhas":     [dict(c) for c in campanhas],
         }
+
+        # ── Breakdown diário (quando pede "essa semana até agora") ──────────────
+        if pedir_breakdown:
+            dias = conn.execute("""
+                SELECT
+                    data_inicio                  AS dia,
+                    SUM(investimento)            AS invest,
+                    SUM(impressoes)              AS impressoes,
+                    SUM(cliques)                 AS cliques,
+                    SUM(conversoes)              AS conversoes,
+                    SUM(valor_conversao)         AS receita,
+                    CASE WHEN SUM(investimento) > 0
+                         THEN SUM(valor_conversao) / SUM(investimento) END AS roas,
+                    CASE WHEN SUM(conversoes) > 0
+                         THEN SUM(investimento) / SUM(conversoes) END AS cpa,
+                    CASE WHEN SUM(impressoes) > 0
+                         THEN CAST(SUM(cliques) AS REAL) / SUM(impressoes) * 100 END AS ctr
+                FROM pod_gads_diario
+                WHERE data_inicio BETWEEN ? AND ?
+                GROUP BY data_inicio
+                ORDER BY data_inicio ASC
+            """, (data_inicio, data_fim)).fetchall()
+            dados["breakdown_diario"] = [dict(d) for d in dias]
 
     except Exception as e:
         logger.error("[POD] Erro ao consultar banco: %s", e)

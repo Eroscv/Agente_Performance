@@ -105,13 +105,17 @@ Dados exclusivos do Google Ads. NUNCA mencione Source OF, Meta Ads ou Facebook.
 1. **Título** — emoji + período + "POD Kombucha · Google Ads"
 2. **Tabela KPI** em ```código``` (Métrica | Valor | Status)
 3. **Tabela de campanhas** quando houver múltiplas (Campanha | Tipo | Invest. | ROAS | Conv.)
-4. **Insights** — máx 4 bullets com emoji
-5. **Recomendação** — 1-2 linhas concretas
+4. **Evolução diária** — quando os dados contiverem `[Evolução Diária da Semana]`, inclua
+   obrigatoriamente uma tabela com: Data | Invest. | Receita | ROAS | Conv.
+   Marque o melhor dia com 🔥 e o pior com 📉
+5. **Insights** — máx 4 bullets com emoji
+6. **Recomendação** — 1-2 linhas concretas
 
 ### Regras
-- Tabelas em ```código``` com | separador, máx 4 colunas
+- Tabelas em ```código``` com | separador, máx 5 colunas
 - Números: R$ com vírgula decimal, ROAS com 2 casas
-- Comprimento: 15-50 linhas dependendo da complexidade
+- Comprimento: 15-60 linhas quando tiver breakdown diário; 15-50 linhas no padrão
+- Quando tiver breakdown diário, o item 4 é OBRIGATÓRIO
 """
 
 
@@ -226,10 +230,32 @@ def _formatar_dados(dados: Any, intent: str) -> str:
         if not dados:
             return "Nenhum dado encontrado."
         linhas = []
+        breakdown = dados.get("breakdown_diario")
         for k, v in dados.items():
+            if k == "breakdown_diario":
+                continue  # será formatado separado abaixo
             if v is not None:
                 linhas.append(f"  {k}: {v}")
-        return "\n".join(linhas)
+        resultado = "\n".join(linhas)
+
+        # Injeta tabela de breakdown diário quando presente
+        if breakdown:
+            resultado += "\n\n[Evolução Diária da Semana]"
+            resultado += "\n  Dia        | Invest.    | Receita    | ROAS  | Conv. | CTR%"
+            resultado += "\n  -----------|------------|------------|-------|-------|-----"
+            for d in breakdown:
+                dia    = d.get("dia", "?")[:10]
+                invest = d.get("invest") or 0
+                receita= d.get("receita") or 0
+                roas   = d.get("roas")
+                conv   = d.get("conversoes") or 0
+                ctr    = d.get("ctr") or 0
+                roas_s = f"{roas:.2f}x" if roas else "—"
+                resultado += (
+                    f"\n  {dia} | R$ {invest:>8.2f} | R$ {receita:>8.2f} "
+                    f"| {roas_s:>5} | {conv:>5.1f} | {ctr:>4.2f}%"
+                )
+        return resultado
 
     if isinstance(dados, list):
         if not dados:
