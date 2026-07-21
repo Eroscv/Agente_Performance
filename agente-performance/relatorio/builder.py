@@ -2773,11 +2773,13 @@ def gerar_relatorio_semanal(
                     "color": "yellow_background",
                 }
             })
+        # 1. Funil de conversão (análise semanal — posição de destaque)
+        blocos += _blocos_funil(resumo)
+
         if resumo_anterior:
             blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
         blocos += _blocos_tendencia_semanal()
         blocos += _blocos_alocacao(campanhas)
-        blocos += _blocos_funil(resumo)
 
         # ── Dados Shopify (reais) ─────────────────────────────────────
         try:
