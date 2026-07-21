@@ -2826,7 +2826,6 @@ def gerar_relatorio_semanal(
 
         if resumo_anterior:
             blocos += _blocos_comparativo(resumo, resumo_anterior, periodo_anterior_str)
-        blocos += _blocos_tendencia_semanal()
         blocos += _blocos_tendencia_mensal(data_fim, db_path=db_path)
         blocos += _blocos_alocacao(campanhas)
 
