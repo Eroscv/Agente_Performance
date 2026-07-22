@@ -14,9 +14,13 @@ Qualquer trabalho no **Agente de Performance Guará** NUNCA deve afetar:
 
 ### Agente de Performance Guará
 - **Diretório:** `/home/ubuntu/.openclaw/workspace/agente-performance/`
-- **Status:** Em refatoração (2026-06-23) — diretório limpo, apenas `.env` e `.env.example` presentes
-- **Stack anterior:** FastAPI + Slack Bolt + APScheduler + SQLite + Windsor API + Anthropic
-- **Nome correto:** "Agente de Performance Guará" (não Guaraná)
+- **Status:** Produção ativa (porta 8001, `agente-guara.service`)
+- **Stack:** FastAPI + Slack Bolt + SQLite + Claude Haiku 4.5 + Notion API
+- **Clientes:** Source OF (Meta Ads) + POD Kombucha (Google Ads) + 4 outros
+- **Shopify Sync:** `db/shopify_sync.py` — tabela `shopify_receita_diaria` — 387 dias, 31.285 pedidos, R$ 9,58M sincronizados
+  - ROAS real calculado: Receita Shopify ÷ Investimento Meta ajustado (×1,1215)
+  - Cron automático: `shopify-sync-diario` às 6h UTC (últimos 8 dias)
+  - Endpoints: GET /shopify/status · POST /shopify/sync · GET /shopify/receita · GET /shopify/diario
 
 ### Flora-Agente
 - **Diretório:** `/home/ubuntu/.openclaw/workspace/Flora-Agente-repo/`
