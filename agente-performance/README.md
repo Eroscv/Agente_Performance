@@ -103,6 +103,125 @@ Slack: resposta no thread com dados + link Notion (se `/relatorio`)
 
 ---
 
+## 💬 Como Utilizar
+
+### Via Slack — Linguagem Natural
+
+Mencione `@agente` em qualquer canal ou mande uma DM diretamente:
+
+```
+@agente como foi o mês de junho?
+@agente qual campanha teve melhor ROAS essa semana?
+@agente compare a ABO vs Advantage em maio
+```
+
+### Via Slack — Slash Commands
+
+| Comando | Exemplo | O que faz |
+|---|---|---|
+| `/hoje` | `/hoje` | Resumo do dia atual |
+| `/semana` | `/semana` | Últimos 7 dias |
+| `/mes` | `/mes` · `/mes junho` | Mês atual ou específico |
+| `/top` | `/top` · `/top compras` · `/top 10` | Top campanhas por ROAS ou compras |
+| `/campanha` | `/campanha ABO` | Detalhe de uma campanha |
+| `/campanhas` | `/campanhas` | Lista todas as campanhas |
+| `/compare` | `/compare ABO vs Advantage` | Comparação lado a lado |
+| `/funil` | `/funil` · `/funil ABO` | Funil de conversão geral ou de uma campanha |
+| `/alertas` | `/alertas` | Campanhas com ROAS baixo ou sem conversão |
+| `/relatorio` | `/relatorio` · `/relatorio mes` · `/relatorio notion` | Relatório no Notion |
+| `/exemplos` | `/exemplos` | Mais exemplos de perguntas |
+| `/metricas` | `/metricas` | Lista de todas as métricas disponíveis |
+| `/status` | `/status` | Status do sistema |
+| `/ajuda` | `/ajuda` | Menu de ajuda completo |
+
+### Exemplos Práticos
+
+**Análise geral:**
+```
+@agente resumo completo de junho — investimento, receita e compras
+@agente como estão as campanhas esse mês?
+@agente visão geral dos últimos 30 dias
+```
+
+**Rankings:**
+```
+@agente qual campanha teve melhor ROAS essa semana?
+@agente top 3 campanhas que geraram mais compras em 2026
+@agente qual teve mais cliques no link em junho?
+```
+
+**Campanha específica:**
+```
+@agente como foi a ABO nos últimos 30 dias?
+@agente mostre o funil de conversão da Advantage em junho
+@agente como evoluiu o investimento da ABO dia a dia em junho?
+```
+
+**Comparativos:**
+```
+@agente compare a Advantage vs ABO em maio
+@agente como foi semana a semana em junho?
+@agente compare junho com maio
+@agente performance antes e depois de 15/06
+```
+
+**Alertas e problemas:**
+```
+@agente qual campanha está com ROAS abaixo de 1?
+@agente tem alguma campanha gastando sem converter?
+@agente alguma campanha com frequência muito alta?
+```
+
+**POD Kombucha (Google Ads):**
+```
+@agente POD como foi a semana passada?
+@agente POD Kombucha resumo de junho
+@agente resultados do POD nos últimos 30 dias
+```
+
+**Relatórios e exportação:**
+```
+/relatorio          → relatório da semana passada no Notion
+/relatorio mes      → relatório do mês passado no Notion
+@agente gera um excel de junho
+@agente salva no Notion o resumo de maio
+```
+
+### Períodos que o Agente Entende
+
+| Expressão | Interpretação |
+|---|---|
+| `hoje` | Data atual |
+| `ontem` | Dia anterior |
+| `essa semana` / `semana atual` | Segunda → domingo da semana corrente |
+| `semana passada` | Segunda → domingo da semana anterior |
+| `esse mês` / `mês atual` | Do dia 1 ao dia atual do mês corrente |
+| `mês passado` | Mês calendário completo anterior |
+| `últimos 7 dias` / `30 dias` / `90 dias` | Período contado a partir de hoje |
+| `em junho` / `junho de 2026` | Mês completo |
+| `janeiro a março` | Período entre dois meses |
+| `Q1` / `Q2` / `segundo trimestre` | Trimestre completo |
+| `01/06/2026` | Data específica (formato BR) |
+| `2026-06-01` | Data específica (formato ISO) |
+| `black friday` | Sinônimo configurado |
+
+### Como Funciona o Roteamento de Clientes
+
+O agente detecta automaticamente para qual cliente a pergunta se refere:
+
+- **Source OF (Meta Ads)** → padrão quando nenhum cliente é mencionado
+- **POD Kombucha (Google Ads)** → qualquer pergunta com `POD`, `Kombucha`, `Google Ads do POD`
+- **Consórcio Sorteado** → menção a `consórcio`, `sorteado`
+- **Máximo Serviço** → menção a `máximo`, `serviço`
+- **BE MUSHIN** → menção a `mushin`
+- **Bazar do Precatório** → menção a `bazar`, `precatório`
+
+### Dica: Reação 👍
+
+Se uma resposta do agente foi especialmente boa, dê 👍 nela no Slack. A resposta é salva na **Base de Conhecimento do Notion** e marcada como aprovada — o agente aprende com o que funciona.
+
+---
+
 ## 📐 Regras de Negócio
 
 > Definidas em reunião com Bianca e Eros (Guará Marketing). **Imutáveis sem aprovação.**
