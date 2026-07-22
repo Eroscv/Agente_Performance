@@ -556,6 +556,28 @@ def consultar(
         except Exception as _e:
             logger.debug("[Delta consulta] Falhou: %s", _e)
 
+    # ── Enriquecimento com receita Shopify real ─────────────────────────────
+    shopify_dados = {}
+    if data_inicio and data_fim and not dados_principais_vazios:
+        try:
+            from agent.queries import receita_shopify_periodo as _rsp
+            _sd = _rsp(data_inicio, data_fim)
+            if _sd.get("sincronizado"):
+                shopify_dados = _sd
+                # Se temos receita Shopify real e dados Meta, recalcula ROAS real
+                roas_real = _sd.get("roas_real")
+                if roas_real and isinstance(dados, dict):
+                    dados["roas_shopify"]           = roas_real
+                    dados["receita_shopify"]        = _sd.get("receita_total")
+                    dados["cac"]                    = _sd.get("cac")
+                    dados["novos_clientes_shopify"] = _sd.get("novos_clientes")
+                    dados["ticket_medio_shopify"]   = _sd.get("ticket_medio")
+                    dados["taxa_recompra_pct"]      = _sd.get("taxa_recompra_pct")
+                logger.debug("[engine] Shopify enriquecido: receita=%.2f roas_real=%s",
+                             _sd.get("receita_total", 0), _sd.get("roas_real"))
+        except Exception as _se:
+            logger.debug("[engine] Shopify sync não disponível: %s", _se)
+
     resultado = {
         "intent":          intents[0],
         "intents":         intents,
@@ -563,7 +585,8 @@ def consultar(
         "dados_extra":     dados_extra,
         "meta":            meta,
         "aviso_vazio":     dados_vazios_msg,
-        "delta":           delta_consulta,  # item 2: comparativo vs período anterior
+        "delta":           delta_consulta,  # comparativo vs período anterior
+        "shopify":         shopify_dados,   # receita real Shopify (vazio se não sincronizado)
     }
 
     # 6. Salva no cache (não cacheia resultados vazios)

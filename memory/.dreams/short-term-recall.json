@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-07-16T12:25:11.159Z",
+  "updatedAt": "2026-07-22T13:30:13.348Z",
   "entries": {
     "memory:memory/2026-06-22.md:1:30": {
       "key": "memory:memory/2026-06-22.md:1:30",
@@ -42,20 +42,21 @@
       "endLine": 37,
       "source": "memory",
       "snippet": "# Memory — 2026-06-24 ## Projetos ativos: Agente de Performance + Agente de Briefings (Guará Marketing) ### Identidade - Nome: Cesar - Role: Senior Lead Systems Engineer & Automation Architect - Configurado por Eros (Guará Marketing) para os projetos Flora e Agente de Performance ### Infraestrutura - Host: ip-172-26-10-132 (AWS Ubuntu) - Proxy HTTPS: 44.204.251.251 - Porta agente briefings: 8002 - URL externa briefings: https://44.204.251.251/briefings/slack/events - Venv: /home/ubuntu/.openclaw/workspace/Agente_briefing/venv - Serviço: agente-briefings.service (active) ### Agente de Performance - Diretório: /home/ubuntu/.openclaw/workspace/agente-performance/ - GitHub: https://github.co",
-      "recallCount": 6,
+      "recallCount": 7,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 6,
+      "totalScore": 7,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-07-16T12:25:11.159Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.347Z",
       "queryHashes": [
         "eb94228f54b4",
         "6f2eb0360318",
         "8e44e9147f05",
         "232d5f91fa66",
         "a4c58fc2a09b",
-        "9aed56b80585"
+        "9aed56b80585",
+        "137494fd710e"
       ],
       "recallDays": [
         "2026-06-24",
@@ -63,7 +64,8 @@
         "2026-07-01",
         "2026-07-03",
         "2026-07-13",
-        "2026-07-16"
+        "2026-07-16",
+        "2026-07-22"
       ],
       "conceptTags": [
         "ip-172-26-10-132",
@@ -83,22 +85,24 @@
       "endLine": 31,
       "source": "memory",
       "snippet": "# Memória — 2026-06-23 ## Projeto: Agente de Performance Guará ### Localização - Projeto: `/home/ubuntu/.openclaw/workspace/agente-performance` - Banco SQLite campanhas: `data/campanhas.db` (30.905 registros, 93 colunas, mai/2023–jun/2026) - Banco contexto: `data/context.db` (TTL 24h) - Banco logs: `data/logs.db` - Env virtual: `venv/` dentro do projeto - Serviço systemd: `agente-guara.service` (User=ubuntu, porta 8001) - Apache proxy: vhost `flora-webhook.conf`, rotas `/guara/` e `/guara/slack/events` - Repositório GitHub: https://github.com/Eroscv/Flora-Agente (privado) - Último commit pushado: `feat: comparativos WoW/MoM/antes-depois/períodos/ranking` ### Regras absolutas - **Flora é I",
-      "recallCount": 3,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-07-16T12:25:11.159Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.347Z",
       "queryHashes": [
         "eb94228f54b4",
         "a4c58fc2a09b",
-        "9aed56b80585"
+        "9aed56b80585",
+        "137494fd710e"
       ],
       "recallDays": [
         "2026-06-24",
         "2026-07-13",
-        "2026-07-16"
+        "2026-07-16",
+        "2026-07-22"
       ],
       "conceptTags": [
         "home/ubuntu",
@@ -118,22 +122,24 @@
       "endLine": 95,
       "source": "memory",
       "snippet": "- `ranking_comparativo` — ranking de todas as campanhas por qualquer métrica ### Pendências do usuário (Slack app) - Configurar no painel api.slack.com: - Event Subscriptions URL: `https://44.204.251.251/guara/slack/events` - Bot events: `app_mention`, `message.im` - OAuth Scopes: `chat:write`, `reactions:write`, `reactions:read`, `app_mentions:read`, `im:history` - Slash command `/ajuda` → mesma URL ### Pendências técnicas abertas - Integrar `agent/cache.py` e `agent/conversation_log.py` no fluxo principal do `engine.py` - Integrar handler Slack para export (detectar palavras \"excel\"/\"pdf\" e chamar `reports/exporter.py`) - Testar bot com perguntas reais no Slack - Exposição do",
-      "recallCount": 3,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-07-16T12:25:11.159Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.347Z",
       "queryHashes": [
         "eb94228f54b4",
         "a4c58fc2a09b",
-        "9aed56b80585"
+        "9aed56b80585",
+        "137494fd710e"
       ],
       "recallDays": [
         "2026-06-24",
         "2026-07-13",
-        "2026-07-16"
+        "2026-07-16",
+        "2026-07-22"
       ],
       "conceptTags": [
         "ranking-comparativo",
@@ -257,19 +263,21 @@
       "endLine": 43,
       "source": "memory",
       "snippet": "- `scheduler.py` atualizado para usar `notion_builder` - `send_report.py` ganhou `send_notion_notification()` (envia link do Notion via WhatsApp) #### Relatório sob demanda (WhatsApp) - Criado `reports/on_demand.py` - **REGRA ABSOLUTA:** apenas `5519995994481` pode solicitar relatório via WhatsApp - Detecta pedidos com regex (`relatório`, `report`) - Interpreta período: semana N do mês, semana passada, semana atual, mês passado, mensal, mês atual - Fallback automático: se período pedido não tem mensagens (`user_messages == 0`), usa período mais recente disponível e avisa - Integrado em `webhook.py` no `on_message_ready()` antes do orquestrador - Resposta: resumo + link do Notion via WhatsAp",
-      "recallCount": 2,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 2,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-02T18:31:23.287Z",
-      "lastRecalledAt": "2026-07-02T18:31:26.171Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.348Z",
       "queryHashes": [
         "0d0550a70f3b",
-        "f7ca85ea071d"
+        "f7ca85ea071d",
+        "239c05a450c4"
       ],
       "recallDays": [
-        "2026-07-02"
+        "2026-07-02",
+        "2026-07-22"
       ],
       "conceptTags": [
         "scheduler.py",
@@ -289,18 +297,20 @@
       "endLine": 178,
       "source": "memory",
       "snippet": "5. **Exportação para Notion via Slack:** - Detecta \"notion\" no texto da mensagem ou no argumento do `/relatorio` - Detecta cliente por token no texto (consórcio, source of, mushin, bazar, máximo) - Publica página e retorna link clicável no Slack - Suporta combinação: \"excel e notion\" → upload no Slack + link no Notion 6. **Source OF identificado em tudo:** - System prompt do Claude menciona \"Source OF — empresa de beleza e cosméticos\" - Arquivos exportados: `source_of_*.xlsx`, `source_of_*.pdf` - Cabeçalho Excel: \"Source OF — Meta Ads\" - Páginas Notion: título `📊 Source OF — Meta Ads · período` - Database padrão Notion: `source_of` 7. **README.md completo** — 585",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-14T12:59:54.258Z",
-      "lastRecalledAt": "2026-07-14T12:59:54.258Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.348Z",
       "queryHashes": [
-        "d09a3d905b6f"
+        "d09a3d905b6f",
+        "239c05a450c4"
       ],
       "recallDays": [
-        "2026-07-14"
+        "2026-07-14",
+        "2026-07-22"
       ],
       "conceptTags": [
         "source-of",
@@ -373,6 +383,192 @@
         "has-history",
         "arquivo",
         "prompt"
+      ]
+    },
+    "memory:memory/2026-07-15.md:47:59": {
+      "key": "memory:memory/2026-07-15.md:47:59",
+      "path": "memory/2026-07-15.md",
+      "startLine": 47,
+      "endLine": 59,
+      "source": "memory",
+      "snippet": "- GitHub: https://github.com/Eroscv/Flora-Agente/blob/main/CONVERSAS.md - Privacidade: telefones mascarados (5514****3327) no GitHub - Inclui: resumo geral, atividade diária, top clientes, perfis enriquecidos, handoffs, blacklist, todas as mensagens na íntegra ## Infraestrutura / Caminhos importantes - Agente Performance: `/home/ubuntu/.openclaw/workspace/agente-performance/` - Flora: `/home/ubuntu/.openclaw/workspace/Flora-Agente-repo/` - Flora DB: `Flora-Agente-repo/flora.db` - Agente Performance DB: `agente-performance/data/performance.db` (ou similar) - Logs Performance: `agente-performance/data/logs.db` - Scripts Flora: `Flora-Agente-repo/scripts/` - Scripts Performance: `agente-perfor",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:30:13.347Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.347Z",
+      "queryHashes": [
+        "137494fd710e"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "home/ubuntu",
+        "flora-agente-repo/flora.db",
+        "agente-performance/data/logs.db",
+        "flora-agente-repo/scripts",
+        "agente-perfor",
+        "github",
+        "https",
+        "github.com"
+      ]
+    },
+    "memory:memory/2026-07-15.md:23:52": {
+      "key": "memory:memory/2026-07-15.md:23:52",
+      "path": "memory/2026-07-15.md",
+      "startLine": 23,
+      "endLine": 52,
+      "source": "memory",
+      "snippet": "8. Perguntas negativas: \"não estão convertendo\" → sem_conversao; \"ruins\" → alertas_roas 9. limit=999 para \"todas\"/\"tudo\" 10. \"mês passado\" = mês calendário completo (não hoje-30d) 11. Retry automático (2x) em JSON inválido antes de cair no fallback 12. Cache NLP em memória (por pergunta normalizada) 13. Logging de latência em ms em cada chamada NLP 14. Log de intent desconhecida retornada pelo Claude - _detect_intent normaliza acentos via unicodedata - Fallback regex: 30/30 casos corretos ### Script de README automático - `scripts/gerar_readme_consultas.py` — lê logs.db + banco, gera CONSULTAS.md - `scripts/push_consultas.sh` — commit + push (idempotente) - Cron OpenClaw: todo dia 00:00 UTC",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:30:13.347Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.347Z",
+      "queryHashes": [
+        "137494fd710e"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "sem-conversao",
+        "alertas-roas",
+        "hoje-30d",
+        "detect-intent",
+        "30/30",
+        "logs.db",
+        "consultas.md",
+        "scripts/push-consultas.sh"
+      ]
+    },
+    "memory:memory/2026-07-01.md:1:25": {
+      "key": "memory:memory/2026-07-01.md:1:25",
+      "path": "memory/2026-07-01.md",
+      "startLine": 1,
+      "endLine": 25,
+      "source": "memory",
+      "snippet": "# Memória — 2026-07-01 ## Sessão de hoje ### Agente de Performance Guará - **Relatórios via Notion** (não mais via docs): `relatorio/builder.py` já usava Notion via `notion/historico.py`. Criada função `gerar_relatorio_mensal()` explícita em `builder.py` para mês passado completo. `cron_relatorio.py` e `gerar_relatorio.py` atualizados para usar a função correta. `/relatorio mes` no Slack corrigido para mês passado completo (antes usava mês atual incompleto). Texto do `/ajuda` atualizado. ### Flora-Agente #### Bug crítico corrigido — Flora estava offline - `agents/orchestrator.py` estava sem a declaração `class OrchestratorAgent:` — os métodos existiam soltos no arquivo. Python aceitava",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:30:13.348Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.348Z",
+      "queryHashes": [
+        "239c05a450c4"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "relatorio/builder.py",
+        "notion/historico.py",
+        "gerar-relatorio-mensal",
+        "builder.py",
+        "cron-relatorio.py",
+        "gerar-relatorio.py",
+        "flora-agente",
+        "agents/orchestrator.py"
+      ]
+    },
+    "memory:memory/2026-06-23.md:133:158": {
+      "key": "memory:memory/2026-06-23.md:133:158",
+      "path": "memory/2026-06-23.md",
+      "startLine": 133,
+      "endLine": 158,
+      "source": "memory",
+      "snippet": "main.py # Entrypoint FastAPI + Slack Bolt README.md # Documentação completa 585 linhas .env .gitignore # Exclui .ssh/, *.db, *.csv, venv/ ``` ### Melhorias implementadas (sessão atual — tarde) 1. **Bugs críticos corrigidos:** - B1: `performance_campanha` agora faz fuzzy/LIKE antes de chamar SQL - B5: campanha não encontrada → lista 8 sugestões ordenadas por investimento - Alertas ROAS: trata campanhas com ROAS NULL (sem conversão), exclui engajamento/tráfego 2. **conversation_log integrado no handler Slack** — bloco `finally` garante log de TODA mensagem real - Log interno do engine removido (evita duplicação) - Registra: pergunta,",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:30:13.348Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.348Z",
+      "queryHashes": [
+        "239c05a450c4"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "main.py",
+        "readme.md",
+        "performance-campanha",
+        "fuzzy/like",
+        "engajamento/tráfego",
+        "conversation-log",
+        "entrypoint",
+        "fastapi"
+      ]
+    },
+    "memory:memory/2026-07-01.md:39:55": {
+      "key": "memory:memory/2026-07-01.md:39:55",
+      "path": "memory/2026-07-01.md",
+      "startLine": 39,
+      "endLine": 55,
+      "source": "memory",
+      "snippet": "- Regex cobre: \"cobrou a mais\", \"valor divergente\", \"cobrança indevida\", \"preço errado\", etc. - 14 casos de teste passando #### Melhorias de relatório em andamento (subagente rodando) - **generator.py:** novas métricas — taxa de handoff realista (guard divisão por zero), tempo médio de resposta por intenção, taxa de resolução sem handoff, ticket médio da conversa, comparativo com período anterior - **notion_builder.py:** ícones de status 🟢🟡🔴 por seção, barras usando tabelas Notion (não ASCII), resumo executivo 3 linhas no topo, comparativo com delta (+/-%), destaque de anomalias, seção de handoffs com toggle por cliente, handoffs resolvidos vs. abertos ### Infraestrutura Flora - Serviço",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:30:13.348Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.348Z",
+      "queryHashes": [
+        "239c05a450c4"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "generator.py",
+        "notion-builder.py",
+        "regex",
+        "cobre",
+        "cobrou",
+        "mais",
+        "valor",
+        "divergente"
+      ]
+    },
+    "memory:memory/2026-06-23.md:115:141": {
+      "key": "memory:memory/2026-06-23.md:115:141",
+      "path": "memory/2026-06-23.md",
+      "startLine": 115,
+      "endLine": 141,
+      "source": "memory",
+      "snippet": "context_store.py # Memória de contexto por thread SQLite TTL 24h conversation_log.py # Log estruturado SQLite (data/logs.db) engine.py # Orquestrador NLP → queries → resposta (sem log interno — handler cuida disso) nlp.py # NLP Claude: JSON estruturado (intents + campanha + datas), fuzzy matching queries.py # 10 consultas SQL prontas synonyms.py # Mapeamento de sinônimos api/app.py # FastAPI REST — 24 endpoints incluindo 5 de Notion db/ connection.py # Singleton SQLite com row_factory loader.py # Carga idempotente CSV→SQLite schema.py # COLUMN_MAP (94 colunas PT-BR→SQL) + C",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:30:13.348Z",
+      "lastRecalledAt": "2026-07-22T13:30:13.348Z",
+      "queryHashes": [
+        "239c05a450c4"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "context-store.py",
+        "conversation-log.py",
+        "data/logs.db",
+        "engine.py",
+        "nlp.py",
+        "queries.py",
+        "synonyms.py",
+        "api/app.py"
       ]
     }
   }

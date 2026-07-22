@@ -205,15 +205,41 @@ def gerar_resposta(
         except Exception as e:
             logger.debug("KB: falha ao buscar contexto (não crítico): %s", e)
 
+    # Dados Shopify reais (quando sincronizados)
+    shopify_str = ""
+    _shopify = kwargs.get("shopify") or {}
+    if _shopify.get("sincronizado"):
+        roas_r  = _shopify.get("roas_real")
+        rec_s   = _shopify.get("receita_total")
+        novos_s = _shopify.get("novos_clientes")
+        ticket_s= _shopify.get("ticket_medio")
+        cac_s   = _shopify.get("cac")
+        recomp  = _shopify.get("taxa_recompra_pct")
+        linhas_shopify = []
+        if rec_s   is not None: linhas_shopify.append(f"  Receita Shopify Real: R$ {rec_s:,.2f}")
+        if roas_r  is not None: linhas_shopify.append(f"  ROAS Real (Shopify÷Meta ajustado): {roas_r:.2f}x")
+        if novos_s is not None: linhas_shopify.append(f"  Novos Clientes: {novos_s}")
+        if ticket_s is not None: linhas_shopify.append(f"  Ticket Médio: R$ {ticket_s:.2f}")
+        if cac_s   is not None: linhas_shopify.append(f"  CAC: R$ {cac_s:.2f}")
+        if recomp  is not None: linhas_shopify.append(f"  Taxa de Recompra: {recomp:.1f}%")
+        if linhas_shopify:
+            shopify_str = (
+                "\n\n[Dados Shopify reais — receita confirmada, não estimada pelo Meta]\n"
+                + "\n".join(linhas_shopify)
+                + "\n  ⚠️ Use o ROAS Real (Shopify) como referência principal, não o ROAS do Meta."
+            )
+
     user_message = f"""Pergunta do usuário: {pergunta}
 {contexto_str}
 Intenção detectada: {intent}
 {periodo_str}
 
 Dados retornados do banco:
-{dados_str}{extras_str}{delta_str}
+{dados_str}{extras_str}{delta_str}{shopify_str}
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.{periodo_nota_str}"""
+    if shopify_str:
+        user_message += "\n\nPRIORIDADE: Se disponível, use o ROAS Real Shopify nas análises. Destaque a diferença entre ROAS Meta vs ROAS Real quando relevante."
 
     # Escolhe system prompt pelo cliente (item 1)
     if is_pod:

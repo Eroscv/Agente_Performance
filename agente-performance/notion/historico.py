@@ -291,7 +291,7 @@ def _limpar_blocos_pagina(page_id: str):
 
         for bloco in blocos:
             bid = bloco["id"]
-            r   = requests.delete(f"{BASE_URL}/blocks/{bid}", headers=headers, timeout=10)
+            r   = requests.delete(f"{BASE_URL}/blocks/{bid}", headers=headers, timeout=30)
             if r.status_code == 200:
                 deletados += 1
             else:

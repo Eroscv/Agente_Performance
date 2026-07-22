@@ -323,7 +323,8 @@ async def _processar_e_responder(
             resposta_final = gerar_resposta(
                 pergunta=text, dados=dados, intent=intent, meta=meta,
                 dados_extra=dados_extra, contexto=contexto,
-                delta=resultado.get("delta", {}),  # item 2: comparativo vs período anterior
+                delta=resultado.get("delta", {}),
+                shopify=resultado.get("shopify", {}),  # receita real Shopify
             )
 
             # Prefixo de aviso de período ajustado (POD, item 13)

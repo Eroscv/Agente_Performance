@@ -353,3 +353,94 @@ def get_kb_contexto(
         return {"entradas": entradas, "prompt_preview": formatado}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Shopify — sincronização em tempo real ─────────────────────────────────────
+
+class ShopifySyncRequest(BaseModel):
+    dias:       int  = 7
+    data_inicio: Optional[str] = None  # YYYY-MM-DD
+    data_fim:    Optional[str] = None  # YYYY-MM-DD
+    dry_run:    bool = False
+    full:       bool = False
+
+
+@app.get("/shopify/status")
+def get_shopify_status():
+    """
+    Status da sincronização Shopify.
+    Retorna data mínima/máxima sincronizada, receita total e última atualização.
+    """
+    try:
+        from agent.queries import status_shopify_sync
+        return status_shopify_sync()
+    except Exception as e:
+        logger.exception("Erro em /shopify/status")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/shopify/sync")
+def post_shopify_sync(req: ShopifySyncRequest):
+    """
+    Sincroniza receita Shopify → SQLite para o período especificado.
+
+    Parâmetros:
+        dias:        Últimos N dias (padrão: 7). Ignorado se data_inicio/data_fim informados.
+        data_inicio: Data inicial YYYY-MM-DD (opcional).
+        data_fim:    Data final YYYY-MM-DD (opcional).
+        dry_run:     Se true, apenas simula — não grava no banco.
+        full:        Se true, sincroniza desde jan/2023 (reprocessamento completo).
+    """
+    from datetime import date, timedelta
+    try:
+        from db.shopify_sync import sincronizar
+        if req.full:
+            d_inicio = date(2023, 1, 1)
+            d_fim    = date.today()
+        elif req.data_inicio and req.data_fim:
+            d_inicio = date.fromisoformat(req.data_inicio)
+            d_fim    = date.fromisoformat(req.data_fim)
+        else:
+            d_fim    = date.today()
+            d_inicio = d_fim - timedelta(days=req.dias - 1)
+
+        resultado = sincronizar(d_inicio, d_fim, dry_run=req.dry_run)
+        return resultado
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception("Erro em /shopify/sync")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/shopify/receita")
+def get_shopify_receita(
+    data_inicio: str = Query(..., description="YYYY-MM-DD"),
+    data_fim:    str = Query(..., description="YYYY-MM-DD"),
+):
+    """
+    Retorna métricas Shopify para o período (dados sincronizados).
+    Inclui ROAS real (Receita Shopify / Investimento Meta ajustado).
+    """
+    try:
+        from agent.queries import receita_shopify_periodo
+        return receita_shopify_periodo(data_inicio, data_fim)
+    except Exception as e:
+        logger.exception("Erro em /shopify/receita")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/shopify/diario")
+def get_shopify_diario(
+    data_inicio: str = Query(..., description="YYYY-MM-DD"),
+    data_fim:    str = Query(..., description="YYYY-MM-DD"),
+):
+    """
+    Receita Shopify por dia no período (para gráficos de evolução).
+    """
+    try:
+        from agent.queries import metricas_shopify_diario
+        return metricas_shopify_diario(data_inicio, data_fim)
+    except Exception as e:
+        logger.exception("Erro em /shopify/diario")
+        raise HTTPException(status_code=500, detail=str(e))
