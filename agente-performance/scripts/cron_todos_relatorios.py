@@ -381,14 +381,24 @@ def executar_cliente(
     )
 
     try:
-        # ── Loader ────────────────────────────────────────────────────────
+        # ── Loader (com retry) ────────────────────────────────────────────
         from db.registry import get_loader, get_builder
+        import time as _time
         loader_fn = get_loader(cliente_key)
-        try:
-            loader_fn()
-            import os as _os; _os.environ["SKIP_SHEETS_SYNC"] = "1"  # item 14: evita dupla sync
-        except Exception as e:
-            logger.warning("[%s] Loader falhou: %s — usando dados locais", cliente_key, e)
+        _loader_ok = False
+        for _attempt in range(1, 4):  # até 3 tentativas
+            try:
+                loader_fn()
+                import os as _os; _os.environ["SKIP_SHEETS_SYNC"] = "1"  # item 14: evita dupla sync
+                _loader_ok = True
+                break
+            except Exception as e:
+                logger.warning("[%s] Loader tentativa %d/3 falhou: %s", cliente_key, _attempt, e)
+                if _attempt < 3:
+                    _time.sleep(10)  # aguarda 10s antes de retry
+        if not _loader_ok:
+            logger.error("[%s] Loader falhou após 3 tentativas — abortando relatório", cliente_key)
+            raise RuntimeError(f"Sync de dados falhou após 3 tentativas para {cliente_key}")
 
         # ── Builder ───────────────────────────────────────────────────────
         builder_fn = get_builder(cliente_key, tipo_builder)
