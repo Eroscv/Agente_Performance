@@ -1,6 +1,6 @@
 # 📊 CONSULTAS.md — Histórico do Agente de Performance Guará
 
-> Atualizado automaticamente · 21/07/2026 00:00 UTC
+> Atualizado automaticamente · 22/07/2026 00:00 UTC
 
 ---
 
@@ -8,17 +8,17 @@
 
 | Métrica | Valor |
 |---------|-------|
-| Total de consultas (histórico) | **69** |
+| Total de consultas (histórico) | **76** |
 | Primeira consulta | 23/06/2026 15:45 UTC |
-| Última consulta   | 08/07/2026 13:16 UTC |
+| Última consulta   | 21/07/2026 23:11 UTC |
 
 ### Últimos períodos
 
 | Período | Consultas | Usuários | Latência média | Cache hits | Erros |
 |---------|-----------|----------|----------------|------------|-------|
-| Últimas 24h   | 0  | 0  | — | 0 | 0 |
-| Últimos 7 dias | 0 | 0 | — | 0 | 0 |
-| Últimos 30 dias | 69 | 5 | 2877ms | 1 | 2 |
+| Últimas 24h   | 7  | 1  | 8425ms | 6 | 0 |
+| Últimos 7 dias | 7 | 1 | 8425ms | 6 | 0 |
+| Últimos 30 dias | 76 | 5 | 3388ms | 7 | 2 |
 
 ## 🎯 Top Intenções (histórico completo)
 
@@ -55,6 +55,7 @@
 
 | Data | Consultas | Erros | Cache hits | Lat. média | Intents distintas |
 |------|-----------|-------|------------|------------|-------------------|
+| 21/07/2026 | 7 | 0 | 6 | 8425ms | 0 |
 | 08/07/2026 | 5 | 0 | 0 | 8249ms | 4 |
 | 30/06/2026 | 3 | 1 | 0 | 5408ms | 2 |
 | 23/06/2026 | 61 | 1 | 1 | 2312ms | 13 |
@@ -63,6 +64,13 @@
 
 | Data/Hora | Usuário | Pergunta | Intent | Campanha | Período | Status |
 |-----------|---------|----------|--------|----------|---------|--------|
+| 21/07/2026 23:11 UTC | U09CW4QR1DH | Como foi essa semana até agora POD" | ❓ `—` | — | — | ✅ 💾 cache |
+| 21/07/2026 23:07 UTC | U09CW4QR1DH | Como foi essa semana até agora POD" | ❓ `—` | — | — | ✅ 💾 cache |
+| 21/07/2026 23:06 UTC | U09CW4QR1DH | Como foi essa semana até agora Source of | ❓ `—` | — | — | ✅ 💾 cache |
+| 21/07/2026 23:02 UTC | U09CW4QR1DH | Como foi essa semana até agora Source of | ❓ `—` | — | — | ✅ 💾 cache |
+| 21/07/2026 23:01 UTC | U09CW4QR1DH | Como foi essa semana até agora POD | ❓ `—` | — | — | ✅ 💾 cache |
+| 21/07/2026 22:58 UTC | U09CW4QR1DH | Como foi essa semana até agora POD | ❓ `—` | — | — | ✅ 💾 cache |
+| 21/07/2026 22:53 UTC | U09CW4QR1DH | _Como foi essa semana até agora POD_ | ❓ `—` | — | — | ✅ |
 | 08/07/2026 13:16 UTC | U09CW4QR1DH | *Qual campanha está gerando melhor retorno?* | 🏆 `top_roas` | — | — | ✅ |
 | 08/07/2026 13:12 UTC | U09CW4QR1DH | quais campanhas temos | 📝 `listar_campanhas` | — | — | ✅ |
 | 08/07/2026 13:11 UTC | U09CW4QR1DH | faça um comparativo `[Advantage] Melhores Hidratante vs qualquer outra campanha` | ⚖️ `comparar` | [Advantage] Melhores Hidratant | — | ✅ |
@@ -106,15 +114,20 @@
 | 23/06/2026 16:30 UTC | test_user | top 5 ROAS e top 5 compras de maio | 🏆 `top_roas` | — | 01/05→31/05/26 | ✅ |
 | 23/06/2026 16:30 UTC | test_user | resultados da ABO em 2020 | 📈 `performance_campanha` | ABO_Testes_Todos_Produtos | 01/01→31/12/20 | ✅ |
 | 23/06/2026 16:30 UTC | test_user | como foi a campanha XYZ Inexistente? | 📈 `performance_campanha` | — | — | ✅ |
-| 23/06/2026 16:30 UTC | test_user | quais campanhas estão com ROAS baixo? | 🚨 `alertas_roas` | — | — | ✅ |
-| 23/06/2026 16:30 UTC | test_user | ranking das campanhas por CPC | 📊 `ranking_metrica` | — | — | ✅ |
-| 23/06/2026 16:30 UTC | test_user | mês a mês dos últimos 4 meses | 📊 `comparar_mom` | — | 23/02→23/06/26 | ✅ |
-| 23/06/2026 16:30 UTC | test_user | como foi a evolução semana a semana nas últimas 4 semanas? | 📊 `comparar_wow` | — | 26/05→23/06/26 | ✅ |
-| 23/06/2026 16:30 UTC | test_user | compare maio vs junho | 📆 `comparar_periodos` | — | — | ✅ |
-| 23/06/2026 16:30 UTC | test_user | qual a evolução diária da ABO em junho? | 📉 `evolucao_diaria` | ABO_Testes_Todos_Produtos | 01/06→30/06/26 | ✅ |
-| 23/06/2026 16:30 UTC | test_user | me mostra o funil da campanha Advantage | 🔽 `funil` | Advantage_2_HidratanteCorporal | — | ✅ |
 
 ## 📋 Todas as Consultas (agrupadas por dia)
+
+### 📅 21/07/2026 (Terça) — 7 consulta(s)
+
+| Hora (UTC) | Usuário | Pergunta | Intent | Campanha | Período | ms | Status |
+|------------|---------|----------|--------|----------|---------|-----|--------|
+| 23:11:15 | U09CW4QR1DH | Como foi essa semana até agora POD" | ❓ `—` | — | — | 9306 | ✅ 💾 |
+| 23:07:35 | U09CW4QR1DH | Como foi essa semana até agora POD" | ❓ `—` | — | — | 8347 | ✅ 💾 |
+| 23:06:03 | U09CW4QR1DH | Como foi essa semana até agora Source of | ❓ `—` | — | — | 9497 | ✅ 💾 |
+| 23:02:03 | U09CW4QR1DH | Como foi essa semana até agora Source of | ❓ `—` | — | — | 8048 | ✅ 💾 |
+| 23:01:54 | U09CW4QR1DH | Como foi essa semana até agora POD | ❓ `—` | — | — | 8136 | ✅ 💾 |
+| 22:58:01 | U09CW4QR1DH | Como foi essa semana até agora POD | ❓ `—` | — | — | 9246 | ✅ 💾 |
+| 22:53:36 | U09CW4QR1DH | _Como foi essa semana até agora POD_ | ❓ `—` | — | — | 6395 | ✅ |
 
 ### 📅 08/07/2026 (Quarta) — 5 consulta(s)
 
@@ -201,4 +214,4 @@
 | 15:45:51 | — | top 5 ROAS esse mês | 🏆 `top_roas` | — | 01/06→23/06/26 | 1236 | ✅ |
 
 ---
-_Gerado automaticamente por `scripts/gerar_readme_consultas.py` · 21/07/2026 00:00 UTC_
+_Gerado automaticamente por `scripts/gerar_readme_consultas.py` · 22/07/2026 00:00 UTC_
