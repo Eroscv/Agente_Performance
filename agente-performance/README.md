@@ -484,6 +484,215 @@ Documentação interativa: `http://localhost:8001/docs`
 
 ---
 
+## 📄 Subagente de Relatoria
+
+O **Subagente de Relatoria** é o pipeline responsável por gerar e publicar relatórios formatados de campanhas. Opera de forma **autônoma** (via cron) ou **sob demanda** (via Slack ou CLI), para todos os clientes cadastrados.
+
+### Arquitetura do Pipeline
+
+```
+Disparo (cron / Slack /relatorio / CLI)
+    │
+    ▼
+scripts/cron_todos_relatorios.py
+    ├─ 1. db.registry.get_loader()   → db/loader_sheets.py ou db/loader_pod.py
+    │      └─ Atualiza SQLite com dados frescos da planilha Google Sheets
+    ├─ 2. verificar_alertas()         → checa ROAS abaixo do threshold
+    │      └─ Posta alerta âncora + thread detalhada no Slack se houver
+    ├─ 3. db.registry.get_builder()  → relatorio/builder.py (Meta) ou builder_pod.py (Google)
+    │      ├─ _buscar_campanhas()         → agrega campanhas do SQLite no período
+    │      ├─ Shopify data (metricas_site) → receita real, novos clientes, CAC, recompra
+    │      ├─ _blocos_*()                 → monta blocos Notion (tabelas, KPIs, funil, etc.)
+    │      └─ notion/historico.py         → publica página no Notion
+    ├─ 4. _calcular_delta()           → variação vs período anterior (ROAS, Invest.)
+    └─ 5. slack/poster.py             → posta âncora + thread com resumo no Slack
+```
+
+### Estrutura do Relatório Notion Gerado
+
+#### Semanal (Source OF — Meta Ads)
+```
+📊 Source OF · Meta Ads Semanal · 14/07/2026 → 20/07/2026
+├─ ⚙️ Callout: gerado automaticamente pelo Agente de Performance
+├─ 💰 Resumo Geral da Conta
+│   ├─ Investimento bruto + ajustado (×1,1215)
+│   ├─ Receita Shopify real + ROAS Real
+│   ├─ Impressões | Cliques | CTR | CPM | CPC | Frequência
+│   └─ Compras | CPA | Funil (Carrinho → Checkout → Compra)
+├─ 📊 Métricas de Site (Shopify)
+│   └─ Ticket Médio | Novos Clientes | CAC | % Desconto | Pedidos >R$300 | Taxa de Recompra
+├─ 📊 Tabela de Campanhas
+│   └─ Campanha | Invest. | Invest.+Imposto | Compras | CPA | ROAS | CPC | CTR
+├─ 💰 Alocação de Budget
+│   └─ % do orçamento por campanha (ordem decrescente)
+├─ 🔄 Comparativo com Período Anterior
+│   └─ Tabela: métrica | atual | anterior | variação %
+├─ 📈 Funil de Conversão
+│   └─ Alcance → Impressões → Cliques → Carrinho → Checkout → Compras
+└─ 🚨 Alertas Automáticos
+    └─ Campanhas com ROAS < 1.5 ou sem conversão
+```
+
+#### Mensal (Source OF)
+Têm as mesmas seções + adicionais:
+```
+├─ 📅 Visão Mensal Diária (receita + investimento dia a dia)
+├─ 🔍 Análise das Últimas 2 Semanas (comparação semana a semana)
+└─ 📋 Histórico de Compras por SKU (dados Shopify)
+```
+
+### Como Usar
+
+#### Via Slack (mais comum)
+```
+/relatorio             → relatório da semana passada (Source OF)
+/relatorio mes         → relatório do mês passado (Source OF)
+/relatorio notion      → só publica no Notion (sem resumo no Slack)
+@agente gera relatório semanal   → mesmo que /relatorio
+@agente relatório de junho       → mês específico
+@agente gera excel e notion      → publica no Notion + envia .xlsx no Slack
+```
+
+#### Via CLI
+```bash
+# Relatório semanal — Source OF (semana passada)
+python scripts/cron_relatorio.py --periodo semana
+
+# Relatório mensal — Source OF
+python scripts/cron_relatorio.py --periodo mes
+
+# Todos os clientes ativos — semanal
+python scripts/cron_todos_relatorios.py --periodo semana
+
+# Todos os clientes — mensal
+python scripts/cron_todos_relatorios.py --periodo mes
+
+# Cliente específico
+python scripts/cron_todos_relatorios.py --cliente source_of --periodo semana
+python scripts/cron_todos_relatorios.py --cliente pod_kombucha --periodo semana
+
+# Só alertas (sem gerar relatório completo)
+python scripts/cron_todos_relatorios.py --apenas-alertas
+
+# Só sincroniza banco (sem relatório)
+python scripts/cron_todos_relatorios.py --apenas-loader
+
+# Sem publicar no Notion (só Slack)
+python scripts/cron_todos_relatorios.py --no-notion --periodo semana
+
+# Período customizado
+python scripts/gerar_relatorio.py --cliente source_of \
+  --inicio 2026-07-01 --fim 2026-07-14
+```
+
+#### Via Python (importar diretamente)
+```python
+from relatorio.builder import gerar_relatorio_semanal, gerar_relatorio_mensal
+
+# Semanal automático (semana passada)
+resultado = gerar_relatorio_semanal(cliente="source_of")
+print(resultado["url"])  # link da página Notion
+
+# Mensal (mês passado)
+resultado = gerar_relatorio_mensal(cliente="source_of")
+
+# Período customizado
+from datetime import date
+resultado = gerar_relatorio_semanal(
+    cliente="source_of",
+    data_inicio=date(2026, 7, 1),
+    data_fim=date(2026, 7, 14),
+)
+
+# POD Kombucha
+from relatorio.builder_pod import gerar_relatorio_semanal_pod
+resultado = gerar_relatorio_semanal_pod()
+```
+
+### Agendamento Automático (Cron)
+
+| Tipo | Schedule | Clientes | O que faz |
+|---|---|---|---|
+| Semanal | **Seg 8h UTC** | Todos ativos | Gera relatório da semana passada |
+| Mensal | **Dia 1 às 8h UTC** | Todos ativos | Gera relatório do mês passado |
+| Shopify Sync | **Todo dia 6h UTC** | Source OF | Sincroniza receita dos últimos 8 dias |
+
+Quando o cron dispara, o fluxo completo é:
+1. Loader sincroniza dados frescos da planilha Google Sheets → SQLite
+2. Alertas proativos são verificados e postados no Slack se houver
+3. Relatório completo é gerado e publicado no Notion
+4. Resumo é postado no canal `#performance` com link do Notion
+
+### Alertas Proativos
+
+Antes de gerar o relatório completo, o sistema verifica automaticamente:
+
+| Threshold | Plataforma | Comportamento |
+|---|---|---|
+| ROAS < 2.0 | Meta Ads (Source OF) | Posta alerta âncora + thread com tabela de campanhas problemáticas |
+| ROAS < 1.5 | Google Ads (POD Kombucha) | Posta alerta âncora + thread com tabela |
+
+Variaveis de ambiente para ajustar:
+```bash
+ALERTA_ROAS_MIN=2.0       # threshold Meta Ads
+ALERTA_ROAS_MIN_GADS=1.5  # threshold Google Ads
+```
+
+### O que o Subagente Retorna
+
+Toda chamada ao builder retorna um `dict` com:
+```python
+{
+    "url":          "https://notion.so/...",  # link da página publicada
+    "page_id":      "uuid",
+    "resumo": {
+        "invest":         float,   # investimento total Meta
+        "invest_ajustado": float,  # com fator 1,1215
+        "receita":        float,   # receita Meta (estimada)
+        "receita_shopify": float,  # receita Shopify real
+        "roas":           float,   # ROAS Meta
+        "roas_real":      float,   # ROAS Shopify/Meta ajustado
+        "compras":        int,
+        "cpa":            float,
+        "cac":            float,   # Invest. ajustado / Novos clientes
+        ...
+    },
+    "num_campanhas": int,
+    "alertas":      ["campanha X: ROAS 0.8x", ...],
+}
+```
+
+### Adicionar Novo Cliente
+
+Adicionar um cliente novo ao pipeline de relatoria **não requer alterar código**:
+
+1. Adicionar bloco em `clientes.json`
+2. Criar database no Notion e compartilhar com a integração
+3. Configurar `notion_key` para resolver o ID correto
+
+```json
+"novo_cliente": {
+  "nome":            "Novo Cliente",
+  "ativo":           true,
+  "plataforma":      "meta_ads",
+  "loader":          "db.loader_sheets",
+  "loader_fn":       "carregar_sheets",
+  "builder":         "relatorio.builder",
+  "builder_semanal": "gerar_relatorio_semanal",
+  "builder_mensal":  "gerar_relatorio_mensal",
+  "notion_key":      "novo_cliente",
+  "slack_emoji":     "🟠",
+  "slack_label":     "Novo Cliente · Meta Ads",
+  "tabela_db":       "campanhas",
+  "schedules": {
+    "semanal": "0 8 * * 1",
+    "mensal":  "0 8 1 * *"
+  }
+}
+```
+
+---
+
 ## 🔄 Cron Jobs (Relatórios Automáticos)
 
 | Script | Schedule | Descrição |
