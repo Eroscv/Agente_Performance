@@ -474,12 +474,21 @@ def main():
                         help="Só checa alertas de ROAS, sem gerar relatório completo")
     parser.add_argument("--apenas-loader", action="store_true",
                         help="Só executa o loader (sincroniza dados), sem relatório nem alertas")
+    parser.add_argument("--data-inicio", default=None,
+                        help="Sobrescreve data de início do período (formato YYYY-MM-DD)")
+    parser.add_argument("--data-fim", default=None,
+                        help="Sobrescreve data de fim do período (formato YYYY-MM-DD)")
     args = parser.parse_args()
 
     publicar       = not args.no_notion
     apenas_alertas = args.apenas_alertas
     apenas_loader  = args.apenas_loader
     data_inicio, data_fim = resolver_periodo(args.periodo)
+    # Sobrescreve datas se passadas manualmente
+    if args.data_inicio:
+        data_inicio = date.fromisoformat(args.data_inicio)
+    if args.data_fim:
+        data_fim = date.fromisoformat(args.data_fim)
     periodo_str  = f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}"
     tipo_label   = {"diario": "Diário", "semana": "Semanal", "mes": "Mensal"}.get(args.periodo, args.periodo.title())
     tipo_builder = "mensal" if args.periodo == "mes" else "semanal"
