@@ -1,6 +1,6 @@
 # 📊 CONSULTAS.md — Histórico do Agente de Performance Guará
 
-> Atualizado automaticamente · 24/07/2026 00:00 UTC
+> Atualizado automaticamente · 25/07/2026 00:00 UTC
 
 ---
 
@@ -8,17 +8,17 @@
 
 | Métrica | Valor |
 |---------|-------|
-| Total de consultas (histórico) | **76** |
+| Total de consultas (histórico) | **77** |
 | Primeira consulta | 23/06/2026 15:45 UTC |
-| Última consulta   | 21/07/2026 23:11 UTC |
+| Última consulta   | 24/07/2026 14:45 UTC |
 
 ### Últimos períodos
 
 | Período | Consultas | Usuários | Latência média | Cache hits | Erros |
 |---------|-----------|----------|----------------|------------|-------|
-| Últimas 24h   | 0  | 0  | — | 0 | 0 |
-| Últimos 7 dias | 7 | 1 | 8425ms | 6 | 0 |
-| Últimos 30 dias | 15 | 1 | 7763ms | 6 | 1 |
+| Últimas 24h   | 1  | 1  | 11045ms | 1 | 0 |
+| Últimos 7 dias | 8 | 1 | 8753ms | 7 | 0 |
+| Últimos 30 dias | 16 | 1 | 7968ms | 7 | 1 |
 
 ## 🎯 Top Intenções (histórico completo)
 
@@ -55,6 +55,7 @@
 
 | Data | Consultas | Erros | Cache hits | Lat. média | Intents distintas |
 |------|-----------|-------|------------|------------|-------------------|
+| 24/07/2026 | 1 | 0 | 1 | 11045ms | 0 |
 | 21/07/2026 | 7 | 0 | 6 | 8425ms | 0 |
 | 08/07/2026 | 5 | 0 | 0 | 8249ms | 4 |
 | 30/06/2026 | 3 | 1 | 0 | 5408ms | 2 |
@@ -64,6 +65,7 @@
 
 | Data/Hora | Usuário | Pergunta | Intent | Campanha | Período | Status |
 |-----------|---------|----------|--------|----------|---------|--------|
+| 24/07/2026 14:45 UTC | U09CW4QR1DH | como foi essa semana até agora Source of | ❓ `—` | — | — | ✅ 💾 cache |
 | 21/07/2026 23:11 UTC | U09CW4QR1DH | Como foi essa semana até agora POD" | ❓ `—` | — | — | ✅ 💾 cache |
 | 21/07/2026 23:07 UTC | U09CW4QR1DH | Como foi essa semana até agora POD" | ❓ `—` | — | — | ✅ 💾 cache |
 | 21/07/2026 23:06 UTC | U09CW4QR1DH | Como foi essa semana até agora Source of | ❓ `—` | — | — | ✅ 💾 cache |
@@ -113,9 +115,14 @@
 | 23/06/2026 16:32 UTC | — | qual o ROAS das campanhas este mês? | 📊 `ranking_metrica` | — | 01/06→23/06/26 | ✅ |
 | 23/06/2026 16:30 UTC | test_user | top 5 ROAS e top 5 compras de maio | 🏆 `top_roas` | — | 01/05→31/05/26 | ✅ |
 | 23/06/2026 16:30 UTC | test_user | resultados da ABO em 2020 | 📈 `performance_campanha` | ABO_Testes_Todos_Produtos | 01/01→31/12/20 | ✅ |
-| 23/06/2026 16:30 UTC | test_user | como foi a campanha XYZ Inexistente? | 📈 `performance_campanha` | — | — | ✅ |
 
 ## 📋 Todas as Consultas (agrupadas por dia)
+
+### 📅 24/07/2026 (Sexta) — 1 consulta(s)
+
+| Hora (UTC) | Usuário | Pergunta | Intent | Campanha | Período | ms | Status |
+|------------|---------|----------|--------|----------|---------|-----|--------|
+| 14:45:34 | U09CW4QR1DH | como foi essa semana até agora Source of | ❓ `—` | — | — | 11045 | ✅ 💾 |
 
 ### 📅 21/07/2026 (Terça) — 7 consulta(s)
 
@@ -214,4 +221,4 @@
 | 15:45:51 | — | top 5 ROAS esse mês | 🏆 `top_roas` | — | 01/06→23/06/26 | 1236 | ✅ |
 
 ---
-_Gerado automaticamente por `scripts/gerar_readme_consultas.py` · 24/07/2026 00:00 UTC_
+_Gerado automaticamente por `scripts/gerar_readme_consultas.py` · 25/07/2026 00:00 UTC_
