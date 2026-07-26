@@ -1,6 +1,6 @@
 # 📊 CONSULTAS.md — Histórico do Agente de Performance Guará
 
-> Atualizado automaticamente · 25/07/2026 00:00 UTC
+> Atualizado automaticamente · 26/07/2026 00:00 UTC
 
 ---
 
@@ -16,7 +16,7 @@
 
 | Período | Consultas | Usuários | Latência média | Cache hits | Erros |
 |---------|-----------|----------|----------------|------------|-------|
-| Últimas 24h   | 1  | 1  | 11045ms | 1 | 0 |
+| Últimas 24h   | 0  | 0  | — | 0 | 0 |
 | Últimos 7 dias | 8 | 1 | 8753ms | 7 | 0 |
 | Últimos 30 dias | 16 | 1 | 7968ms | 7 | 1 |
 
@@ -221,4 +221,4 @@
 | 15:45:51 | — | top 5 ROAS esse mês | 🏆 `top_roas` | — | 01/06→23/06/26 | 1236 | ✅ |
 
 ---
-_Gerado automaticamente por `scripts/gerar_readme_consultas.py` · 25/07/2026 00:00 UTC_
+_Gerado automaticamente por `scripts/gerar_readme_consultas.py` · 26/07/2026 00:00 UTC_
