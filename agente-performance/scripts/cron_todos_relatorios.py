@@ -110,7 +110,22 @@ def periodo_anterior(data_inicio: date, data_fim: date):
 # ── Slack ─────────────────────────────────────────────────────────────────────
 
 def postar_slack_fallback(msg: str, max_tentativas: int = 3) -> bool:
-    import urllib.request, json, time
+    """Fallback via Bot API (com canal correto) ou webhook se token indisponível."""
+    import urllib.request, json, time, requests as _req
+    # Tenta primeiro via Bot API com o canal configurado
+    token = os.getenv("SLACK_BOT_TOKEN", "")
+    ch = os.getenv("SLACK_CHANNEL", "performance").lstrip("#")
+    if token:
+        try:
+            r = _req.post("https://slack.com/api/chat.postMessage",
+                          headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                          json={"channel": ch, "text": msg, "mrkdwn": True}, timeout=15)
+            if r.json().get("ok"):
+                return True
+            logger.warning("Bot API fallback falhou: %s", r.json().get("error"))
+        except Exception as e:
+            logger.warning("Bot API fallback erro: %s", e)
+    # Último recurso: webhook (canal fixo)
     webhook_url = os.getenv("SLACK_WEBHOOK_URL", "")
     if not webhook_url: return False
     payload = json.dumps({"text": msg}).encode()
@@ -122,7 +137,7 @@ def postar_slack_fallback(msg: str, max_tentativas: int = 3) -> bool:
                 if resp.status == 200: return True
         except Exception as e:
             logger.warning("Slack webhook (tentativa %d): %s", i, e)
-            if i < max_tentativas: import time; time.sleep(2 ** i)
+            if i < max_tentativas: time.sleep(2 ** i)
     return False
 
 

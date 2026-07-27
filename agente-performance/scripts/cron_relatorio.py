@@ -41,14 +41,14 @@ def resolver_periodo(periodo: str):
     raise ValueError(f"Período inválido: {periodo}")
 
 
-def postar_slack(msg: str, max_tentativas: int = None, delay_inicial: float = 5.0, delay_maximo: float = 300.0) -> bool:
+def postar_slack(msg: str, max_tentativas: int = 5, delay_inicial: float = 5.0, delay_maximo: float = 300.0) -> bool:
     """
     Posta mensagem no canal Slack via Webhook.
-    Faz retry infinito (ou até max_tentativas) com backoff exponencial até funcionar.
+    Faz retry com backoff exponencial até max_tentativas (padrão 5).
 
     Args:
         msg:             Texto da mensagem.
-        max_tentativas:  None = retry infinito até sucesso. Inteiro limita as tentativas.
+        max_tentativas:  Número máximo de tentativas (padrão 5, evita loop infinito em crons).
         delay_inicial:   Segundos de espera antes da 1ª retentativa.
         delay_maximo:    Teto do backoff exponencial (segundos).
     """

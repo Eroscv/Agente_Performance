@@ -28,6 +28,8 @@ from agent.conversation_log import registrar as log_registrar
 from agent.cache import get as cache_get
 from slack.formatter import markdown_to_blocks, truncar_blocos
 
+logger = logging.getLogger(__name__)
+
 # Timeout global para _processar_e_responder (segundos)
 _HANDLER_TIMEOUT = int(os.getenv("SLACK_HANDLER_TIMEOUT", "60"))
 

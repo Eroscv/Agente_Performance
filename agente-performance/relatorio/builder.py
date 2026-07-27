@@ -402,6 +402,19 @@ def _blocos_resumo(resumo: dict, periodo_str: str) -> list[dict]:
             }}]}})
 
     blocos.append({"object": "block", "type": "divider", "divider": {}})
+
+    # Legenda do Resumo Executivo
+    blocos.append({
+        "object": "block", "type": "paragraph",
+        "paragraph": {"rich_text": [{"type": "text", "text": {"content":
+            "📌 Legenda: ROAS = Receita ÷ Investimento Meta · "
+            "CPA Ajustado = (Investimento × 1,1215) ÷ Compras · "
+            "CPA Meta = valor reportado pela plataforma · "
+            "CTR = Cliques ÷ Impressões · "
+            "CPM = custo por mil impressões · "
+            "Ticket Médio = Receita ÷ Compras"
+        }, "annotations": {"italic": True, "color": "gray"}}]}
+    })
     return blocos
 
 
@@ -493,6 +506,15 @@ def _blocos_tabela_campanhas(rows: list[dict]) -> list[dict]:
         }
     }
 
+    legenda_campanhas = {
+        "object": "block", "type": "paragraph",
+        "paragraph": {"rich_text": [{"type": "text", "text": {"content":
+            "📌 Legenda: Invest. = gasto bruto Meta Ads · ROAS = Receita ÷ Investimento · "
+            "CPA Ajust. = (Investimento × 1,1215) ÷ Compras · CTR = Cliques ÷ Impressões · "
+            "CPM = custo por mil impressões (plataforma)"
+        }, "annotations": {"italic": True, "color": "gray"}}]}
+    }
+
     return [
         {"object": "block", "type": "heading_2",
          "heading_2": {"rich_text": [{"text": {"content": "📋 Desempenho por Campanha"}}]}},
@@ -506,6 +528,7 @@ def _blocos_tabela_campanhas(rows: list[dict]) -> list[dict]:
                 "children": main_rows,
             }
         },
+        legenda_campanhas,
         toggle_tecnico,
         {"object": "block", "type": "divider", "divider": {}},
     ]
@@ -546,35 +569,70 @@ def _blocos_top_campanhas(campanhas: list[dict]) -> list[dict]:
 
 
 def _blocos_alocacao(campanhas: list[dict]) -> list[dict]:
-    """Budget allocation — com ROAS por campanha."""
+    """Budget allocation — tabela com Campanha, Investimento, % Budget e ROAS."""
     total = sum(float(c.get("investimento") or 0) for c in campanhas)
     if total == 0:
         return []
 
-    blocos = [
-        {"object": "block", "type": "heading_2",
-         "heading_2": {"rich_text": [{"text": {"content": "💰 Alocação de Budget"}}]}},
-    ]
+    def _cell(text: str, bold: bool = False, color: str = "default") -> dict:
+        return {"type": "table_cell", "table_cell": {"rich_text": [{
+            "type": "text",
+            "text": {"content": text},
+            "annotations": {"bold": bold, "color": color},
+        }]}}
+
+    header_row = {
+        "object": "block", "type": "table_row",
+        "table_row": {"cells": [
+            [{"type": "text", "text": {"content": "Campanha"}, "annotations": {"bold": True}}],
+            [{"type": "text", "text": {"content": "Investimento"}, "annotations": {"bold": True}}],
+            [{"type": "text", "text": {"content": "% Budget"}, "annotations": {"bold": True}}],
+            [{"type": "text", "text": {"content": "ROAS"}, "annotations": {"bold": True}}],
+        ]}
+    }
+
+    rows = [header_row]
     for c in sorted(campanhas, key=lambda x: float(x.get("investimento") or 0), reverse=True):
         invest  = float(c.get("investimento") or 0)
         receita = float(c.get("valor_compras") or 0)
         roas    = round(receita / invest, 2) if invest > 0 else None
         pct     = calcular_pct_budget(invest, total)
         nome    = c.get("campanha", "")
+        roas_txt = f"{roas:.2f}x" if roas else "—"
 
-        if roas and roas > 0:
-            roas_str = f" — ROAS {roas:.2f}x"
-        else:
-            roas_str = " — sem conversão"
-
-        blocos.append({
-            "object": "block", "type": "bulleted_list_item",
-            "bulleted_list_item": {"rich_text": [{"text": {"content":
-                f"{nome}  —  {_fmt_brl(invest)}  ({_fmt_pct(pct)}){roas_str}"
-            }}]}
+        rows.append({
+            "object": "block", "type": "table_row",
+            "table_row": {"cells": [
+                [{"type": "text", "text": {"content": nome}}],
+                [{"type": "text", "text": {"content": _fmt_brl(invest)}}],
+                [{"type": "text", "text": {"content": _fmt_pct(pct)}}],
+                [{"type": "text", "text": {"content": roas_txt}}],
+            ]}
         })
 
-    blocos.append({"object": "block", "type": "divider", "divider": {}})
+    legenda_alocacao = {
+        "object": "block", "type": "paragraph",
+        "paragraph": {"rich_text": [{"type": "text", "text": {"content":
+            "📌 Legenda: % Budget = Investimento da campanha ÷ Total investido × 100 · "
+            "ROAS = Receita ÷ Investimento bruto (sem imposto)"
+        }, "annotations": {"italic": True, "color": "gray"}}]}
+    }
+
+    blocos = [
+        {"object": "block", "type": "heading_2",
+         "heading_2": {"rich_text": [{"text": {"content": "💰 Alocação de Budget"}}]}},
+        {
+            "object": "block", "type": "table",
+            "table": {
+                "table_width": 4,
+                "has_column_header": True,
+                "has_row_header": False,
+                "children": rows,
+            }
+        },
+        legenda_alocacao,
+        {"object": "block", "type": "divider", "divider": {}},
+    ]
     return blocos
 
 
@@ -708,6 +766,15 @@ def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anter
                 "children": table_rows,
             }
         },
+        {
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": [{"type": "text", "text": {"content":
+                "📌 Legenda: ↑↓ variação percentual em relação ao período anterior · "
+                "ROAS = Receita ÷ Investimento · "
+                "CPA Ajust. = (Investimento × 1,1215) ÷ Compras · "
+                "Valores negativos de CPA/CAC indicam melhora (custo menor)"
+            }, "annotations": {"italic": True, "color": "gray"}}]}
+        },
         {"object": "block", "type": "divider", "divider": {}},
     ]
 
@@ -768,6 +835,13 @@ def _blocos_funil(resumo: dict) -> list[dict]:
                 "has_row_header": False,
                 "children": table_rows,
             }
+        },
+        {
+            "object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": [{"type": "text", "text": {"content":
+                "📌 Legenda: CTR = Cliques ÷ Impressões · Taxa entre etapas = volume da etapa atual ÷ volume da etapa anterior · "
+                "Frequência = impressões ÷ alcance único · Taxa Alcance→Compra = eficiência geral da campanha"
+            }, "annotations": {"italic": True, "color": "gray"}}]}
         },
         {"object": "block", "type": "divider", "divider": {}},
     ]
@@ -2770,9 +2844,31 @@ def gerar_relatorio_semanal(
 
     resumo  = _resumo_geral(campanhas)
 
+    # ── Receita Shopify (real) para o período atual e anterior ───────────────
+    try:
+        import sqlite3 as _sq
+        _conn = _sq.connect(str(db_path))
+        def _shopify_receita_periodo(ini, fim):
+            row = _conn.execute(
+                "SELECT COALESCE(SUM(receita),0) AS r FROM shopify_receita_diaria "
+                "WHERE data >= ? AND data <= ?",
+                (str(ini), str(fim))
+            ).fetchone()
+            return float(row[0]) if row and row[0] else None
+        resumo["receita_shopify"] = _shopify_receita_periodo(data_inicio, data_fim)
+        _receita_shopify_ant       = _shopify_receita_periodo(ant_inicio, ant_fim)
+        _conn.close()
+        logger.info("[Builder] Receita Shopify atual=%s anterior=%s",
+                    resumo['receita_shopify'], _receita_shopify_ant)
+    except Exception as _e:
+        logger.warning("[Builder] Falha ao buscar receita Shopify: %s", _e)
+        resumo["receita_shopify"] = None
+        _receita_shopify_ant = None
+
     # ── Dados período anterior ─────────────────────────────────────────────
     campanhas_anterior = _buscar_campanhas(ant_inicio, ant_fim, db_path)
     resumo_anterior    = _resumo_geral(campanhas_anterior) if campanhas_anterior else {}
+    resumo_anterior["receita_shopify"] = _receita_shopify_ant
 
     alertas = _alertas(campanhas, resumo, resumo_anterior=resumo_anterior)
 
@@ -2802,20 +2898,22 @@ def gerar_relatorio_semanal(
         # Última semana do mês (igual ao semanal) + consolidado do mês
         blocos = [callout_gerado]
 
-        # Aviso de qualidade de dados
-        if val_report and (not val_report.ok or val_report.warnings):
-            issues_txt = "\n".join(
-                f"{'❌' if i.severity == 'ERROR' else '⚠️'} {i.check}: {i.message}"
+        # Aviso de qualidade de dados — apenas ERRORs reais (warnings operacionais omitidos)
+        if val_report and not val_report.ok:
+            errors_txt = "\n".join(
+                f"❌ {i.check}: {i.message}"
                 for i in val_report.issues
+                if i.severity == 'ERROR'
             )
-            blocos.append({
-                "object": "block", "type": "callout",
-                "callout": {
-                    "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{issues_txt}"}}],
-                    "icon": {"type": "emoji", "emoji": "⚠️"},
-                    "color": "yellow_background",
-                }
-            })
+            if errors_txt:
+                blocos.append({
+                    "object": "block", "type": "callout",
+                    "callout": {
+                        "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{errors_txt}"}}],
+                        "icon": {"type": "emoji", "emoji": "⚠️"},
+                        "color": "yellow_background",
+                    }
+                })
 
         # ── Dados Shopify — última semana do mês ─────────────────────────
         sem_fim = data_fim
@@ -2926,20 +3024,22 @@ def gerar_relatorio_semanal(
         # ── Estrutura do relatório semanal ──────────────────────────────────
         blocos = []
 
-        # Aviso de qualidade de dados (se houver issues)
-        if val_report and (not val_report.ok or val_report.warnings):
-            issues_txt = "\n".join(
-                f"{'❌' if i.severity == 'ERROR' else '⚠️'} {i.check}: {i.message}"
+        # Aviso de qualidade de dados — apenas ERRORs reais (warnings operacionais omitidos)
+        if val_report and not val_report.ok:
+            errors_txt = "\n".join(
+                f"❌ {i.check}: {i.message}"
                 for i in val_report.issues
+                if i.severity == 'ERROR'
             )
-            blocos.append({
-                "object": "block", "type": "callout",
-                "callout": {
-                    "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{issues_txt}"}}],
-                    "icon": {"type": "emoji", "emoji": "⚠️"},
-                    "color": "yellow_background",
-                }
-            })
+            if errors_txt:
+                blocos.append({
+                    "object": "block", "type": "callout",
+                    "callout": {
+                        "rich_text": [{"text": {"content": f"⚠️ Qualidade dos dados\n{errors_txt}"}}],
+                        "icon": {"type": "emoji", "emoji": "⚠️"},
+                        "color": "yellow_background",
+                    }
+                })
 
         # ── Dados Shopify (reais) ─────────────────────────────────────
         try:

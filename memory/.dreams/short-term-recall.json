@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-07-22T13:30:13.348Z",
+  "updatedAt": "2026-07-22T13:59:40.842Z",
   "entries": {
     "memory:memory/2026-06-22.md:1:30": {
       "key": "memory:memory/2026-06-22.md:1:30",
@@ -569,6 +569,99 @@
         "queries.py",
         "synonyms.py",
         "api/app.py"
+      ]
+    },
+    "memory:memory/2026-07-21.md:1:32": {
+      "key": "memory:memory/2026-07-21.md:1:32",
+      "path": "memory/2026-07-21.md",
+      "startLine": 1,
+      "endLine": 32,
+      "source": "memory",
+      "snippet": "# Memória — 2026-07-21 ## Agente de Performance Guará — Sessão de Desenvolvimento ### Subagente de Relatoria — Alterações no Builder Trabalhamos extensivamente no pipeline do relatório semanal (`relatorio/builder.py`). Resumo das mudanças: #### Seções removidas (ambos os pipelines — semanal e mensal) - 📋 Desempenho por Campanha - 🏆 Top Campanhas por ROAS - 📊 Resumo Executivo - 🚨 Alertas Automáticos - 📅 Planejamento Q3 2026 — Meta Ads - 🎨 Planejamento Criativo - 📊 Tendência Últimas 4 Semanas (WoW) — substituída por Comparativo com Período Anterior #### Alterações nas tabelas existentes - **💰 Alocação Budget Canais:** adicionada coluna `% do Total` - **📊 Métricas de Site:** adici",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:59:40.842Z",
+      "lastRecalledAt": "2026-07-22T13:59:40.842Z",
+      "queryHashes": [
+        "ae33b377610f"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "relatorio/builder.py",
+        "memória",
+        "agente",
+        "performance",
+        "guará",
+        "sessão",
+        "desenvolvimento",
+        "subagente"
+      ]
+    },
+    "memory:memory/2026-07-21.md:111:140": {
+      "key": "memory:memory/2026-07-21.md:111:140",
+      "path": "memory/2026-07-21.md",
+      "startLine": 111,
+      "endLine": 140,
+      "source": "memory",
+      "snippet": "- Paginação cursor-based automática, retry em 429, lookup de `orders_count` via endpoint `/customers/` - Fallback para placeholder se Shopify indisponível ### Integração Shopify no Builder - **Semanal:** pedidos_por_sku, pedidos_por_estado, recompras_por_sku, assiduidade_clientes, metricas_site integrados - **Mensal:** mesmo conjunto integrado (bug corrigido — antes só estava no semanal) - Métricas de Site: Ticket Médio, Novos Clientes, CAC, % Desconto, Pedidos >R$300, Receita Total Shopify populados com dados reais ### Sincronização Automática da Planilha - `loader_sheets.py` agora expõe `carregar_sheets()` chamável programaticamente - `gerar_relatorio_semanal()` e `gerar_relatorio_mensal",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:59:40.842Z",
+      "lastRecalledAt": "2026-07-22T13:59:40.842Z",
+      "queryHashes": [
+        "ae33b377610f"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "cursor-based",
+        "orders-count",
+        "pedidos-por-sku",
+        "pedidos-por-estado",
+        "recompras-por-sku",
+        "assiduidade-clientes",
+        "metricas-site",
+        "loader-sheets.py"
+      ]
+    },
+    "memory:memory/2026-07-21.md:131:165": {
+      "key": "memory:memory/2026-07-21.md:131:165",
+      "path": "memory/2026-07-21.md",
+      "startLine": 131,
+      "endLine": 165,
+      "source": "memory",
+      "snippet": "- 740 pedidos Shopify · 19 SKUs · 23 estados · 235 recompras ### Credenciais Shopify (adicionadas ao .env do agente de performance) - Origem: copiadas do Flora-Agente - `SHOPIFY_STORE=source-of-brasil` - `SHOPIFY_TOKEN=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` --- ## POD Kombucha — Google Ads — Novo Cliente (2026-07-21) ### Integração - **Planilha:** `https://docs.google.com/spreadsheets/d/1Vj3Zt1ZPk5nH_bBbdm1gna0cMC85PGN-pBtCKr_UJ50/export?format=csv` - **Colunas:** Day, Clicks, Cost, Impr., Conv. value, Conversions, Campaign, Campaign ID, Campaign type - **Período dados:** 26/07/2025 → 20/07/2026 (1.159 linhas) - **Tabela banco:** `pod_gads_diario` (TOTALMENTE ISOLADA da Source Of) - **L",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-07-22T13:59:40.842Z",
+      "lastRecalledAt": "2026-07-22T13:59:40.842Z",
+      "queryHashes": [
+        "ae33b377610f"
+      ],
+      "recallDays": [
+        "2026-07-22"
+      ],
+      "conceptTags": [
+        "flora-agente",
+        "shopify-store",
+        "source-of-brasil",
+        "shopify-token",
+        "26/07/2025",
+        "20/07/2026",
+        "1.159",
+        "pod-gads-diario"
       ]
     }
   }
