@@ -20,9 +20,11 @@ import json
 import logging
 import os
 import re
+import sqlite3
 import threading
 import time
 from datetime import date, timedelta
+from pathlib import Path
 from typing import Optional
 
 import anthropic
@@ -42,6 +44,51 @@ _client_lock = threading.Lock()
 _nlp_cache: dict[str, dict] = {}
 _nlp_cache_lock = threading.Lock()
 NLP_CACHE_MAX = 256  # máximo de entradas em memória
+
+# MELHORIA 5: Cache NLP persistido em SQLite
+_NLP_CACHE_TTL_H  = 2    # TTL de cache ativo (2 horas)
+_NLP_CACHE_CLEAN_H = 24  # limpeza de entradas > 24h ao iniciar
+BASE_DIR = Path(__file__).parent.parent
+NLP_DB_PATH = BASE_DIR / "data" / "campanhas.db"
+_nlp_db_conn: Optional[sqlite3.Connection] = None
+_nlp_db_lock = threading.Lock()
+_nlp_db_cleaned = False  # lazy cleanup executado apenas uma vez
+
+
+def _get_nlp_db() -> Optional[sqlite3.Connection]:
+    """Conexão para a tabela nlp_cache em campanhas.db."""
+    global _nlp_db_conn, _nlp_db_cleaned
+    if _nlp_db_conn is None:
+        try:
+            NLP_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _nlp_db_conn = sqlite3.connect(str(NLP_DB_PATH), check_same_thread=False)
+            _nlp_db_conn.row_factory = sqlite3.Row
+            _nlp_db_conn.execute("PRAGMA journal_mode=WAL")
+            _nlp_db_conn.executescript("""
+                CREATE TABLE IF NOT EXISTS nlp_cache (
+                    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                    cache_key  TEXT NOT NULL UNIQUE,
+                    result_json TEXT NOT NULL,
+                    created_at TEXT DEFAULT (datetime('now'))
+                );
+                CREATE INDEX IF NOT EXISTS idx_nlp_cache_key ON nlp_cache(cache_key);
+            """)
+            _nlp_db_conn.commit()
+        except Exception as e:
+            logger.warning("[NLP] Falha ao inicializar nlp_cache em SQLite: %s", e)
+            _nlp_db_conn = None
+    # Lazy cleanup: remove entradas > 24h (apenas uma vez por processo)
+    if _nlp_db_conn is not None and not _nlp_db_cleaned:
+        try:
+            _nlp_db_conn.execute(
+                "DELETE FROM nlp_cache WHERE created_at < datetime('now', ?)",
+                (f"-{_NLP_CACHE_CLEAN_H} hours",)
+            )
+            _nlp_db_conn.commit()
+            _nlp_db_cleaned = True
+        except Exception as e:
+            logger.debug("[NLP] cleanup lazy nlp_cache: %s", e)
+    return _nlp_db_conn
 
 INTENTS_DISPONIVEIS = [
     # Básicas
@@ -183,6 +230,18 @@ Resposta: {"intents":["top_roas"],"campanha":null,"data_inicio":"2026-08-11","da
 Pergunta: "resumo geral de todos os clientes"
 Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
+Pergunta: "performance do google ads do pod essa semana"
+Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-08-11","data_fim":"2026-08-17","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"google_ads"}
+
+Pergunta: "gads pod kombucha mês passado"
+Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-07-01","data_fim":"2026-07-31","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"google_ads"}
+
+Pergunta: "top roas search e pmax do pod"
+Resposta: {"intents":["top_roas"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"google_ads"}
+
+Pergunta: "campanhas google do pod kombucha hoje"
+Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-08-17","data_fim":"2026-08-17","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"google_ads"}
+
 ## Formato de resposta (JSON puro, sem markdown, sem explicação)
 {
   "intents": ["intent1"],
@@ -264,17 +323,72 @@ def fuzzy_match_campaign(fragmento: str, campanhas: list[str]) -> Optional[str]:
 
 
 def _nlp_cache_get(key: str) -> Optional[dict]:
+    """
+    MELHORIA 5: tenta memória primeiro, depois SQLite com TTL de 2h.
+    """
+    # 1) Memória RAM
     with _nlp_cache_lock:
-        return _nlp_cache.get(key)
+        hit = _nlp_cache.get(key)
+    if hit is not None:
+        return hit
+
+    # 2) SQLite
+    try:
+        db = _get_nlp_db()
+        if db is None:
+            return None
+        with _nlp_db_lock:
+            row = db.execute(
+                "SELECT result_json, created_at FROM nlp_cache WHERE cache_key = ?",
+                (key,)
+            ).fetchone()
+        if not row:
+            return None
+        # Verifica TTL
+        from datetime import datetime as _dt
+        created = _dt.fromisoformat(row["created_at"])
+        if (_dt.utcnow() - created).total_seconds() > _NLP_CACHE_TTL_H * 3600:
+            return None  # expirado
+        result = json.loads(row["result_json"])
+        # Promove para RAM
+        with _nlp_cache_lock:
+            if len(_nlp_cache) >= NLP_CACHE_MAX:
+                oldest = next(iter(_nlp_cache))
+                del _nlp_cache[oldest]
+            _nlp_cache[key] = result
+        return result
+    except Exception as e:
+        logger.debug("[NLP] _nlp_cache_get SQLite: %s", e)
+        return None
 
 
 def _nlp_cache_set(key: str, value: dict) -> None:
+    """
+    MELHORIA 5: salva em RAM e em SQLite.
+    """
     with _nlp_cache_lock:
         if len(_nlp_cache) >= NLP_CACHE_MAX:
-            # Remove a entrada mais antiga (FIFO simples)
             oldest = next(iter(_nlp_cache))
             del _nlp_cache[oldest]
         _nlp_cache[key] = value
+
+    # Persiste no SQLite
+    try:
+        db = _get_nlp_db()
+        if db is None:
+            return
+        result_str = json.dumps(value, ensure_ascii=False)
+        with _nlp_db_lock:
+            db.execute("""
+                INSERT INTO nlp_cache (cache_key, result_json)
+                VALUES (?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    result_json = excluded.result_json,
+                    created_at  = datetime('now')
+            """, (key, result_str))
+            db.commit()
+    except Exception as e:
+        logger.debug("[NLP] _nlp_cache_set SQLite: %s", e)
 
 
 def _parse_claude_response(raw_text: str) -> dict:
@@ -284,6 +398,127 @@ def _parse_claude_response(raw_text: str) -> dict:
     # Remove comentários inline (// ...) que Claude às vezes insere
     raw_text = re.sub(r"//[^\n]*", "", raw_text)
     return json.loads(raw_text)
+
+
+# MELHORIA 4: Fallback para intenções desconhecidas
+def _fallback_intencao_desconhecida(pergunta: str) -> str:
+    """
+    Retorna mensagem amigável quando a intent não é reconhecida.
+    Inclui sugestões contextuais baseadas em palavras-chave da pergunta.
+    """
+    p = pergunta.lower()
+
+    # Detecta palavras-chave para sugerir comandos relevantes
+    sugestoes = []
+    if any(w in p for w in ["roas", "retorno", "efici"]):
+        sugestoes.append("`top roas`")
+    if any(w in p for w in ["compra", "venda", "convers"]):
+        sugestoes.append("`top compras`")
+    if any(w in p for w in ["funil", "carrinho", "checkout"]):
+        sugestoes.append("`funil`")
+    if any(w in p for w in ["alerta", "ruim", "baixo", "problema"]):
+        sugestoes.append("`alertas`")
+    if any(w in p for w in ["semana", "week"]):
+        sugestoes.append("`resumo da semana`")
+    if any(w in p for w in ["mês", "mes", "month"]):
+        sugestoes.append("`resumo do mês`")
+    if any(w in p for w in ["compar", "versus", " vs "]):
+        sugestoes.append("`compare ABO vs Advantage`")
+    if any(w in p for w in ["google", "gads", "pod"]):
+        sugestoes.append("`/pod` ou `/pod status`")
+
+    if not sugestoes:
+        sugestoes = ["`resumo geral`", "`top roas`", "`alertas`", "`/ajuda`"]
+
+    sug_str = " · ".join(sugestoes[:4])
+    return (
+        f"Não entendi exatamente o que você precisa. 🤔\n\n"
+        f"Tente ser mais específico ou use uma dessas opções:\n"
+        f"{sug_str}\n\n"
+        f"Para ver todos os comandos disponíveis, use `/ajuda`."
+    )
+
+
+# MELHORIA 8: Alerta de dados incompletos
+def _verificar_cobertura_dados(
+    data_inicio: Optional[str],
+    data_fim: Optional[str],
+    cliente_key: Optional[str],
+    plataforma: Optional[str],
+) -> Optional[str]:
+    """
+    Verifica se os dados cobrem todo o período solicitado.
+    Retorna aviso formatado se MAX(data) < data_fim por mais de 1 dia, ou None.
+    """
+    if not data_fim:
+        return None
+    try:
+        from datetime import date as _date
+        df  = _date.fromisoformat(data_fim)
+        hoje = _date.today()
+        # Só alertar para períodos recentes (dentro dos últimos 7 dias)
+        if (hoje - df).days > 7:
+            return None
+
+        # Determina tabela conforme plataforma/cliente
+        tabela = None
+        if plataforma == "google_ads" or cliente_key == "pod_kombucha":
+            tabela = "pod_gads_diario"
+        else:
+            tabela = "campanhas"
+
+        from db.connection import get_conn
+        try:
+            conn = get_conn()
+        except Exception:
+            return None
+
+        # Detecta coluna de data
+        col_data = "data_inicio" if tabela == "pod_gads_diario" else "data_inicio"
+        # Tenta detectar a coluna real
+        try:
+            info = conn.execute(f"PRAGMA table_info({tabela})").fetchall()
+            cols = [r[1] if isinstance(r, (list, tuple)) else r['name'] for r in info]
+            if "data" in cols:
+                col_data = "data"
+            elif "data_inicio" in cols:
+                col_data = "data_inicio"
+            elif "data_fim" in cols:
+                col_data = "data_fim"
+        except Exception:
+            pass
+
+        where_parts = []
+        params      = []
+        if data_inicio:
+            where_parts.append(f"{col_data} >= ?")
+            params.append(data_inicio)
+        if data_fim:
+            where_parts.append(f"{col_data} <= ?")
+            params.append(data_fim)
+
+        where_clause = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
+        sql = f"SELECT MAX({col_data}) AS max_data FROM {tabela} {where_clause}"
+
+        row = conn.execute(sql, params).fetchone()
+        if not row:
+            return None
+
+        max_data_raw = row["max_data"] if hasattr(row, "keys") else row[0]
+        if not max_data_raw:
+            return None
+
+        max_data = _date.fromisoformat(str(max_data_raw)[:10])
+        diff_days = (df - max_data).days
+
+        if diff_days > 1:
+            return (
+                f"⚠️ *Dados disponíveis até {max_data.strftime('%d/%m/%Y')}.*"
+                f" Os últimos *{diff_days} dias* ainda estão sendo sincronizados."
+            )
+    except Exception as e:
+        logger.debug("[NLP] _verificar_cobertura_dados: %s", e)
+    return None
 
 
 def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str = "") -> dict:
@@ -346,7 +581,7 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
             raw_text = response.content[0].text.strip()
             parsed   = _parse_claude_response(raw_text)
 
-            # Valida intents — loga qualquer intent desconhecida
+            # Valida intents — MELHORIA 4: fallback amigável se nenhuma intent válida
             intents_brutas = parsed.get("intents", [])
             intents_invalidas = [i for i in intents_brutas if i not in INTENTS_DISPONIVEIS]
             if intents_invalidas:
@@ -356,6 +591,24 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
                 )
 
             intents = [i for i in intents_brutas if i in INTENTS_DISPONIVEIS]
+            # MELHORIA 4: todas as intents eram inválidas → retorna erro amigável
+            if not intents and intents_brutas:
+                msg_fallback = _fallback_intencao_desconhecida(pergunta)
+                logger.warning("[NLP] Nenhuma intent válida detectada para: '%s'", pergunta[:80])
+                resultado = {
+                    "erro":     msg_fallback,
+                    "intent":   "desconhecida",
+                    "intents":  ["desconhecida"],
+                    "campanha": None,
+                    "data_inicio": None,
+                    "data_fim":    None,
+                    "limit":    10,
+                    "raw":      parsed,
+                    "periodo_nota": None,
+                    "cliente_key":  None,
+                    "plataforma":   None,
+                }
+                break
             if not intents:
                 intents = ["resumo_geral"]
 
@@ -486,3 +739,10 @@ def _fallback_regex(pergunta: str, campanhas: list[str], contexto: str = "") -> 
         "cliente_key": None,
         "plataforma":  None,
     }
+
+
+# Re-exporta consultar do engine para compatibilidade com testes
+try:
+    from agent.engine import consultar  # noqa: F401  # MELHORIA: re-export para importação direta
+except ImportError:
+    pass

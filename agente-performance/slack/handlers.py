@@ -182,6 +182,188 @@ def formatar_resumo_relatorio(resultado: dict) -> str:
     )
 
 
+# ── MELHORIA 7: Sugestões pro-ativas por intent ─────────────────────────────
+
+from typing import Optional
+
+_SUGESTOES_POR_INTENT: dict = {
+    "resumo_geral":            "💡 *Próximos passos:* `/top roas` · `/compare` · `/alertas`",
+    "top_roas":                "💡 *Também pode:* `/top compras` · `/campanha <nome>` · `/funil`",
+    "top_compras":             "💡 *Também pode:* `/top roas` · `/funil` · `/compare`",
+    "top_receita":             "💡 *Também pode:* `/top roas` · `/top compras`",
+    "performance_campanha":    "💡 *Aprofunde:* `/funil <campanha>` · `/compare <campanha> vs Advantage`",
+    "alertas_roas":            "💡 *Também veja:* `/sem_conversao` · `/top roas` · `/funil`",
+    "sem_conversao":           "💡 *Também pode:* `/alertas` · `/top roas`",
+    "funil":                   "💡 *Aprofunde:* `/funil` detalhado · `/top compras`",
+    "funil_detalhado":         "💡 *Também pode:* `/top roas` · `/alertas`",
+    "comparar":                "💡 *Também pode:* comparar períodos · `/top roas`",
+    "comparar_periodos":       "💡 *Também pode:* `/top roas` · `/resumo_geral`",
+    "comparar_wow":            "💡 *Também pode:* comparar mês a mês · `/top roas`",
+    "comparar_mom":            "💡 *Também pode:* histórico mensal · `/top roas`",
+    "historico_mensal":        "💡 *Também pode:* comparar mom · `/resumo_geral`",
+    "periodo":                 "💡 *Também pode:* `/top roas` · `/funil` · `/alertas`",
+    "saturacao_frequencia":    "💡 *Considera:* pausar campanhas com frequência > 4. Use `/alertas`.",
+    "eficiencia_criativo":     "💡 *Aprofunde:* métricas de vídeo · `/top ctr`",
+    "distribuicao_investimento": "💡 *Também pode:* `/top roas` · `/resumo_geral`",
+    "resumo_executivo":        "💡 *Aprofunde:* `/alertas` · `/top roas` · `/funil`",
+    "evolucao_diaria":         "💡 *Também pode:* comparar wow · `/top roas`",
+    "metricas_video":          "💡 *Também pode:* eficiência criativo · `/top ctr`",
+    "metricas_engajamento":    "💡 *Também pode:* `/top ctr` · eficiência criativo",
+    "ranking_metrica":         "💡 *Também pode:* `/top roas` · `/top compras`",
+}
+
+
+def _sugestao_proativa(intent: str) -> Optional[str]:
+    """Retorna sugestão de follow-up ou None se não houver mapeamento."""
+    return _SUGESTOES_POR_INTENT.get(intent)
+
+
+# ── MELHORIA 8: Alerta de cobertura de dados ─────────────────────────────────
+
+def _verificar_cobertura_dados_handler(
+    data_inicio,
+    data_fim,
+    cliente_key,
+    plataforma,
+) -> Optional[str]:
+    """Wrapper que chama nlp._verificar_cobertura_dados sem import circular."""
+    try:
+        from agent.nlp import _verificar_cobertura_dados
+        return _verificar_cobertura_dados(data_inicio, data_fim, cliente_key, plataforma)
+    except Exception as e:
+        logger.debug("[handler] _verificar_cobertura_dados: %s", e)
+        return None
+
+
+# ── MELHORIA 9: Base de Conhecimento local (SQLite) ───────────────────────────
+
+def _kb_local_salvar(pergunta: str, resposta: str, intent: str, msg_ts=None) -> None:
+    """
+    Salva resposta na tabela local kb_cache em campanhas.db.
+    Não aprovada até receber 👍.
+    """
+    try:
+        import sqlite3 as _sq
+        from pathlib import Path as _P
+        _db = _P(__file__).parent.parent / "data" / "campanhas.db"
+        conn = _sq.connect(str(_db), check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS kb_cache (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                pergunta    TEXT NOT NULL,
+                resposta    TEXT NOT NULL,
+                intent      TEXT,
+                aprovado    INTEGER DEFAULT 0,
+                slack_msg_ts TEXT,
+                criado_em   TEXT DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_kb_cache_ts ON kb_cache(slack_msg_ts);
+        """)
+        conn.execute("""
+            INSERT INTO kb_cache (pergunta, resposta, intent, slack_msg_ts)
+            VALUES (?, ?, ?, ?)
+        """, (pergunta, resposta, intent, msg_ts))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logger.debug("[KB local] salvar: %s", e)
+
+
+def _kb_local_aprovar(slack_msg_ts: str) -> bool:
+    """Marca a entrada como aprovada na tabela kb_cache local."""
+    try:
+        import sqlite3 as _sq
+        from pathlib import Path as _P
+        _db = _P(__file__).parent.parent / "data" / "campanhas.db"
+        conn = _sq.connect(str(_db), check_same_thread=False)
+        cur  = conn.execute(
+            "UPDATE kb_cache SET aprovado = 1 WHERE slack_msg_ts = ?",
+            (slack_msg_ts,)
+        )
+        conn.commit()
+        ok = cur.rowcount > 0
+        conn.close()
+        return ok
+    except Exception as e:
+        logger.debug("[KB local] aprovar: %s", e)
+        return False
+
+
+# ── MELHORIA 10: Fallback quando sync falhou ─────────────────────────────────
+
+def _ultimo_dia_com_dados(cliente_key, plataforma):
+    """
+    Retorna a última data com dados disponíveis no banco para o cliente/plataforma.
+    Retorna date ou None.
+    """
+    try:
+        import sqlite3 as _sq
+        from datetime import date as _date
+        from pathlib import Path as _P
+        _db = _P(__file__).parent.parent / "data" / "campanhas.db"
+        conn = _sq.connect(str(_db), check_same_thread=False)
+        conn.row_factory = _sq.Row
+
+        if plataforma == "google_ads" or cliente_key == "pod_kombucha":
+            tabela, col = "pod_gads_diario", "data_inicio"
+        else:
+            tabela, col = "campanhas", "data_inicio"
+
+        # verifica se a coluna existe
+        info = conn.execute(f"PRAGMA table_info({tabela})").fetchall()
+        colunas = [r["name"] for r in info]
+        if col not in colunas:
+            col = "data" if "data" in colunas else (colunas[0] if colunas else "data")
+
+        row = conn.execute(f"SELECT MAX({col}) AS ultimo FROM {tabela}").fetchone()
+        conn.close()
+        if row and row["ultimo"]:
+            return _date.fromisoformat(str(row["ultimo"])[:10])
+    except Exception as e:
+        logger.debug("[handler] _ultimo_dia_com_dados: %s", e)
+    return None
+
+
+def _verificar_sync_falhou(cliente_key, plataforma) -> Optional[str]:
+    """
+    MELHORIA 10: Verifica se o sync recente falhou para o cliente/plataforma.
+    Se cron_runs mostra falha recente, retorna aviso com último dia disponível.
+    Retorna None se tudo ok.
+    """
+    try:
+        from datetime import date as _date, timedelta as _td
+        from db.cron_log import listar_runs
+
+        hoje = _date.today()
+        d3   = hoje - _td(days=3)
+
+        ck   = cliente_key or "source_of"
+        runs = listar_runs(cliente_key=ck, limit=5)
+        falhou = any(
+            r["status"] != "sucesso" and r.get("criado_em", "") >= d3.isoformat()
+            for r in runs
+        )
+        if not falhou:
+            return None
+
+        ultimo = _ultimo_dia_com_dados(cliente_key, plataforma)
+        if ultimo is None:
+            return (
+                "⚠️ *Sincronização recente falhou.* "
+                "Os dados podem estar desatualizados. Tente novamente mais tarde."
+            )
+
+        return (
+            f"⚠️ *Sincronização recente falhou.* "
+            f"Os dados mais recentes disponíveis são de *{ultimo.strftime('%d/%m/%Y')}*. "
+            f"Consultas para períodos mais recentes podem estar incompletas."
+        )
+    except Exception as e:
+        logger.debug("[handler] _verificar_sync_falhou: %s", e)
+        return None
+
+
 app = AsyncApp(
     token=os.getenv("SLACK_BOT_TOKEN", ""),
     signing_secret=os.getenv("SLACK_SIGNING_SECRET", ""),
@@ -247,6 +429,34 @@ async def _processar_e_responder(
                     text=erro, mrkdwn=True,
                 )
                 return
+
+            # MELHORIA 8: Alerta de cobertura de dados (prefixo na resposta)
+            aviso_cobertura = None
+            try:
+                aviso_cobertura = _verificar_cobertura_dados_handler(
+                    data_inicio=meta.get("data_inicio"),
+                    data_fim=meta.get("data_fim"),
+                    cliente_key=meta.get("cliente"),
+                    plataforma=meta.get("plataforma"),
+                )
+            except Exception as _e8:
+                logger.debug("[handler] cobertura_dados: %s", _e8)
+
+            # MELHORIA 10: Fallback quando sync falhou para período recente vazio
+            if not dados or (isinstance(dados, list) and len(dados) == 0):
+                try:
+                    from datetime import date as _date, timedelta as _td
+                    _meta_fim = meta.get("data_fim")
+                    _hoje = _date.today()
+                    if _meta_fim and (_hoje - _date.fromisoformat(_meta_fim)).days <= 3:
+                        aviso_sync = _verificar_sync_falhou(
+                            cliente_key=meta.get("cliente"),
+                            plataforma=meta.get("plataforma"),
+                        )
+                        if aviso_sync and not aviso_vazio:
+                            aviso_vazio = aviso_sync
+                except Exception as _e10:
+                    logger.debug("[handler] verificar_sync_falhou: %s", _e10)
 
             # Dados vazios com sugestão de período
             # Para POD: aviso_vazio pode ser apenas nota de período ajustado (não interrompe a resposta)
@@ -333,6 +543,10 @@ async def _processar_e_responder(
             if aviso_periodo_pod:
                 resposta_final = aviso_periodo_pod + "\n\n" + resposta_final
 
+            # MELHORIA 8: Prefixo de alerta de cobertura de dados
+            if aviso_cobertura:
+                resposta_final = aviso_cobertura + "\n\n" + resposta_final
+
             append_history(thread_ts, channel, "agent", resposta_final[:500], meta)
 
             blocks = truncar_blocos(markdown_to_blocks(resposta_final))
@@ -343,9 +557,9 @@ async def _processar_e_responder(
 
             # Salva na Base de Conhecimento (não aprovado até receber 👍)
             if not cache_hit and resposta_final and not erro_final:
+                resp_msg_ts = msg.get("ts") if msg else None
                 try:
                     from notion.knowledge_base import salvar_entrada
-                    resp_msg_ts = msg.get("ts") if msg else None
                     salvar_entrada(
                         pergunta=text,
                         resposta=resposta_final,
@@ -356,7 +570,31 @@ async def _processar_e_responder(
                         slack_msg_ts=resp_msg_ts,
                     )
                 except Exception as e_kb:
-                    logger.debug("KB: erro ao salvar (não crítico): %s", e_kb)
+                    logger.debug("KB: erro ao salvar no Notion (não crítico): %s", e_kb)
+                # MELHORIA 9: Salvar também na tabela local kb_cache (campanhas.db)
+                try:
+                    _kb_local_salvar(
+                        pergunta=text,
+                        resposta=resposta_final,
+                        intent=intent,
+                        msg_ts=resp_msg_ts,
+                    )
+                except Exception as e_kb_local:
+                    logger.debug("KB local: erro ao salvar (não crítico): %s", e_kb_local)
+
+            # MELHORIA 7: Sugestões proativas após resposta principal
+            if resposta_final and not erro_final and not cache_hit:
+                try:
+                    sugestao = _sugestao_proativa(intent)
+                    if sugestao:
+                        await client.chat_postMessage(
+                            channel=channel,
+                            thread_ts=thread_ts,
+                            text=sugestao,
+                            mrkdwn=True,
+                        )
+                except Exception as e_sug:
+                    logger.debug("[handler] sugestão proativa: %s", e_sug)
 
         except Exception as e:
             erro_final = str(e)
@@ -942,6 +1180,14 @@ async def handle_reaction(event, client):
                     pass
         else:
             logger.debug("KB: nenhuma entrada encontrada para ts=%s", msg_ts)
+
+        # MELHORIA 9: Aprova também na tabela local kb_cache
+        try:
+            aprovado_local = _kb_local_aprovar(msg_ts)
+            if aprovado_local:
+                logger.info("KB local: entrada aprovada (ts=%s)", msg_ts)
+        except Exception as e_kbl:
+            logger.debug("KB local: erro ao aprovar (não crítico): %s", e_kbl)
 
     except Exception as e:
         logger.debug("KB reaction handler erro (não crítico): %s", e)

@@ -119,6 +119,69 @@ Dados exclusivos do Google Ads. NUNCA mencione Source OF, Meta Ads ou Facebook.
 """
 
 
+# MELHORIA 9: Base de Conhecimento local — busca por similaridade com rapidfuzz
+def _buscar_kb_local(pergunta: str, intent: str, top_n: int = 3) -> str:
+    """
+    Busca as `top_n` entradas mais similares na tabela local kb_cache (campanhas.db).
+    Usa rapidfuzz para comparar perguntas. Só retorna entradas aprovadas.
+    Retorna string formatada para injetar no prompt ou string vazia.
+    """
+    try:
+        import sqlite3 as _sq
+        from pathlib import Path as _P
+        from rapidfuzz import process as _fuzz_proc, fuzz as _fuzz
+
+        _db = _P(__file__).parent.parent / "data" / "campanhas.db"
+        if not _db.exists():
+            return ""
+
+        conn = _sq.connect(str(_db), check_same_thread=False)
+        conn.row_factory = _sq.Row
+
+        # Busca entradas aprovadas da mesma intent (ou qualquer se não houver suficientes)
+        rows = conn.execute("""
+            SELECT pergunta, resposta, intent FROM kb_cache
+            WHERE aprovado = 1
+            ORDER BY criado_em DESC
+            LIMIT 100
+        """).fetchall()
+        conn.close()
+
+        if not rows:
+            return ""
+
+        # Filtra por intent primeiro
+        intent_rows = [r for r in rows if r["intent"] == intent]
+        pool = intent_rows if len(intent_rows) >= top_n else list(rows)
+
+        perguntas = [r["pergunta"] for r in pool]
+        if not perguntas:
+            return ""
+
+        # Similaridade com rapidfuzz
+        matches = _fuzz_proc.extract(
+            pergunta,
+            perguntas,
+            scorer=_fuzz.token_sort_ratio,
+            limit=top_n,
+            score_cutoff=40,
+        )
+        if not matches:
+            return ""
+
+        linhas = ["[Base de Conhecimento local — exemplos aprovados similares]"]
+        for match_text, score, idx in matches:
+            row = pool[idx]
+            linhas.append(f"  P: {row['pergunta']}")
+            linhas.append(f"  R: {row['resposta'][:300]}")
+            linhas.append("")
+
+        return "\n".join(linhas).strip()
+    except Exception as e:
+        logger.debug("[KB local] _buscar_kb_local: %s", e)
+        return ""
+
+
 def get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
@@ -204,6 +267,16 @@ def gerar_resposta(
                 logger.debug("KB: injetando %d entradas no prompt", len(entradas))
         except Exception as e:
             logger.debug("KB: falha ao buscar contexto (não crítico): %s", e)
+
+    # MELHORIA 9: Complementa com KB local (SQLite campanhas.db) — busca os 3 mais similares
+    kb_local_contexto = ""
+    try:
+        kb_local_contexto = _buscar_kb_local(pergunta, intent, top_n=3)
+    except Exception as e:
+        logger.debug("KB local: falha ao buscar (não crítico): %s", e)
+
+    if kb_local_contexto:
+        kb_contexto = (kb_contexto + "\n\n" + kb_local_contexto).strip()
 
     # Dados Shopify reais (quando sincronizados)
     shopify_str = ""
