@@ -58,6 +58,10 @@ app = FastAPI(
     description="API de consulta a dados de campanhas Meta Ads",
 )
 
+# ── Router: histórico de relatórios ──────────────────────────────────────────
+from api.relatorio_history import router as relatorios_router
+app.include_router(relatorios_router)
+
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 

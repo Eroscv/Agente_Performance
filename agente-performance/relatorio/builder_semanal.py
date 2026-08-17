@@ -387,6 +387,30 @@ def gerar_relatorio_semanal(
         cliente_key=cliente,
     )
 
+    # ── Persiste log do relatório no SQLite ──────────────────────────────
+    try:
+        from db.relatorio_log import registrar_relatorio
+        registrar_relatorio(
+            cliente_key=cliente,
+            plataforma="meta_ads",
+            periodicidade=tipo,  # 'semanal' ou 'mensal'
+            data_inicio=str(data_inicio),
+            data_fim=str(data_fim),
+            titulo=titulo,
+            notion_url=resultado.get("url"),
+            notion_page_id=resultado.get("page_id"),
+            blocos_n=len(blocos),
+            resumo={
+                "investimento": resumo.get("total_invest"),
+                "receita":      resumo.get("receita_shopify") or resumo.get("total_receita"),
+                "roas":         resumo.get("roas"),
+                "conversoes":   resumo.get("total_compras") or resumo.get("conversoes"),
+            },
+            status="ok",
+        )
+    except Exception as _log_err:
+        logger.warning("[Semanal] Falha ao registrar log de relatório: %s", _log_err)
+
     return {
         "titulo":        titulo,
         "periodo":       periodo_str,

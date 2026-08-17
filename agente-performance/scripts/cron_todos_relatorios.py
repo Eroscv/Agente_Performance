@@ -417,8 +417,9 @@ def executar_cliente(
 
         # ── Builder ───────────────────────────────────────────────────────
         builder_fn = get_builder(cliente_key, tipo_builder)
+        _t_inicio  = _time.monotonic()
         resultado  = builder_fn(data_inicio=data_inicio, data_fim=data_fim, publicar=publicar)
-        
+        _duracao_ms = int((_time.monotonic() - _t_inicio) * 1000)
 
         if resultado.get("erro"):
             raise RuntimeError(resultado["erro"])
@@ -447,6 +448,31 @@ def executar_cliente(
                 f"_{periodo_str}_\n"
                 f"📎 <{url}|Abrir relatório completo no Notion>"
             )
+
+        # ── Persiste log detalhado do relatório no SQLite ──────────────────────
+        try:
+            from db.relatorio_log import registrar_relatorio as _reg_rel
+            from db.registry import get_cliente as _get_cli
+            _cfg_cli  = _get_cli(cliente_key)
+            _plataforma = _cfg_cli.get("plataforma", "meta_ads")
+            _resumo   = resultado.get("resumo", {})
+            _reg_rel(
+                cliente_key=cliente_key,
+                plataforma=_plataforma,
+                periodicidade=tipo_builder,  # 'diario', 'semanal', 'mensal'
+                data_inicio=str(data_inicio),
+                data_fim=str(data_fim),
+                titulo=resultado.get("titulo"),
+                notion_url=url if url != "—" else None,
+                notion_page_id=resultado.get("page_id"),
+                slack_ok=ok_slack,
+                blocos_n=len(resultado.get("blocos", [])),
+                resumo=_resumo,
+                status="ok",
+                duracao_ms=_duracao_ms,
+            )
+        except Exception as _log_err:
+            logger.warning("[%s] Falha ao registrar log de relatório: %s", cliente_key, _log_err)
 
         registrar_run(
             cliente_key=cliente_key,

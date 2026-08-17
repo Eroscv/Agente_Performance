@@ -392,6 +392,25 @@ def gerar_relatorio_diario(
 
     logger.info("[Diário] %s·%s %s → Notion: %s", cliente_key, plataforma, data, resultado.get("url"))
 
+    # ── Persiste log do relatório no SQLite ──────────────────────────────
+    try:
+        from db.relatorio_log import registrar_relatorio
+        registrar_relatorio(
+            cliente_key=cliente_key,
+            plataforma=plataforma,
+            periodicidade="diario",
+            data_inicio=data,
+            data_fim=data,
+            titulo=titulo,
+            notion_url=resultado.get("url"),
+            notion_page_id=resultado.get("page_id"),
+            blocos_n=len(blocos),
+            resumo=resumo,
+            status="ok",
+        )
+    except Exception as _log_err:
+        logger.warning("[Diário] Falha ao registrar log de relatório: %s", _log_err)
+
     return {
         "titulo":      titulo,
         "page_id":     resultado.get("page_id"),
