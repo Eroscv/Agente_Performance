@@ -109,17 +109,6 @@ def _bk_divider() -> dict:
 
 def _bk_context(txt: str) -> dict:
     return {"type": "context", "elements": [{"type": "mrkdwn", "text": txt}]}
-
-def _bk_fields(pares: list[tuple[str, str]]) -> dict:
-    """Bloco section com fields (2 colunas lado a lado, máx 10 fields)."""
-    return {
-        "type": "section",
-        "fields": [
-            {"type": "mrkdwn", "text": f"*{k}*\n{v}"}
-            for k, v in pares[:10]
-        ]
-    }
-
 def _tabela_codigo(header: list[str], rows: list[list[str]]) -> str:
     """Tabela alinhada dentro de bloco ```código```."""
     all_rows = [header] + rows

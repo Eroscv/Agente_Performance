@@ -67,17 +67,11 @@ def _roas_emoji(roas) -> str:
 
 # ── Blocos Notion ─────────────────────────────────────────────────────────────
 
-def _h1(texto: str) -> dict:
-    return {"object": "block", "type": "heading_1",
-            "heading_1": {"rich_text": [{"type": "text", "text": {"content": texto}}]}}
 
 def _h2(texto: str) -> dict:
     return {"object": "block", "type": "heading_2",
             "heading_2": {"rich_text": [{"type": "text", "text": {"content": texto}}]}}
 
-def _h3(texto: str) -> dict:
-    return {"object": "block", "type": "heading_3",
-            "heading_3": {"rich_text": [{"type": "text", "text": {"content": texto}}]}}
 
 def _paragrafo(texto: str, bold: bool = False) -> dict:
     return {"object": "block", "type": "paragraph",
