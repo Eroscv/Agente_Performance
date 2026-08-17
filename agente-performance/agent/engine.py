@@ -585,8 +585,14 @@ def consultar(
         cliente_key = canal_cliente
         logger.debug("[consultar] cliente_key inferido pelo canal '%s': %s", channel, cliente_key)
 
+    # Default para source_of quando não há contexto de cliente
+    # Evita misturar dados de clientes diferentes em perguntas genéricas
+    if not cliente_key and not plataforma:
+        cliente_key = "source_of"
+        logger.debug("[consultar] cliente_key não detectado — default: source_of")
+
     # Flag: precisa de execução segmentada?
-    modo_segmentado = not cliente_key and not plataforma
+    modo_segmentado = False  # desativado — default source_of garante isolamento
 
     # 3. Valida campanha
     if campanha is None and campanha_raw and "performance" in " ".join(intents):
@@ -633,6 +639,7 @@ def consultar(
         "intent":          intents[0],
         "periodo_nota":    periodo_nota,
         "cliente_key":     cliente_key,
+        "cliente":         cliente_key,  # alias para compatibilidade com handlers
         "plataforma":      plataforma,
         "modo_segmentado": modo_segmentado,
     }
