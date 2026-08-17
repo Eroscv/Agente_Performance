@@ -1390,3 +1390,354 @@ def status_shopify_sync() -> dict:
         return status_sync()
     except Exception as e:
         return {"sincronizado": False, "erro": str(e)}
+
+
+# ── Novas funções v4 — Melhorias de dados e consultas ────────────────────────
+
+def verificar_gap_dados(cliente_key: str = "source_of", plataforma: str = "meta_ads") -> dict:
+    """
+    Verifica se existe gap de dados recentes (último dia disponível vs hoje).
+    Retorna dict com: ultimo_dia, dias_atrasado, tem_gap, aviso.
+    """
+    from datetime import date, timedelta
+    where, params = _build_where(None, cliente_key=cliente_key, plataforma=plataforma)
+    r = query_one(f"""
+        SELECT MAX(data_inicio) as ultimo_dia, MAX(data_fim) as ultimo_fim
+        FROM campanhas_unificada {where}
+    """, tuple(params))
+
+    ultimo = r.get("ultimo_fim") or r.get("ultimo_dia") if r else None
+    if not ultimo:
+        return {"tem_gap": False, "aviso": None}
+
+    try:
+        ultimo_dt = date.fromisoformat(str(ultimo)[:10])
+        hoje = date.today()
+        ontem = hoje - timedelta(days=1)
+        dias_atrasado = (ontem - ultimo_dt).days
+
+        if dias_atrasado <= 0:
+            return {"tem_gap": False, "ultimo_dia": str(ultimo_dt), "dias_atrasado": 0, "aviso": None}
+
+        aviso = (
+            f"⚠️ _Dados desatualizados: último sync foi {ultimo_dt.strftime('%d/%m')}. "
+            f"Mostrando até {ultimo_dt.strftime('%d/%m/%Y')} "
+            f"({dias_atrasado} dia{'s' if dias_atrasado > 1 else ''} sem atualização)._"
+        )
+        return {
+            "tem_gap": True,
+            "ultimo_dia": str(ultimo_dt),
+            "dias_atrasado": dias_atrasado,
+            "aviso": aviso,
+        }
+    except Exception:
+        return {"tem_gap": False, "aviso": None}
+
+
+def _meta_ads_union_source(cliente_key: Optional[str] = None) -> str:
+    """
+    Retorna a cláusula FROM correta para queries de criativo (ad-level).
+    Usa as tabelas brutas Meta Ads pois a view campanhas_unificada não expoe ad_name/ad_id.
+    Filtra por cliente_key quando informado.
+    """
+    # Mapeamento cliente_key -> tabela Meta Ads
+    _META_TABLES = {
+        "source_of":    "source_of_meta_ads_diario",
+        "pod_kombucha": "pod_kombucha_meta_ads_diario",
+    }
+
+    if cliente_key and cliente_key in _META_TABLES:
+        tabela = _META_TABLES[cliente_key]
+        return f"FROM {tabela}"
+
+    # Sem filtro de cliente: UNION de todas as tabelas Meta
+    unions = []
+    for ck, tabela in _META_TABLES.items():
+        unions.append(f"""
+        SELECT '{ck}' AS cliente_key, 'meta_ads' AS plataforma,
+               data, campanha, campaign_id, adset_name, adset_id,
+               ad_name, ad_id, objetivo, impressoes, alcance,
+               cliques_link, investimento, compras, valor_compras,
+               frequencia
+        FROM {tabela}
+        """)
+    union_sql = " UNION ALL ".join(unions)
+    return f"FROM ({union_sql}) AS meta_ads_union"
+
+
+def _meta_ads_where(
+    base_condition: Optional[str],
+    campanha:    Optional[str] = None,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+) -> tuple[str, list]:
+    """
+    WHERE builder para queries diretas nas tabelas Meta Ads brutas.
+    Não inclui filtro de plataforma (já é sempre meta_ads aqui).
+    Não inclui cliente_key quando já está resolvido na FROM clause.
+    """
+    conditions = []
+    params = []
+
+    if base_condition:
+        conditions.append(base_condition)
+
+    if campanha:
+        conditions.append("campanha LIKE ?")
+        params.append(f"%{campanha}%")
+
+    if data_inicio:
+        conditions.append("data >= ?")
+        params.append(data_inicio)
+    if data_fim:
+        conditions.append("data <= ?")
+        params.append(data_fim)
+
+    # cliente_key só é necessário na WHERE quando usamos UNION (FROM com subconsulta)
+    if not cliente_key or cliente_key not in ("source_of", "pod_kombucha"):
+        pass  # não filtra — UNION já inclui todos
+
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    return where, params
+
+
+def top_criativos_roas(
+    campanha:    Optional[str] = None,
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+    limit:       int = 10,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
+) -> list[dict]:
+    """
+    Top anúncios (criativos) por ROAS dentro de uma campanha ou de todas.
+    Agrupa por ad_name + ad_id para análise de criativo individual.
+    Usa tabelas brutas Meta Ads (a view campanhas_unificada não expõe ad_name/ad_id).
+    """
+    from_clause = _meta_ads_union_source(cliente_key)
+    where, params = _meta_ads_where(
+        "ad_name IS NOT NULL AND ad_name != '' AND investimento > 0",
+        campanha=campanha,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        cliente_key=cliente_key,
+    )
+    _roas_raw = "ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4)"
+    return query(f"""
+        SELECT
+            campanha,
+            ad_name                                               AS criativo,
+            ad_id,
+            ROUND(SUM(investimento), 2)                           AS investimento,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)             AS receita,
+            {_roas_raw}                                           AS roas,
+            ROUND(SUM(COALESCE(compras, 0)), 0)                   AS compras,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(compras,0)),0), 2) AS cpa,
+            ROUND(SUM(impressoes), 0)                             AS impressoes,
+            ROUND(CAST(SUM(COALESCE(cliques_link,0)) AS FLOAT) / NULLIF(SUM(impressoes),0) * 100, 2) AS ctr,
+            ROUND(CAST(SUM(COALESCE(impressoes,0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance,0)),0), 2) AS frequencia,
+            MAX(data)                                             AS ultima_atividade
+        {from_clause}
+        {where}
+        GROUP BY campanha, ad_name, ad_id
+        HAVING SUM(investimento) > 10
+        ORDER BY roas DESC NULLS LAST
+        LIMIT {limit}
+    """, tuple(params))
+
+
+def criativos_em_fadiga(
+    frequencia_min: float = 3.5,
+    data_inicio:    Optional[str] = None,
+    data_fim:       Optional[str] = None,
+    cliente_key:    Optional[str] = None,
+    plataforma:     Optional[str] = None,
+) -> list[dict]:
+    """
+    Criativos com frequência alta (fadiga) e CTR abaixo da média — candidatos a pausar ou renovar.
+    Usa tabelas brutas Meta Ads (a view campanhas_unificada não expõe ad_name/ad_id).
+    """
+    from_clause = _meta_ads_union_source(cliente_key)
+    where, params = _meta_ads_where(
+        "ad_name IS NOT NULL AND ad_name != '' AND investimento > 0",
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        cliente_key=cliente_key,
+    )
+    _roas_raw = "ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4)"
+    return query(f"""
+        WITH base AS (
+            SELECT
+                campanha,
+                ad_name AS criativo,
+                ad_id,
+                ROUND(SUM(investimento), 2) AS investimento,
+                ROUND(CAST(SUM(COALESCE(impressoes,0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance,0)),0), 2) AS frequencia,
+                ROUND(CAST(SUM(COALESCE(cliques_link,0)) AS FLOAT) / NULLIF(SUM(impressoes),0) * 100, 2) AS ctr,
+                ROUND(SUM(COALESCE(compras,0)), 0) AS compras,
+                {_roas_raw} AS roas,
+                MAX(data) AS ultima_atividade
+            {from_clause}
+            {where}
+            GROUP BY campanha, ad_name, ad_id
+            HAVING SUM(investimento) > 20
+               AND SUM(COALESCE(alcance,0)) > 0
+        ),
+        media_ctr AS (
+            SELECT AVG(ctr) as ctr_medio FROM base WHERE ctr > 0
+        )
+        SELECT b.*,
+               ROUND(m.ctr_medio, 2) AS ctr_medio_conta
+        FROM base b, media_ctr m
+        WHERE b.frequencia >= {frequencia_min}
+          AND (b.ctr < m.ctr_medio OR b.ctr IS NULL)
+        ORDER BY b.frequencia DESC, b.investimento DESC
+    """, tuple(params))
+
+
+def projecao_fechamento_mes(
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
+) -> dict:
+    """
+    Projeta o resultado do mês corrente com base no ritmo dos dias já disponíveis.
+    Retorna: dias_decorridos, dias_mes, ritmo_diario, projecao_invest, projecao_receita,
+             projecao_roas, projecao_compras, dados_reais_ate_agora.
+    """
+    from datetime import date, timedelta
+    import calendar
+
+    hoje = date.today()
+    primeiro_dia = hoje.replace(day=1)
+    ultimo_dia_mes = hoje.replace(day=calendar.monthrange(hoje.year, hoje.month)[1])
+    dias_mes = ultimo_dia_mes.day
+    dias_decorridos = (hoje - primeiro_dia).days  # dias com dados (exclusive hoje)
+
+    if dias_decorridos <= 0:
+        return {"aviso": "Primeiro dia do mês — sem dados suficientes para projeção."}
+
+    where, params = _build_where(
+        None,
+        data_inicio=str(primeiro_dia),
+        data_fim=str(hoje - timedelta(days=1)),
+        cliente_key=cliente_key,
+        plataforma=plataforma,
+    )
+
+    r = query_one(f"""
+        SELECT
+            ROUND(SUM(investimento), 2)               AS invest_real,
+            ROUND(SUM(COALESCE(valor_compras,0)), 2)  AS receita_real,
+            ROUND(SUM(COALESCE(compras,0)), 0)        AS compras_real,
+            COUNT(DISTINCT date(data_inicio))         AS dias_com_dados
+        FROM campanhas_unificada {where}
+    """, tuple(params))
+
+    if not r or not r.get("invest_real"):
+        return {"aviso": "Sem dados suficientes para projeção do mês corrente."}
+
+    invest_real  = r["invest_real"] or 0
+    receita_real = r["receita_real"] or 0
+    compras_real = r["compras_real"] or 0
+    dias_dados   = r["dias_com_dados"] or dias_decorridos
+
+    # Ritmo diário médio
+    ritmo_invest  = invest_real  / dias_dados
+    ritmo_receita = receita_real / dias_dados
+    ritmo_compras = compras_real / dias_dados
+
+    # Projeção para o mês completo
+    proj_invest  = round(ritmo_invest  * dias_mes, 2)
+    proj_receita = round(ritmo_receita * dias_mes, 2)
+    proj_compras = round(ritmo_compras * dias_mes, 0)
+    proj_roas    = round(proj_receita / proj_invest, 4) if proj_invest > 0 else None
+
+    dias_restantes = dias_mes - dias_decorridos
+
+    return {
+        "mes":              hoje.strftime("%B/%Y"),
+        "dias_mes":         dias_mes,
+        "dias_decorridos":  dias_decorridos,
+        "dias_restantes":   dias_restantes,
+        "invest_real":      invest_real,
+        "receita_real":     receita_real,
+        "compras_real":     compras_real,
+        "roas_real":        round(receita_real / invest_real, 4) if invest_real > 0 else None,
+        "ritmo_invest_dia": round(ritmo_invest, 2),
+        "proj_invest_mes":  proj_invest,
+        "proj_receita_mes": proj_receita,
+        "proj_compras_mes": int(proj_compras),
+        "proj_roas":        proj_roas,
+        "pct_mes_decorrido": round(dias_decorridos / dias_mes * 100, 1),
+    }
+
+
+def comparar_mesmo_periodo_ano_anterior(
+    data_inicio: str,
+    data_fim:    str,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
+) -> dict:
+    """
+    Compara o período solicitado com o mesmo período do ano anterior.
+    Útil para detectar sazonalidade (Black Friday, Dia das Mães, etc).
+    Retorna dict com periodo_atual, periodo_anterior_ano e deltas percentuais.
+    """
+    from datetime import date, timedelta
+
+    try:
+        ini = date.fromisoformat(data_inicio)
+        fim = date.fromisoformat(data_fim)
+    except Exception:
+        return {"aviso": "Datas inválidas para comparação anual."}
+
+    # Mesmo período, ano anterior
+    ini_ano_ant = ini.replace(year=ini.year - 1)
+    fim_ano_ant = fim.replace(year=fim.year - 1)
+
+    def _buscar(d_ini, d_fim):
+        where, params = _build_where(
+            None,
+            data_inicio=str(d_ini),
+            data_fim=str(d_fim),
+            cliente_key=cliente_key,
+            plataforma=plataforma,
+        )
+        return query_one(f"""
+            SELECT
+                ROUND(SUM(investimento), 2)               AS investimento,
+                ROUND(SUM(COALESCE(valor_compras,0)), 2)  AS receita,
+                ROUND(SUM(COALESCE(compras,0)), 0)        AS compras,
+                {_ROAS_EXPR}                              AS roas,
+                ROUND(SUM(impressoes), 0)                 AS impressoes,
+                ROUND(CAST(SUM(COALESCE(cliques_link,0)) AS FLOAT) / NULLIF(SUM(impressoes),0)*100, 2) AS ctr
+            FROM campanhas_unificada {where}
+        """, tuple(params)) or {}
+
+    atual    = _buscar(ini, fim)
+    anterior = _buscar(ini_ano_ant, fim_ano_ant)
+
+    if not anterior.get("investimento"):
+        return {
+            "aviso": f"Sem dados para o mesmo período do ano anterior ({ini_ano_ant} → {fim_ano_ant}).",
+            "periodo_atual": {"inicio": str(ini), "fim": str(fim), **atual},
+        }
+
+    def _pct(a, b):
+        if not b or b == 0:
+            return None
+        return round((a - b) / b * 100, 1)
+
+    return {
+        "periodo_atual":    {"inicio": str(ini),         "fim": str(fim),         **atual},
+        "periodo_anterior": {"inicio": str(ini_ano_ant), "fim": str(fim_ano_ant), **anterior},
+        "variacao": {
+            "investimento_pct": _pct(atual.get("investimento",0), anterior.get("investimento",0)),
+            "receita_pct":      _pct(atual.get("receita",0),      anterior.get("receita",0)),
+            "compras_pct":      _pct(atual.get("compras",0),      anterior.get("compras",0)),
+            "roas_pct":         _pct(atual.get("roas",0),         anterior.get("roas",0)),
+            "ctr_pct":          _pct(atual.get("ctr",0),          anterior.get("ctr",0)),
+        },
+        "tem_dados_ano_anterior": True,
+    }

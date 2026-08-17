@@ -155,6 +155,10 @@ def _detect_intent(text: str) -> str:
         ("evolucao_diaria",         r"evolu|diário|ao\s+longo|por\s+dia|histórico|tendência"),
         ("comparar",                r"compar|versus|vs\.?|lado\s+a\s+lado"),
         ("performance_campanha",    r"performance|desempenho|resultado"),
+        ("projecao_mes",            r"projecao|projeção|fechamento.*mes|ritmo.*mes|se continuar|vai fechar|estimativa.*mes|quanto.*fechar"),
+        ("sazonalidade",            r"ano anterior|ano passado|mesmo periodo.*ano|black friday|dia das maes|natal|sazonalidade|comparar.*ano"),
+        ("top_criativos",           r"criativo|anuncio|ad\b|melhor.*anuncio|pior.*anuncio|top.*criativo|qual.*anuncio"),
+        ("criativos_fadiga",        r"fadiga|saturad|frequencia.*alta|cansado|repetido|renovar.*criativo|pausar.*criativo"),
         ("periodo",                 r"período|resumo\s+de|total\s+de|consolidado"),
         ("resumo_geral",            r"resumo|geral|overview|visão\s+geral|como\s+est[áa]"),
     ]
@@ -402,6 +406,18 @@ def _executar_intent(
 
     elif intent == "metricas_mensageria":
         return queries.metricas_mensageria(campanha, data_inicio, data_fim, **_fk)
+
+    elif intent == "top_criativos":
+        return queries.top_criativos_roas(campanha, data_inicio, data_fim, limit, **_fk)
+
+    elif intent == "criativos_fadiga":
+        return queries.criativos_em_fadiga(data_inicio=data_inicio, data_fim=data_fim, **_fk)
+
+    elif intent == "projecao_mes":
+        return queries.projecao_fechamento_mes(**_fk)
+
+    elif intent == "sazonalidade":
+        return queries.comparar_mesmo_periodo_ano_anterior(data_inicio, data_fim, **_fk)
 
     elif intent == "comparar":
         campanhas_todas = _get_available_campaigns()
@@ -749,6 +765,23 @@ def consultar(
     )
     if dados_principais_vazios:
         dados_vazios_msg = _dados_vazios_sugestao(intents[0], campanha, data_inicio, data_fim)
+
+    # Melhoria 1: verificar gap de dados e adicionar aviso na resposta
+    try:
+        from agent.queries import verificar_gap_dados
+        _gap = verificar_gap_dados(
+            cliente_key=cliente_key or "source_of",
+            plataforma=plataforma or "meta_ads"
+        )
+        if _gap.get("tem_gap") and _gap.get("aviso"):
+            aviso_gap = _gap["aviso"]
+            # Injetar no aviso_vazio existente ou criar novo campo
+            if not dados_vazios_msg:
+                dados_vazios_msg = aviso_gap
+            else:
+                dados_vazios_msg = aviso_gap + "\n\n" + dados_vazios_msg
+    except Exception as _gap_err:
+        logger.debug("[engine] verificar_gap_dados: %s", _gap_err)
 
     # Melhoria 6 + Item 2: Delta vs período anterior
     # Para resumo_geral: sempre calcula delta com queries.resumo_periodo para consistência

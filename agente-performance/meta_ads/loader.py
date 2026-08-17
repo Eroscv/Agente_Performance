@@ -67,6 +67,9 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     adicoes_carrinho    REAL DEFAULT 0,
     checkout_iniciado   REAL DEFAULT 0,
     visualizacoes_landing REAL DEFAULT 0,
+    qualidade_ranking   TEXT,
+    engagement_ranking  TEXT,
+    conversion_ranking  TEXT,
     UNIQUE(data, campanha, ad_id)
 )
 """
@@ -91,6 +94,9 @@ FIELDS = ",".join([
     "video_thruplay_watched_actions",
     "video_play_actions",
     "objective",
+    "quality_ranking",
+    "engagement_rate_ranking",
+    "conversion_rate_ranking",
 ])
 
 
@@ -168,6 +174,10 @@ def _normalizar(row: dict) -> dict:
         "adicoes_carrinho":   _parse_action(actions, "add_to_cart"),
         "checkout_iniciado":  _parse_action(actions, "initiate_checkout"),
         "visualizacoes_landing": _parse_action(actions, "landing_page_view"),
+        # Novas métricas de qualidade de ranking (Melhoria 3)
+        "qualidade_ranking":  row.get("quality_ranking"),
+        "engagement_ranking": row.get("engagement_rate_ranking"),
+        "conversion_ranking": row.get("conversion_rate_ranking"),
     }
 
 
@@ -273,6 +283,7 @@ def salvar(rows: list[dict], append: bool = False,
         "investimento", "compras", "valor_compras", "cpa_meta", "roas_compras",
         "cpm", "frequencia", "video_3s", "video_50pct", "thruplays",
         "adicoes_carrinho", "checkout_iniciado", "visualizacoes_landing",
+        "qualidade_ranking", "engagement_ranking", "conversion_ranking",
     ]
     sql = f"""
         INSERT OR REPLACE INTO {tabela} ({', '.join(cols)})

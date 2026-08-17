@@ -66,7 +66,10 @@ QUERY = """
         metrics.conversions,
         metrics.conversions_value,
         metrics.ctr,
-        metrics.average_cpc
+        metrics.average_cpc,
+        metrics.cost_per_conversion,
+        metrics.search_impression_share,
+        campaign_budget.amount_micros
     FROM campaign
     WHERE segments.date BETWEEN '{date_start}' AND '{date_end}'
       AND campaign.status != 'REMOVED'
@@ -103,19 +106,23 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
                 m = row.metrics
                 c = row.campaign
                 rows.append({
-                    "customer_id":     customer_id,
-                    "data":            row.segments.date,
-                    "campaign_id":     str(c.id),
-                    "campanha":        c.name,
-                    "tipo_campanha":   c.advertising_channel_type.name,
-                    "status":          c.status.name,
-                    "impressoes":      float(m.impressions),
-                    "cliques":         float(m.clicks),
-                    "investimento":    _micros_to_brl(m.cost_micros),
-                    "conversoes":      round(m.conversions, 4),
-                    "valor_conversao": round(m.conversions_value, 2),
-                    "ctr":             round(m.ctr * 100, 4),  # % 
-                    "cpc_medio":       _micros_to_brl(m.average_cpc),
+                    "customer_id":         customer_id,
+                    "data":                row.segments.date,
+                    "campaign_id":         str(c.id),
+                    "campanha":            c.name,
+                    "tipo_campanha":       c.advertising_channel_type.name,
+                    "status":              c.status.name,
+                    "impressoes":          float(m.impressions),
+                    "cliques":             float(m.clicks),
+                    "investimento":        _micros_to_brl(m.cost_micros),
+                    "conversoes":          round(m.conversions, 4),
+                    "valor_conversao":     round(m.conversions_value, 2),
+                    "ctr":                 round(m.ctr * 100, 4),  # %
+                    "cpc_medio":           _micros_to_brl(m.average_cpc),
+                    # Novas métricas (Melhoria 2)
+                    "custo_por_conversao": _micros_to_brl(m.cost_per_conversion) if m.cost_per_conversion else None,
+                    "impressao_share":     round(m.search_impression_share, 4) if m.search_impression_share else None,
+                    "budget_diario":       _micros_to_brl(row.campaign_budget.amount_micros) if row.campaign_budget.amount_micros else None,
                 })
 
         logger.info("[%s] %d linhas retornadas", customer_id, len(rows))
@@ -143,6 +150,9 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     valor_conversao REAL DEFAULT 0,
     ctr             REAL,
     cpc_medio       REAL,
+    custo_por_conversao REAL,
+    impressao_share     REAL,
+    budget_diario       REAL,
     UNIQUE(data, campaign_id)
 )
 """
@@ -167,6 +177,7 @@ def salvar(rows: list[dict], append: bool = False,
         "data", "campaign_id", "campanha", "tipo_campanha",
         "status", "impressoes", "cliques", "investimento",
         "conversoes", "valor_conversao", "ctr", "cpc_medio",
+        "custo_por_conversao", "impressao_share", "budget_diario",
     ]
     sql = f"""
         INSERT OR REPLACE INTO {tabela} ({', '.join(cols)})
