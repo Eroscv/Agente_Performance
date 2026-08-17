@@ -37,6 +37,10 @@ from relatorio.meta import (
     top_ads,
 )
 
+from relatorio.builder_semanal import gerar_relatorio_semanal
+from relatorio.builder_mensal import gerar_relatorio_mensal
+from relatorio.builder_periodo import gerar_relatorio_periodo
+
 __all__ = [
     # regras
     "FATOR_IMPOSTO",

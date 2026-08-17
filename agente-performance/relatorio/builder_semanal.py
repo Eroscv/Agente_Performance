@@ -2,7 +2,8 @@
 relatorio/builder_semanal.py
 
 Gerador de relatório semanal Meta Ads.
-Inclui helper exclusivo _blocos_tendencia_semanal e função pública gerar_relatorio_semanal.
+Inclui _blocos_tendencia_semanal e função pública gerar_relatorio_semanal
+(que também orquestra o relatório mensal quando tipo="mensal").
 """
 
 from __future__ import annotations
@@ -25,6 +26,15 @@ from relatorio.builder_shared import (
     _blocos_alocacao, _blocos_alertas, _blocos_comparativo, _blocos_funil,
     _blocos_metricas_site_semanal, _blocos_alocacao_canais, _blocos_alocacao_por_anuncio,
     _blocos_placeholder, _blocos_pedidos_sku, _blocos_pedidos_estado, _blocos_recompradoras,
+    _buscar_dados_diarios,
+)
+from relatorio.builder_mensal import (
+    _blocos_analise_ultima_semana,
+    _blocos_visao_mensal_diaria,
+    _blocos_visao_mensal_narrativa,
+    _blocos_metas_mes,
+    _blocos_proximos_passos,
+    _blocos_tendencia_mensal,
 )
 from relatorio.regras import spend_com_imposto
 from notion.historico import criar_relatorio_no_historico
@@ -67,13 +77,6 @@ def _blocos_tendencia_semanal(semanas: int = 4) -> list[dict]:
         {"object":"block","type":"table","table":{"table_width":len(header),"has_column_header":True,"has_row_header":False,"children":table_rows}},
         {"object":"block","type":"divider","divider":{}},
     ]
-
-
-_MESES_PT = {
-    1: "Janeiro", 2: "Fevereiro", 3: "Março",    4: "Abril",
-    5: "Maio",    6: "Junho",     7: "Julho",    8: "Agosto",
-    9: "Setembro",10: "Outubro",  11: "Novembro", 12: "Dezembro",
-}
 
 
 def gerar_relatorio_semanal(
@@ -451,14 +454,4 @@ def gerar_relatorio_semanal(
         "num_campanhas": len(campanhas),
     }
 
-
-def gerar_relatorio_mensal(
-    cliente: str = "source_of",
-    ano: int = None,
-    mes: int = None,
-    publicar: bool = True,
-    db_path: Path = DB_PATH,
-) -> dict:
-    """
-    Gera e publica o relatório mensal Meta Ads.
 

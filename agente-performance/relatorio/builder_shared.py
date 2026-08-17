@@ -1034,6 +1034,48 @@ def _blocos_alocacao_por_anuncio(
 # ── Visão Mensal — análise narrativa automática ─────────────────────────────
 
 
+def _buscar_dados_diarios(
+    data_inicio: date,
+    data_fim: date,
+    db_path: Path = DB_PATH,
+) -> list[dict]:
+    """
+    Retorna lista de dicts {data, invest, compras, receita, roas} por dia.
+    Reutilizada tanto pela tabela diária quanto pela narrativa mensal.
+    """
+    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            data_inicio                        AS dia,
+            SUM(investimento)                  AS invest,
+            SUM(COALESCE(compras, 0))           AS compras,
+            SUM(COALESCE(valor_compras, 0))     AS receita
+        FROM campanhas
+        WHERE data_inicio >= ? AND data_fim <= ?
+        GROUP BY data_inicio
+        ORDER BY data_inicio
+    """, (data_inicio.isoformat(), data_fim.isoformat()))
+    rows = cur.fetchall()
+    conn.close()
+
+    resultado = []
+    for row in rows:
+        invest  = float(row["invest"] or 0)
+        compras = int(row["compras"] or 0)
+        receita = float(row["receita"] or 0)
+        roas    = round(receita / invest, 4) if invest > 0 else None
+        resultado.append({
+            "data":    row["dia"],
+            "invest":  invest,
+            "compras": compras,
+            "receita": receita,
+            "roas":    roas,
+        })
+    return resultado
+
+
 def _blocos_placeholder(
     titulo: str,
     emoji: str,
@@ -1472,4 +1514,10 @@ def _blocos_recompradoras(
 
     return blocos
 
+
+_MESES_PT = {
+    1: "Janeiro", 2: "Fevereiro", 3: "Março",    4: "Abril",
+    5: "Maio",    6: "Junho",     7: "Julho",    8: "Agosto",
+    9: "Setembro",10: "Outubro",  11: "Novembro", 12: "Dezembro",
+}
 

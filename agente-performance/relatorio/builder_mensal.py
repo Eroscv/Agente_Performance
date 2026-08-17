@@ -14,9 +14,11 @@ from pathlib import Path
 
 from relatorio.builder_shared import (
     # constantes
-    CLIENTES, DB_PATH, _SQLITE_TIMEOUT, _MESES_PT,
+    CLIENTES, DB_PATH, _SQLITE_TIMEOUT, _MESES_PT, _MESES_PT_ABR,
     # db
     _buscar_campanhas, _resumo_geral, _alertas, _buscar_dados_diarios,
+    # dados históricos
+    _DADOS_HISTORICO, _META_Q3, _RECOMPRAS_HISTORICO, _RECOMPRAS_ESTADOS,
     # fmt
     _fmt_brl, _fmt_x, _fmt_pct, _fmt_n, _fmt_data_pt, _mk_table_notion,
     # blocos compartilhados
@@ -24,11 +26,8 @@ from relatorio.builder_shared import (
     _blocos_alocacao, _blocos_alertas, _blocos_comparativo, _blocos_funil,
     _blocos_metricas_site_semanal, _blocos_alocacao_canais, _blocos_alocacao_por_anuncio,
     _blocos_placeholder, _blocos_pedidos_sku, _blocos_pedidos_estado, _blocos_recompradoras,
-    # dados históricos
-    _DADOS_HISTORICO, _META_Q3, _RECOMPRAS_HISTORICO, _RECOMPRAS_ESTADOS, _MESES_PT_ABR,
 )
 from relatorio.regras import spend_com_imposto, calcular_cpa
-from notion.historico import criar_relatorio_no_historico
 
 logger = logging.getLogger(__name__)
 
@@ -426,48 +425,6 @@ def _blocos_visao_mensal_diaria(
 
         {"object": "block", "type": "divider", "divider": {}},
     ]
-
-
-def _buscar_dados_diarios(
-    data_inicio: date,
-    data_fim: date,
-    db_path: Path = DB_PATH,
-) -> list[dict]:
-    """
-    Retorna lista de dicts {data, invest, compras, receita, roas} por dia.
-    Reutilizada tanto pela tabela diária quanto pela narrativa mensal.
-    """
-    conn = sqlite3.connect(db_path, timeout=_SQLITE_TIMEOUT)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT
-            data_inicio                        AS dia,
-            SUM(investimento)                  AS invest,
-            SUM(COALESCE(compras, 0))           AS compras,
-            SUM(COALESCE(valor_compras, 0))     AS receita
-        FROM campanhas
-        WHERE data_inicio >= ? AND data_fim <= ?
-        GROUP BY data_inicio
-        ORDER BY data_inicio
-    """, (data_inicio.isoformat(), data_fim.isoformat()))
-    rows = cur.fetchall()
-    conn.close()
-
-    resultado = []
-    for row in rows:
-        invest  = float(row["invest"] or 0)
-        compras = int(row["compras"] or 0)
-        receita = float(row["receita"] or 0)
-        roas    = round(receita / invest, 4) if invest > 0 else None
-        resultado.append({
-            "data":    row["dia"],
-            "invest":  invest,
-            "compras": compras,
-            "receita": receita,
-            "roas":    roas,
-        })
-    return resultado
 
 
 def _detectar_fases(dados_diarios: list) -> dict:
@@ -1260,6 +1217,17 @@ def _blocos_tendencia_mensal(data_ref: date, meses: int = 4, db_path: Path = DB_
     ]
 
 
+
+def gerar_relatorio_mensal(
+    cliente: str = "source_of",
+    ano: int = None,
+    mes: int = None,
+    publicar: bool = True,
+    db_path: Path = DB_PATH,
+) -> dict:
+    """
+    Gera e publica o relatório mensal Meta Ads.
+
     Args:
         cliente:  chave do cliente (ex: 'source_of')
         ano:      ano do mês de referência (default: mês passado)
@@ -1271,6 +1239,8 @@ def _blocos_tendencia_mensal(data_ref: date, meses: int = 4, db_path: Path = DB_
         dict com: page_id, url, resumo, num_campanhas, alertas
     """
     from calendar import monthrange
+    # Import local para evitar circular: builder_semanal importa de builder_mensal
+    from relatorio.builder_semanal import gerar_relatorio_semanal
 
     hoje = date.today()
 
@@ -1293,16 +1263,3 @@ def _blocos_tendencia_mensal(data_ref: date, meses: int = 4, db_path: Path = DB_
         db_path=db_path,
         tipo="mensal",
     )
-
-
-def gerar_relatorio_periodo(
-    cliente: str = "source_of",
-    data_inicio: date = None,
-    data_fim: date = None,
-    publicar: bool = True,
-) -> dict:
-    """Alias genérico para períodos customizados."""
-    return gerar_relatorio_semanal(
-        cliente=cliente,
-        data_inicio=data_inicio,
-        data_fim=data_fim,
