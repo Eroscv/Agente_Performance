@@ -1,7 +1,7 @@
 """
 relatorio/builder_shared.py
 
-Funções e constantes compartilhadas entre builder_semanal, builder_mensal e builder_periodo.
+Funções e constantes compartilhadas entre builder_semanal e builder_mensal.
 """
 
 from __future__ import annotations

@@ -39,7 +39,6 @@ from relatorio.meta import (
 
 from relatorio.builder_semanal import gerar_relatorio_semanal
 from relatorio.builder_mensal import gerar_relatorio_mensal
-from relatorio.builder_periodo import gerar_relatorio_periodo
 
 __all__ = [
     # regras
@@ -57,5 +56,4 @@ __all__ = [
     # builder
     "gerar_relatorio_semanal",
     "gerar_relatorio_mensal",
-    "gerar_relatorio_periodo",
 ]

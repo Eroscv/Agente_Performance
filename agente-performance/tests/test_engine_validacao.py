@@ -2,7 +2,7 @@
 Validação das alterações recentes no engine.py:
 1. default cliente_key=source_of
 2. campo meta["cliente"] populado
-3. POD passa pelo fluxo principal (não _consultar_pod_legacy)
+3. POD passa pelo fluxo principal (função legacy removida)
 4. Isolamento de dados entre clientes
 5. imports dos builders
 """
@@ -95,11 +95,12 @@ class TestIsolamentoDados:
 class TestFluxoPODPrincipal:
 
     def test_consultar_pod_nao_chama_legacy(self):
+        """_consultar_pod_legacy foi removida — POD passa 100% pelo fluxo principal."""
         limpar_cache()
-        from agent import engine
-        with patch.object(engine, "_consultar_pod_legacy", wraps=engine._consultar_pod_legacy) as mock_legacy:
-            r = engine.consultar("como está o google ads do pod essa semana?", channel="C_GENERICO")
-            assert mock_legacy.call_count == 0, f"_consultar_pod_legacy foi chamada {mock_legacy.call_count}x — deveria ser 0"
+        from agent.engine import consultar
+        r = consultar("como está o google ads do pod essa semana?", channel="C_GENERICO")
+        # Função legacy removida — basta confirmar que consultar() retorna resultado válido
+        assert isinstance(r, dict), "consultar() deve retornar dict"
 
     def test_consultar_pod_retorna_cliente_correto(self):
         limpar_cache()
