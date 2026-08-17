@@ -46,6 +46,8 @@ def metricas_video(
     campanha:    Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Métricas de vídeo por campanha: views, ThruPlays, retenção e custo.
@@ -66,6 +68,8 @@ def metricas_video(
         extra_params=extra,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     rows = query(f"""
         SELECT
@@ -104,9 +108,17 @@ def data_range_disponivel() -> dict:
 
 # ── Consultas principais ──────────────────────────────────────────────────────
 
-def listar_campanhas() -> list[dict]:
+def listar_campanhas(
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
+) -> list[dict]:
     """Lista todas as campanhas únicas com período de atividade."""
-    return query("""
+    where, params = _build_where(
+        "campanha IS NOT NULL AND campanha != ''",
+        cliente_key=cliente_key,
+        plataforma=plataforma,
+    )
+    return query(f"""
         SELECT
             campanha,
             MIN(data_inicio)                    AS primeira_data,
@@ -114,21 +126,25 @@ def listar_campanhas() -> list[dict]:
             COUNT(*)                            AS dias_com_dados,
             ROUND(SUM(investimento), 2)         AS investimento_total
         FROM campanhas_unificada
-        WHERE campanha IS NOT NULL AND campanha != ''
+        {where}
         GROUP BY campanha
         ORDER BY investimento_total DESC
-    """)
+    """, tuple(params))
 
 
 def resumo_por_campanha(
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Resumo agregado por campanha: investimento, compras, ROAS ponderado, CPC, CTR."""
     where, params = _build_where(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -156,6 +172,8 @@ def performance_campanha(
     campanha:    str,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Série temporal diária de uma campanha específica.
@@ -168,6 +186,8 @@ def performance_campanha(
         extra_params=[campanha],
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     resultado = query(f"""
         SELECT
@@ -202,6 +222,8 @@ def performance_campanha(
         extra_params=[like_pattern],
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     logger.info("[queries] performance_campanha: match exato vazio para '%s', tentando LIKE '%s'", campanha, like_pattern)
     return query(f"""
@@ -237,6 +259,8 @@ def top_campanhas_roas(
     data_fim:                Optional[str] = None,
     excluir_awareness:       bool = True,
     exigir_atividade_recente: bool = True,
+    cliente_key:             Optional[str] = None,
+    plataforma:              Optional[str] = None,
 ) -> list[dict]:
     """
     Top N campanhas por ROAS ponderado (mínimo R$100 investidos).
@@ -254,6 +278,8 @@ def top_campanhas_roas(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
 
     # Filtro de awareness: exclui campanhas cujo nome contém padrões de awareness/tráfego
@@ -298,12 +324,16 @@ def top_campanhas_compras(
     limit:       int = 10,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Top N campanhas por volume de compras."""
     where, params = _build_where(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -325,6 +355,8 @@ def evolucao_diaria(
     campanha:    Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Evolução diária agregada (todas as campanhas ou uma específica)."""
     base = "campanha = ?" if campanha else None
@@ -334,6 +366,8 @@ def evolucao_diaria(
         extra_params=extra,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -352,13 +386,24 @@ def evolucao_diaria(
     """, tuple(params))
 
 
-def resumo_periodo(data_inicio: str, data_fim: str) -> dict:
+def resumo_periodo(
+    data_inicio: str,
+    data_fim:    str,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
+) -> dict:
     """
     Totais consolidados de um período.
 
     Retorna dict vazio se não há dados — inclui 'aviso' quando isso ocorre.
     """
-    where, params = _build_where(None, data_inicio=data_inicio, data_fim=data_fim)
+    where, params = _build_where(
+        None,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
+    )
     result = query_one(f"""
         SELECT
             COUNT(DISTINCT campanha)                         AS campanhas_ativas,
@@ -397,7 +442,12 @@ def resumo_periodo(data_inicio: str, data_fim: str) -> dict:
     return result
 
 
-def alertas_roas_baixo(threshold: float = 1.0, janela_dias: int = 30) -> list[dict]:
+def alertas_roas_baixo(
+    threshold:   float = 1.0,
+    janela_dias: int = 30,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
+) -> list[dict]:
     """
     Campanhas com ROAS preocupante.
 
@@ -414,7 +464,17 @@ def alertas_roas_baixo(threshold: float = 1.0, janela_dias: int = 30) -> list[di
                  data_max, threshold, janela_dias)
     janela_sql = f"-{janela_dias} days"
 
-    return query("""
+    # Filtros extras de cliente/plataforma
+    extra_conditions = ""
+    extra_params_list: list = []
+    if cliente_key:
+        extra_conditions += "\n          AND cliente_key = ?"
+        extra_params_list.append(cliente_key)
+    if plataforma:
+        extra_conditions += "\n          AND plataforma = ?"
+        extra_params_list.append(plataforma)
+
+    return query(f"""
         SELECT
             campanha,
             ROUND(SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento), 0), 4) AS roas,
@@ -432,7 +492,7 @@ def alertas_roas_baixo(threshold: float = 1.0, janela_dias: int = 30) -> list[di
           AND campanha IS NOT NULL AND campanha != ''
           AND LOWER(campanha) NOT LIKE '%engajamento%'
           AND LOWER(campanha) NOT LIKE '%trafego%'
-          AND LOWER(campanha) NOT LIKE '%tr_fego%'
+          AND LOWER(campanha) NOT LIKE '%tr_fego%'{extra_conditions}
         GROUP BY campanha
         HAVING SUM(investimento) >= 100
            AND (
@@ -442,13 +502,15 @@ def alertas_roas_baixo(threshold: float = 1.0, janela_dias: int = 30) -> list[di
         ORDER BY
             CASE WHEN SUM(valor_compras) = 0 THEN 0 ELSE 1 END ASC,
             SUM(valor_compras) / NULLIF(SUM(investimento), 0) ASC
-    """, (threshold, data_max, janela_sql, threshold))
+    """, (threshold, data_max, janela_sql, *extra_params_list, threshold))
 
 
 def comparar_campanhas(
     campanhas:   list[str],
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Compara múltiplas campanhas lado a lado."""
     if not campanhas:
@@ -459,6 +521,8 @@ def comparar_campanhas(
         extra_params=list(campanhas),
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -486,6 +550,8 @@ def metricas_funil(
     campanha:    Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> dict:
     """Métricas de funil: impressões → cliques → carrinho → checkout → compra."""
     base = "campanha = ?" if campanha else None
@@ -495,6 +561,8 @@ def metricas_funil(
         extra_params=extra,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query_one(f"""
         SELECT
@@ -519,6 +587,8 @@ def _build_where(
     extra_params:   list = None,
     data_inicio:    Optional[str] = None,
     data_fim:       Optional[str] = None,
+    cliente_key:    Optional[str] = None,
+    plataforma:     Optional[str] = None,
 ) -> tuple[str, list]:
     """
     Constrói cláusula WHERE completa de forma segura.
@@ -526,6 +596,8 @@ def _build_where(
     - base_condition: condição inicial (ex: "campanha IS NOT NULL", pode ser None)
     - extra_params: parâmetros posicionais correspondentes à base_condition
     - data_inicio / data_fim: filtros de período opcionais
+    - cliente_key: filtra por cliente (ex: 'source_of', 'pod_kombucha')
+    - plataforma: filtra por plataforma (ex: 'meta_ads', 'google_ads')
 
     Retorna (where_clause_str, params_list).
     """
@@ -535,6 +607,12 @@ def _build_where(
     if base_condition:
         conditions.append(base_condition)
 
+    if cliente_key:
+        conditions.append("cliente_key = ?")
+        params.append(cliente_key)
+    if plataforma:
+        conditions.append("plataforma = ?")
+        params.append(plataforma)
     if data_inicio:
         conditions.append("data_inicio >= ?")
         params.append(data_inicio)
@@ -551,6 +629,8 @@ def _build_where(
 def historico_mensal(
     campanha:    Optional[str] = None,
     meses:       int = 12,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Série histórica mensal: últimos N meses com totais e ROAS.
@@ -574,7 +654,10 @@ def historico_mensal(
 
         base = "campanha = ?" if campanha else None
         extra = [campanha] if campanha else []
-        where, params = _build_where(base, extra_params=extra, data_inicio=ini, data_fim=fim)
+        where, params = _build_where(
+            base, extra_params=extra, data_inicio=ini, data_fim=fim,
+            cliente_key=cliente_key, plataforma=plataforma,
+        )
 
         nomes = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
         row = query(f"""
@@ -604,12 +687,16 @@ def top_campanhas_ctr(
     limit:       int = 10,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Top N campanhas por CTR (mínimo 1.000 impressões para evitar distorção)."""
     where, params = _build_where(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -632,12 +719,16 @@ def top_campanhas_cpm(
     limit:       int = 10,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Top N campanhas por menor CPM (mais eficiente em custo de exibição)."""
     where, params = _build_where(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -660,12 +751,16 @@ def top_campanhas_alcance(
     limit:       int = 10,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Top N campanhas por alcance total único."""
     where, params = _build_where(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -688,12 +783,16 @@ def top_campanhas_cliques(
     limit:       int = 10,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Top N campanhas por volume de cliques no link."""
     where, params = _build_where(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -716,12 +815,16 @@ def top_campanhas_receita(
     limit:       int = 10,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """Top N campanhas por receita total gerada."""
     where, params = _build_where(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -744,6 +847,8 @@ def eficiencia_criativo(
     campanha:    Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Indicadores de qualidade de criativo por campanha.
@@ -759,6 +864,8 @@ def eficiencia_criativo(
         extra_params=extra,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -783,6 +890,8 @@ def eficiencia_criativo(
 def distribuicao_investimento(
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Share de investimento por campanha (% do total do período).
@@ -794,6 +903,8 @@ def distribuicao_investimento(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -817,6 +928,8 @@ def campanhas_sem_conversao(
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
     invest_min:  float = 50.0,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Campanhas com investimento mas ZERO compras registradas.
@@ -828,6 +941,8 @@ def campanhas_sem_conversao(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -849,6 +964,8 @@ def campanhas_sem_conversao(
 
 def campanhas_inativas(
     dias_sem_dados: int = 14,
+    cliente_key:    Optional[str] = None,
+    plataforma:     Optional[str] = None,
 ) -> list[dict]:
     """
     Campanhas que não têm dados nos últimos N dias.
@@ -861,27 +978,39 @@ def campanhas_inativas(
     if not data_max:
         return []
 
-    return query("""
+    # Filtros extras de cliente/plataforma
+    extra_conditions = ""
+    extra_params_list: list = []
+    if cliente_key:
+        extra_conditions += " AND cliente_key = ?"
+        extra_params_list.append(cliente_key)
+    if plataforma:
+        extra_conditions += " AND plataforma = ?"
+        extra_params_list.append(plataforma)
+
+    return query(f"""
         SELECT
             campanha,
             MAX(data_fim)                        AS ultima_atividade,
             ROUND(SUM(investimento), 2)          AS investimento_total,
             ROUND(SUM(COALESCE(compras, 0)), 0)  AS compras_total,
-            {_ROAS}                              AS roas_historico,
+            {_ROAS_EXPR}                         AS roas_historico,
             COUNT(DISTINCT data_inicio)          AS dias_com_dados
         FROM campanhas_unificada
-        WHERE campanha IS NOT NULL AND campanha != ''
+        WHERE campanha IS NOT NULL AND campanha != ''{extra_conditions}
         GROUP BY campanha
         HAVING MAX(data_fim) < DATE(?, ?)
            AND SUM(investimento) >= 100
         ORDER BY ultima_atividade DESC
-    """.replace("{_ROAS}", _ROAS_EXPR), (data_max, f"-{dias_sem_dados} days"))
+    """, (*extra_params_list, data_max, f"-{dias_sem_dados} days"))
 
 
 def variacao_diaria_roas(
     campanha:    Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Volatilidade do ROAS dia a dia.
@@ -896,6 +1025,8 @@ def variacao_diaria_roas(
         extra_params=extra,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -925,6 +1056,8 @@ def saturacao_frequencia(
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
     threshold:   float = 3.0,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Campanhas com frequência média acima do threshold (padrão: 3x).
@@ -936,6 +1069,8 @@ def saturacao_frequencia(
         "campanha IS NOT NULL AND campanha != ''",
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -960,6 +1095,8 @@ def custo_funil_detalhado(
     campanha:    Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Custo em cada etapa do funil por campanha.
@@ -974,6 +1111,9 @@ def custo_funil_detalhado(
         extra_params=extra,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
+    )
     )
     return query(f"""
         SELECT

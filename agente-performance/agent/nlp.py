@@ -125,6 +125,18 @@ Sua tarefa: analisar a pergunta do usuário e retornar SOMENTE um JSON estrutura
 - comparar_mom: evolução mês a mês com variação % (month over month)
 - comparar_antes_depois: comparar antes e depois de uma data específica
 
+## Detecção de cliente
+Analise a pergunta e detecte qual cliente está sendo mencionado:
+- "Source OF", "source", "sof", "source of" → `"source_of"`
+- "POD", "pod kombucha", "kombucha", "pod" → `"pod_kombucha"`
+- Nenhum mencionado → `null`
+
+## Detecção de plataforma
+Analise a pergunta e detecte qual plataforma está sendo mencionada:
+- "Meta", "Facebook", "meta ads", "instagram ads" → `"meta_ads"`
+- "Google", "google ads", "gads", "search", "pmax" → `"google_ads"`
+- Nenhuma mencionada → `null`
+
 ## Regras
 1. Retorne MÚLTIPLAS intenções apenas se a pergunta pedir explicitamente mais de uma coisa
 2. Para campanha: extraia o nome ou fragmento mencionado. Se não houver campanha específica, use null
@@ -139,28 +151,37 @@ Sua tarefa: analisar a pergunta do usuário e retornar SOMENTE um JSON estrutura
 ## Exemplos (few-shot)
 
 Pergunta: "qual a performance da campanha ABO em junho?"
-Resposta: {"intents":["performance_campanha"],"campanha":"ABO","data_inicio":"2026-06-01","data_fim":"2026-06-30","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10}
+Resposta: {"intents":["performance_campanha"],"campanha":"ABO","data_inicio":"2026-06-01","data_fim":"2026-06-30","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "top 5 campanhas por ROAS no mês passado"
-Resposta: {"intents":["top_roas"],"campanha":null,"data_inicio":"2026-06-01","data_fim":"2026-06-30","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":5}
+Resposta: {"intents":["top_roas"],"campanha":null,"data_inicio":"2026-06-01","data_fim":"2026-06-30","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":5,"cliente_key":null,"plataforma":null}
 
 Pergunta: "compare maio com junho"
-Resposta: {"intents":["comparar_periodos"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":"2026-05-01","periodo_a_fim":"2026-05-31","periodo_b_inicio":"2026-06-01","periodo_b_fim":"2026-06-30","data_virada":null,"metrica":null,"limit":10}
+Resposta: {"intents":["comparar_periodos"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":"2026-05-01","periodo_a_fim":"2026-05-31","periodo_b_inicio":"2026-06-01","periodo_b_fim":"2026-06-30","data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "quais campanhas estão sem conversão essa semana?"
-Resposta: {"intents":["sem_conversao"],"campanha":null,"data_inicio":"2026-07-09","data_fim":"2026-07-15","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10}
+Resposta: {"intents":["sem_conversao"],"campanha":null,"data_inicio":"2026-07-09","data_fim":"2026-07-15","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "mostre todas as campanhas ativas"
-Resposta: {"intents":["listar_campanhas"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":999}
+Resposta: {"intents":["listar_campanhas"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":999,"cliente_key":null,"plataforma":null}
 
 Pergunta: "o funil da Advantage Hidratante está vazando onde?"
-Resposta: {"intents":["funil_detalhado"],"campanha":"Advantage Hidratante","data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10}
+Resposta: {"intents":["funil_detalhado"],"campanha":"Advantage Hidratante","data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "qual campanha tem maior alcance em abril?"
-Resposta: {"intents":["top_alcance"],"campanha":null,"data_inicio":"2026-04-01","data_fim":"2026-04-30","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10}
+Resposta: {"intents":["top_alcance"],"campanha":null,"data_inicio":"2026-04-01","data_fim":"2026-04-30","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "a frequência da ABO está alta?"
-Resposta: {"intents":["saturacao_frequencia"],"campanha":"ABO","data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10}
+Resposta: {"intents":["saturacao_frequencia"],"campanha":"ABO","data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
+
+Pergunta: "como estão as campanhas do Source OF no Google no mês passado?"
+Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-07-01","data_fim":"2026-07-31","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"source_of","plataforma":"google_ads"}
+
+Pergunta: "top ROAS do POD no Meta essa semana"
+Resposta: {"intents":["top_roas"],"campanha":null,"data_inicio":"2026-08-11","data_fim":"2026-08-17","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"meta_ads"}
+
+Pergunta: "resumo geral de todos os clientes"
+Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 ## Formato de resposta (JSON puro, sem markdown, sem explicação)
 {
@@ -174,7 +195,9 @@ Resposta: {"intents":["saturacao_frequencia"],"campanha":"ABO","data_inicio":nul
   "periodo_b_fim": null,
   "data_virada": null,
   "metrica": null,
-  "limit": 10
+  "limit": 10,
+  "cliente_key": null,
+  "plataforma": null
 }"""
 
 
@@ -396,6 +419,9 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
                 "limit":        limit_override if limit_override else int(parsed.get("limit", 10)),
                 "raw":          parsed,
                 "periodo_nota": periodo_nota,
+                # Campos de segmentação (None = não detectado = modo segmentado no engine)
+                "cliente_key":  parsed.get("cliente_key") or None,
+                "plataforma":   parsed.get("plataforma")  or None,
             }
             break  # sucesso — sai do loop de retry
 
@@ -457,4 +483,6 @@ def _fallback_regex(pergunta: str, campanhas: list[str], contexto: str = "") -> 
         "limit":       limit,
         "raw":         {"fallback": True, "contexto_usado": bool(contexto)},
         "periodo_nota": None,
+        "cliente_key": None,
+        "plataforma":  None,
     }

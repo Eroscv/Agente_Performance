@@ -34,6 +34,85 @@ from db.connection import query as raw_query, get_conn
 
 logger = logging.getLogger(__name__)
 
+# ── Segmentos / clientes ──────────────────────────────────────────────────────
+
+import json as _json
+import os as _os
+
+_CLIENTES_JSON = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "clientes.json")
+
+# Labels amigáveis para exibição
+_PLATAFORMA_LABEL = {
+    "meta_ads":   "Meta Ads",
+    "google_ads": "Google Ads",
+}
+
+
+def _carregar_segmentos_ativos() -> list[dict]:
+    """
+    Lê clientes.json e retorna lista de segmentos ativos.
+
+    Cada item:
+        {
+          "cliente_key":  str,   # ex: "source_of"
+          "plataforma":   str,   # ex: "meta_ads"
+          "nome_cliente": str,   # ex: "Source OF"
+          "nome_plat":    str,   # ex: "Meta Ads"
+          "emoji":        str,   # ex: "🔵"
+          "label":        str,   # ex: "Source OF · Meta Ads"
+        }
+
+    Exclui shopify (não é plataforma de anúncios) e entradas com ativo=false.
+    Resultado é cacheado em memória (arquivo raramente muda).
+    """
+    try:
+        with open(_CLIENTES_JSON, encoding="utf-8") as f:
+            dados = _json.load(f)
+    except Exception as e:
+        logger.error("[segmentos] Falha ao ler clientes.json: %s", e)
+        return []
+
+    segmentos = []
+    for ck, cfg in dados.get("clientes", {}).items():
+        if not cfg.get("ativo", False):
+            continue
+        nome_cliente = cfg.get("nome", ck)
+        emoji        = cfg.get("slack_emoji", "📊")
+        for plat, pcfg in cfg.get("plataformas", {}).items():
+            if plat == "shopify":
+                continue
+            if not pcfg.get("ativo", False):
+                continue
+            nome_plat = _PLATAFORMA_LABEL.get(plat, plat)
+            segmentos.append({
+                "cliente_key":  ck,
+                "plataforma":   plat,
+                "nome_cliente": nome_cliente,
+                "nome_plat":    nome_plat,
+                "emoji":        emoji,
+                "label":        f"{nome_cliente} · {nome_plat}",
+            })
+    return segmentos
+
+
+def get_contexto_cliente(canal_id: str) -> Optional[str]:
+    """
+    Infere cliente_key a partir do nome/id do canal Slack.
+
+    Regras (case-insensitive):
+      - canal contém 'pod' ou 'kombucha' → 'pod_kombucha'
+      - canal contém 'source' ou 'sof'   → 'source_of'
+      - senão                            → None (canal genérico)
+    """
+    if not canal_id:
+        return None
+    c = canal_id.lower()
+    if "pod" in c or "kombucha" in c:
+        return "pod_kombucha"
+    if "source" in c or "sof" in c:
+        return "source_of"
+    return None
+
 
 # ── helpers legados (mantidos para fallback do nlp.py) ───────────────────────
 
@@ -224,94 +303,105 @@ def _executar_intent(
     data_fim:    Optional[str],
     limit:       int,
     meta_extra:  dict = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> Any:
-    """Executa uma única intenção e retorna os dados."""
+    """
+    Executa uma única intenção e retorna os dados.
+
+    cliente_key / plataforma são opcionais e repassados a todas as queries
+    que os aceitam, filtrando os dados por segmento.
+    """
+    # kwargs comuns de filtro (só passados quando não-None)
+    _fk: dict = {}
+    if cliente_key:
+        _fk["cliente_key"] = cliente_key
+    if plataforma:
+        _fk["plataforma"] = plataforma
 
     if intent == "listar_campanhas":
-        return queries.listar_campanhas()
+        return queries.listar_campanhas(**_fk)
 
     elif intent == "resumo_geral":
         if data_inicio and data_fim:
-            return queries.resumo_periodo(data_inicio, data_fim)
-        return queries.resumo_por_campanha(data_inicio, data_fim)
+            return queries.resumo_periodo(data_inicio, data_fim, **_fk)
+        return queries.resumo_por_campanha(data_inicio, data_fim, **_fk)
 
     elif intent == "performance_campanha":
         if campanha:
-            return queries.performance_campanha(campanha, data_inicio, data_fim)
-        # Usuário pediu performance de campanha específica mas não foi possível identificar qual
-        # Retornar lista das principais para orientar o usuário
-        return queries.resumo_por_campanha(data_inicio, data_fim)
+            return queries.performance_campanha(campanha, data_inicio, data_fim, **_fk)
+        return queries.resumo_por_campanha(data_inicio, data_fim, **_fk)
 
     elif intent == "top_roas":
-        return queries.top_campanhas_roas(limit, data_inicio, data_fim)
+        return queries.top_campanhas_roas(limit, data_inicio, data_fim, **_fk)
 
     elif intent == "top_compras":
-        return queries.top_campanhas_compras(limit, data_inicio, data_fim)
+        return queries.top_campanhas_compras(limit, data_inicio, data_fim, **_fk)
 
     elif intent == "evolucao_diaria":
-        return queries.evolucao_diaria(campanha, data_inicio, data_fim)
+        return queries.evolucao_diaria(campanha, data_inicio, data_fim, **_fk)
 
     elif intent == "periodo":
         if data_inicio and data_fim:
-            return queries.resumo_periodo(data_inicio, data_fim)
-        return queries.resumo_por_campanha(data_inicio, data_fim)
+            return queries.resumo_periodo(data_inicio, data_fim, **_fk)
+        return queries.resumo_por_campanha(data_inicio, data_fim, **_fk)
 
     elif intent == "funil":
-        return queries.metricas_funil(campanha, data_inicio, data_fim)
+        return queries.metricas_funil(campanha, data_inicio, data_fim, **_fk)
 
     elif intent == "alertas_roas":
-        return queries.alertas_roas_baixo()
+        return queries.alertas_roas_baixo(**_fk)
 
     elif intent == "historico_mensal":
-        return queries.historico_mensal(campanha)
+        return queries.historico_mensal(campanha, **_fk)
 
     elif intent == "resumo_executivo":
-        return queries.resumo_executivo(data_inicio, data_fim)
+        return queries.resumo_executivo(data_inicio, data_fim, **_fk)
 
     elif intent == "top_receita":
-        return queries.top_campanhas_receita(limit, data_inicio, data_fim)
+        return queries.top_campanhas_receita(limit, data_inicio, data_fim, **_fk)
 
     elif intent == "top_ctr":
-        return queries.top_campanhas_ctr(limit, data_inicio, data_fim)
+        return queries.top_campanhas_ctr(limit, data_inicio, data_fim, **_fk)
 
     elif intent == "top_cpm":
-        return queries.top_campanhas_cpm(limit, data_inicio, data_fim)
+        return queries.top_campanhas_cpm(limit, data_inicio, data_fim, **_fk)
 
     elif intent == "top_alcance":
-        return queries.top_campanhas_alcance(limit, data_inicio, data_fim)
+        return queries.top_campanhas_alcance(limit, data_inicio, data_fim, **_fk)
 
     elif intent == "top_cliques":
-        return queries.top_campanhas_cliques(limit, data_inicio, data_fim)
+        return queries.top_campanhas_cliques(limit, data_inicio, data_fim, **_fk)
 
     elif intent == "funil_detalhado":
-        return queries.custo_funil_detalhado(campanha, data_inicio, data_fim)
+        return queries.custo_funil_detalhado(campanha, data_inicio, data_fim, **_fk)
 
     elif intent == "eficiencia_criativo":
-        return queries.eficiencia_criativo(campanha, data_inicio, data_fim)
+        return queries.eficiencia_criativo(campanha, data_inicio, data_fim, **_fk)
 
     elif intent == "distribuicao_investimento":
-        return queries.distribuicao_investimento(data_inicio, data_fim)
+        return queries.distribuicao_investimento(data_inicio, data_fim, **_fk)
 
     elif intent == "sem_conversao":
-        return queries.campanhas_sem_conversao(data_inicio, data_fim)
+        return queries.campanhas_sem_conversao(data_inicio, data_fim, **_fk)
 
     elif intent == "campanhas_inativas":
-        return queries.campanhas_inativas()
+        return queries.campanhas_inativas(**_fk)
 
-        ("variacao_roas",           r"volatilidade|variacao.*roas|variação.*roas|roas.*variou|oscilacao|oscilação|pico.*roas|instabilidade.*roas"),
-        return queries.variacao_diaria_roas(campanha, data_inicio, data_fim)
+    elif intent == "variacao_roas":
+        return queries.variacao_diaria_roas(campanha, data_inicio, data_fim, **_fk)
 
     elif intent == "saturacao_frequencia":
-        return queries.saturacao_frequencia(data_inicio, data_fim)
+        return queries.saturacao_frequencia(data_inicio, data_fim, **_fk)
 
     elif intent == "metricas_video":
-        return queries.metricas_video(campanha, data_inicio, data_fim)
+        return queries.metricas_video(campanha, data_inicio, data_fim, **_fk)
 
     elif intent == "metricas_engajamento":
-        return queries.metricas_engajamento(campanha, data_inicio, data_fim)
+        return queries.metricas_engajamento(campanha, data_inicio, data_fim, **_fk)
 
     elif intent == "metricas_mensageria":
-        return queries.metricas_mensageria(campanha, data_inicio, data_fim)
+        return queries.metricas_mensageria(campanha, data_inicio, data_fim, **_fk)
 
     elif intent == "comparar":
         campanhas_todas = _get_available_campaigns()
@@ -341,14 +431,94 @@ def _executar_intent(
         data_virada = nlp_raw.get("data_virada") or data_inicio
         if data_virada:
             return comparar_antes_depois(data_virada, campanha)
-        return queries.resumo_por_campanha(data_inicio, data_fim)
+        return queries.resumo_por_campanha(data_inicio, data_fim, **_fk)
 
     elif intent == "ranking_metrica":
         nlp_raw = meta_extra.get("nlp_raw", {}) if meta_extra else {}
         metrica = nlp_raw.get("metrica") or "roas"
         return ranking_comparativo(metrica, data_inicio, data_fim)
 
-    return queries.resumo_por_campanha(data_inicio, data_fim)
+    return queries.resumo_por_campanha(data_inicio, data_fim, **_fk)
+
+
+# ── Execução por segmento (multi-cliente) ─────────────────────────────────────
+
+def executar_por_segmento(
+    intent:      str,
+    params:      dict,
+    meta_extra:  dict = None,
+) -> list[dict]:
+    """
+    Executa a intent separadamente para cada segmento ativo (cliente + plataforma).
+
+    Usado quando o NLP não detectou cliente/plataforma e o canal não tem contexto
+    de cliente definido — em vez de misturar dados de todos os clientes, retorna
+    seções distintas identificadas por cliente + plataforma.
+
+    Retorna lista de dicts:
+        [
+          {
+            "cliente_key":  "source_of",
+            "plataforma":   "meta_ads",
+            "nome_cliente": "Source OF",
+            "nome_plat":    "Meta Ads",
+            "emoji":        "🔵",
+            "label":        "Source OF · Meta Ads",
+            "dados":        <resultado da query>,
+            "vazio":        bool,
+          },
+          ...
+        ]
+    """
+    segmentos = _carregar_segmentos_ativos()
+    if not segmentos:
+        logger.warning("[segmento] Nenhum segmento ativo encontrado em clientes.json")
+        return []
+
+    campanha    = params.get("campanha")
+    data_inicio = params.get("data_inicio")
+    data_fim    = params.get("data_fim")
+    limit       = params.get("limit", 10)
+
+    resultados = []
+    for seg in segmentos:
+        ck   = seg["cliente_key"]
+        plat = seg["plataforma"]
+        try:
+            dados = _executar_intent(
+                intent,
+                campanha,
+                data_inicio,
+                data_fim,
+                limit,
+                meta_extra,
+                cliente_key=ck,
+                plataforma=plat,
+            )
+            vazio = (
+                (isinstance(dados, list) and len(dados) == 0) or
+                (isinstance(dados, dict) and not dados) or
+                dados is None
+            )
+            resultados.append({
+                **seg,
+                "dados": dados,
+                "vazio": vazio,
+            })
+            logger.debug(
+                "[segmento] %s | intent=%s | vazio=%s",
+                seg["label"], intent, vazio,
+            )
+        except Exception as e:
+            logger.error("[segmento] Erro em %s: %s", seg["label"], e)
+            resultados.append({
+                **seg,
+                "dados": None,
+                "vazio": True,
+                "erro": str(e),
+            })
+
+    return resultados
 
 
 # ── Ponto de entrada principal ────────────────────────────────────────────────
@@ -361,20 +531,27 @@ def consultar(
 ) -> dict[str, Any]:
     """
     Processa uma pergunta em linguagem natural.
-    Detecta automaticamente o cliente (Source OF vs POD Kombucha) pelo contexto da pergunta.
-    Usa cache, log, validação de campanha e sugestão de vazio.
+
+    Fluxo de roteamento por cliente/plataforma:
+      1. Pergunta menciona POD/Kombucha           → _consultar_pod() (legacy)
+      2. NLP detectou cliente_key OU plataforma  → query filtrada
+      3. Canal tem contexto de cliente definido  → query filtrada pelo canal
+      4. Nenhum dos acima                        → executar_por_segmento()
+                                                   (uma seção por segmento ativo)
     """
     import re as _re
+    import time
 
-    # ── Item 8: Detecta cliente POD Kombucha na pergunta ────────────────────────
-    # Se a pergunta mencionar POD, Kombucha, Google Ads do POD etc., roteia para banco POD
+    # ── Roteamento legacy POD (mantido para compatibilidade) ─────────────────
+    # TODO: quando _consultar_pod() for refatorado para usar v_performance,
+    # este bloco pode ser removido e o POD passa pelo fluxo normal.
     _POD_PATTERN = _re.compile(
         r"\b(pod|kombucha|pod kombucha|gads pod|google ads.{0,10}pod|pod.{0,10}google)\b",
         _re.IGNORECASE,
     )
     if _POD_PATTERN.search(pergunta):
         return _consultar_pod(pergunta, thread_ts=thread_ts)
-    import time
+
     t_inicio = time.time()
 
     # 1. Verifica cache
@@ -388,17 +565,30 @@ def consultar(
     # 2. NLP com Claude
     params = interpretar(pergunta, campanhas_disponiveis, contexto)
 
-    intents     = params["intents"]
-    campanha    = params["campanha"]
-    data_inicio = params["data_inicio"]
-    data_fim    = params["data_fim"]
-    limit       = params["limit"]
-    campanha_raw = params.get("raw", {}).get("campanha")  # nome original antes do fuzzy
-    periodo_nota = params.get("periodo_nota")  # aviso de ajuste automático de período
+    intents      = params["intents"]
+    campanha     = params["campanha"]
+    data_inicio  = params["data_inicio"]
+    data_fim     = params["data_fim"]
+    limit        = params["limit"]
+    campanha_raw = params.get("raw", {}).get("campanha")
+    periodo_nota = params.get("periodo_nota")
+
+    # ── Detecta cliente_key e plataforma ─────────────────────────────────────
+    # Prioridade: NLP > canal > None (None ativa modo segmentado)
+    nlp_raw_full = params.get("raw", {})
+    cliente_key  = nlp_raw_full.get("cliente_key") or None
+    plataforma   = nlp_raw_full.get("plataforma")  or None
+
+    # Infere cliente pelo canal se NLP não detectou
+    canal_cliente = get_contexto_cliente(channel or "")
+    if not cliente_key and canal_cliente:
+        cliente_key = canal_cliente
+        logger.debug("[consultar] cliente_key inferido pelo canal '%s': %s", channel, cliente_key)
+
+    # Flag: precisa de execução segmentada?
+    modo_segmentado = not cliente_key and not plataforma
 
     # 3. Valida campanha
-    # Se NLP extraiu um nome de campanha (raw) mas fuzzy não encontrou match,
-    # retorna erro com sugestões em vez de silenciosamente mostrar resumo geral
     if campanha is None and campanha_raw and "performance" in " ".join(intents):
         sugestoes = campanhas_disponiveis[:8]
         lista = "\n".join(f"  • {c}" for c in sugestoes)
@@ -408,7 +598,7 @@ def consultar(
             f"...e mais {max(0, len(campanhas_disponiveis) - 8)} outras.\n\n"
             f"_Tente usar parte do nome, ex: `performance Advantage` ou `performance ABO`_"
         )
-        resultado = {
+        return {
             "intent":      intents[0],
             "intents":     intents,
             "dados":       [],
@@ -418,11 +608,10 @@ def consultar(
                             "data_fim": data_fim, "limit": limit},
             "erro":        erro_campanha,
         }
-        return resultado
 
     campanha_valida, erro_campanha = _validar_campanha(campanha, campanhas_disponiveis)
     if erro_campanha:
-        resultado = {
+        return {
             "intent":       intents[0],
             "intents":      intents,
             "dados":        [],
@@ -432,22 +621,23 @@ def consultar(
                              "data_fim": data_fim, "limit": limit},
             "erro":         erro_campanha,
         }
-        return resultado
 
     campanha = campanha_valida
     meta = {
-        "intents":      intents,
-        "campanha":     campanha,
-        "data_inicio":  data_inicio,
-        "data_fim":     data_fim,
-        "limit":        limit,
-        "nlp_raw":      params.get("raw", {}),
-        "intent":       intents[0],
-        "periodo_nota": periodo_nota,  # ← propagado para o claude_client via meta
+        "intents":         intents,
+        "campanha":        campanha,
+        "data_inicio":     data_inicio,
+        "data_fim":        data_fim,
+        "limit":           limit,
+        "nlp_raw":         nlp_raw_full,
+        "intent":          intents[0],
+        "periodo_nota":    periodo_nota,
+        "cliente_key":     cliente_key,
+        "plataforma":      plataforma,
+        "modo_segmentado": modo_segmentado,
     }
 
     # 4. Executa queries
-    # Detecta se pede breakdown diário (mesma lógica do POD)
     _SEMANA_PARCIAL_SOF = re.compile(
         r"(essa\s+semana|esta\s+semana|semana\s+at[eé]\s+agora|semana\s+atual"
         r"|at[eé]\s+agora|at[eé]\s+hoje|semana\s+corrente)",
@@ -455,7 +645,48 @@ def consultar(
     )
     pedir_breakdown_sof = bool(_SEMANA_PARCIAL_SOF.search(pergunta))
 
-    dados = _executar_intent(intents[0], campanha, data_inicio, data_fim, limit, meta)
+    # ── Modo segmentado: sem cliente/plataforma detectados ───────────────────
+    if modo_segmentado:
+        segmentos = executar_por_segmento(
+            intents[0],
+            {"campanha": campanha, "data_inicio": data_inicio,
+             "data_fim": data_fim, "limit": limit},
+            meta_extra=meta,
+        )
+        # Intents secundárias: roda em modo segmentado também
+        dados_extra_seg: dict = {}
+        for intent_extra in intents[1:]:
+            dados_extra_seg[intent_extra] = executar_por_segmento(
+                intent_extra,
+                {"campanha": campanha, "data_inicio": data_inicio,
+                 "data_fim": data_fim, "limit": limit},
+                meta_extra=meta,
+            )
+        resultado = {
+            "intent":          intents[0],
+            "intents":         intents,
+            "dados":           segmentos,
+            "dados_extra":     dados_extra_seg,
+            "meta":            meta,
+            "modo_segmentado": True,
+            "aviso_vazio":     None,
+            "delta":           {},
+            "shopify":         {},
+        }
+        todos_vazios = all(s.get("vazio", True) for s in segmentos)
+        if todos_vazios:
+            resultado["aviso_vazio"] = (
+                "⚠️ Nenhum dado encontrado para nenhum segmento no período solicitado."
+            )
+        if not todos_vazios:
+            cache_set(pergunta, resultado)
+        return resultado
+
+    # ── Modo normal: cliente/plataforma conhecidos ───────────────────────────
+    dados = _executar_intent(
+        intents[0], campanha, data_inicio, data_fim, limit, meta,
+        cliente_key=cliente_key, plataforma=plataforma,
+    )
 
     # Item 1: Breakdown diário Source OF via ads_diario
     if pedir_breakdown_sof and isinstance(dados, (list, dict)):
@@ -502,7 +733,8 @@ def consultar(
     dados_extra = {}
     for intent_extra in intents[1:]:
         dados_extra[intent_extra] = _executar_intent(
-            intent_extra, campanha, data_inicio, data_fim, limit, meta
+            intent_extra, campanha, data_inicio, data_fim, limit, meta,
+            cliente_key=cliente_key, plataforma=plataforma,
         )
 
     # 5. Verifica dados vazios e sugere alternativa
