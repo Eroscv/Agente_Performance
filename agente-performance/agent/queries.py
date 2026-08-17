@@ -1114,7 +1114,6 @@ def custo_funil_detalhado(
         cliente_key=cliente_key,
         plataforma=plataforma,
     )
-    )
     return query(f"""
         SELECT
             campanha,
@@ -1154,6 +1153,8 @@ def metricas_engajamento(
     campanha:    Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Métricas de engajamento social por campanha.
@@ -1168,6 +1169,8 @@ def metricas_engajamento(
         extra_params=extra,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -1198,6 +1201,8 @@ def metricas_mensageria(
     campanha:    Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> list[dict]:
     """
     Métricas de campanhas de mensageria (WhatsApp/Messenger).
@@ -1212,6 +1217,8 @@ def metricas_mensageria(
         extra_params=extra,
         data_inicio=data_inicio,
         data_fim=data_fim,
+        cliente_key=cliente_key,
+        plataforma=plataforma,
     )
     return query(f"""
         SELECT
@@ -1234,6 +1241,8 @@ def metricas_mensageria(
 def resumo_executivo(
     data_inicio: Optional[str] = None,
     data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
 ) -> dict:
     """
     Visão executiva completa: totais + top campanhas + alertas.
@@ -1247,13 +1256,19 @@ def resumo_executivo(
 
     Retorna dict com todas essas seções.
     """
-    totais    = resumo_periodo(data_inicio, data_fim) if (data_inicio and data_fim) else {}
-    top_roas  = top_campanhas_roas(3, data_inicio, data_fim)
-    top_comp  = top_campanhas_compras(3, data_inicio, data_fim)
-    top_rec   = top_campanhas_receita(3, data_inicio, data_fim)
-    alertas   = alertas_roas_baixo()
-    sem_conv  = campanhas_sem_conversao(data_inicio, data_fim)
-    distrib   = distribuicao_investimento(data_inicio, data_fim)
+    _fk: dict = {}
+    if cliente_key:
+        _fk["cliente_key"] = cliente_key
+    if plataforma:
+        _fk["plataforma"] = plataforma
+
+    totais    = resumo_periodo(data_inicio, data_fim, **_fk) if (data_inicio and data_fim) else {}
+    top_roas  = top_campanhas_roas(3, data_inicio, data_fim, **_fk)
+    top_comp  = top_campanhas_compras(3, data_inicio, data_fim, **_fk)
+    top_rec   = top_campanhas_receita(3, data_inicio, data_fim, **_fk)
+    alertas   = alertas_roas_baixo(**_fk)
+    sem_conv  = campanhas_sem_conversao(data_inicio, data_fim, **_fk)
+    distrib   = distribuicao_investimento(data_inicio, data_fim, **_fk)
 
     return {
         "totais":             totais,
