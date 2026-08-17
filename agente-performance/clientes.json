@@ -15,8 +15,7 @@
           "tabela_db":      "source_of_gads_diario"
         },
         "meta_ads": {
-          "ativo":          false,
-          "_comentario":    "Aguardando access token Meta Ads API",
+          "ativo":          true,
           "meta_account_id": "act_1059884611898142",
           "loader":         "meta_ads.loader",
           "loader_fn":      "carregar_meta",
