@@ -223,10 +223,6 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
 
     blocos: list[dict] = []
 
-    # ── Cabeçalho ──────────────────────────────────────────────────────────
-    blocos.append(_bk_header(f"{ec} {nome_c} · {ep} {nome_p} · Relatório Diário · {data_fmt}"))
-    blocos.append(_bk_divider())
-
     # ── Visão Geral (fields 2 colunas) ────────────────────────────────────
     blocos.append(_bk_section("*📊 Visão Geral*"))
     kpi_campos = [
@@ -381,16 +377,29 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
     except Exception as e:
         logger.warning("[%s·%s] Notion falhou: %s", cliente_key, plataforma, e)
 
-    # ── Âncora no canal ───────────────────────────────────────────────────
+    # ── Preparação ────────────────────────────────────────────────────────
     nome_c   = LABELS_CLIENTE.get(cliente_key, cliente_key)
     nome_p   = LABELS_PLAT.get(plataforma, plataforma)
     ec       = EMOJIS_CLIENTE.get(cliente_key, "📊")
     ep       = EMOJIS_PLAT.get(plataforma, "📊")
     data_fmt = f"{data[8:10]}/{data[5:7]}/{data[:4]}"
-    roas_e   = _roas_emoji(d.get("roas"))
+    titulo   = f"{ec} {nome_c} · {ep} {nome_p} · Relatório Diário · {data_fmt}"
 
+    # ── Msg 1: só o título (texto puro, sem blocos) ───────────────────────
+    titulo_resp = _post({
+        "channel": SLACK_CHANNEL,
+        "text": titulo,
+    })
+    if not titulo_resp.get("ok"):
+        logger.error("[%s·%s] Título falhou: %s", cliente_key, plataforma, titulo_resp.get("error"))
+        return False
+
+    thread_ts = titulo_resp.get("ts")
+    logger.info("[%s·%s] Título postado ts=%s", cliente_key, plataforma, thread_ts)
+
+    # ── Msg 2 (thread): âncora com KPIs resumidos ─────────────────────────
+    roas_e = _roas_emoji(d.get("roas"))
     ancora_blocos = [
-        _bk_header(f"{ec} {nome_c} · {ep} {nome_p} · Relatório Diário · {data_fmt}"),
         _bk_fields([
             (f"{roas_e} ROAS",      _x(d.get("roas"))),
             ("💰 Investimento",     _brl(d.get("investimento"))),
@@ -399,20 +408,14 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
         ]),
         _bk_context(f"_{data_fmt} · {nome_c} · {nome_p} · {d.get('campanhas', 0)} campanhas ativas_"),
     ]
-
-    ancora_resp = _post({
+    _post({
         "channel": SLACK_CHANNEL,
+        "thread_ts": thread_ts,
         "blocks": ancora_blocos,
-        "text": f"{ec} {nome_c} · {nome_p} · Relatório Diário · {data_fmt}",
+        "text": f"KPIs · {titulo}",
     })
-    if not ancora_resp.get("ok"):
-        logger.error("[%s·%s] Âncora falhou: %s", cliente_key, plataforma, ancora_resp.get("error"))
-        return False
 
-    thread_ts = ancora_resp.get("ts")
-    logger.info("[%s·%s] Âncora postada ts=%s", cliente_key, plataforma, thread_ts)
-
-    # ── Thread — relatório completo ───────────────────────────────────────
+    # ── Msg 3+ (thread): relatório completo ──────────────────────────────
     blocos = _blocos_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url)
     ok = _enviar_blocos(SLACK_CHANNEL, thread_ts, blocos,
                         fallback_txt=f"Relatório diário {nome_c} · {nome_p} · {data_fmt}")
