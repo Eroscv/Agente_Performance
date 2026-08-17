@@ -533,24 +533,14 @@ def consultar(
     Processa uma pergunta em linguagem natural.
 
     Fluxo de roteamento por cliente/plataforma:
-      1. Pergunta menciona POD/Kombucha           → _consultar_pod() (legacy)
-      2. NLP detectou cliente_key OU plataforma  → query filtrada
-      3. Canal tem contexto de cliente definido  → query filtrada pelo canal
-      4. Nenhum dos acima                        → executar_por_segmento()
+      1. NLP detectou cliente_key OU plataforma  → query filtrada
+      2. Canal tem contexto de cliente definido  → query filtrada pelo canal
+      3. Nenhum dos acima                        → executar_por_segmento()
                                                    (uma seção por segmento ativo)
-    """
-    import re as _re
-    import time
 
-    # ── Roteamento legacy POD (mantido para compatibilidade) ─────────────────
-    # TODO: quando _consultar_pod() for refatorado para usar v_performance,
-    # este bloco pode ser removido e o POD passa pelo fluxo normal.
-    _POD_PATTERN = _re.compile(
-        r"\b(pod|kombucha|pod kombucha|gads pod|google ads.{0,10}pod|pod.{0,10}google)\b",
-        _re.IGNORECASE,
-    )
-    if _POD_PATTERN.search(pergunta):
-        return _consultar_pod(pergunta, thread_ts=thread_ts)
+    POD Kombucha é roteado pelo NLP (cliente_key='pod_kombucha') via fluxo principal.
+    """
+    import time
 
     t_inicio = time.time()
 
@@ -844,8 +834,12 @@ def consultar_sql(sql: str) -> list[dict]:
     return raw_query(sql_clean)
 
 
-def _consultar_pod(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, Any]:
+def _consultar_pod_legacy(pergunta: str, thread_ts: Optional[str] = None) -> dict[str, Any]:
     """
+    [LEGACY — NÃO USAR] Fluxo POD antigo mantido como fallback temporário.
+    POD Kombucha agora passa pelo fluxo principal `consultar()` via NLP.
+    Esta função será removida após validação em produção.
+
     Consulta dados do POD Kombucha (Google Ads) em linguagem natural.
 
     Melhorias:

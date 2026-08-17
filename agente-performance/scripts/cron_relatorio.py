@@ -111,7 +111,8 @@ def main():
 
     logger.info("Cron %s iniciado: %s", tipo, periodo_str)
 
-    from relatorio.builder import gerar_relatorio_semanal, gerar_relatorio_mensal
+    from relatorio.builder_semanal import gerar_relatorio_semanal
+    from relatorio.builder_mensal import gerar_relatorio_mensal
     from slack.handlers import formatar_resumo_relatorio
 
     if args.periodo == "mes":

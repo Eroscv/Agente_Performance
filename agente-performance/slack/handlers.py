@@ -924,12 +924,12 @@ async def handle_relatorio(ack, respond, command, client):
                 )
             )
         elif usar_mensal:
-            from relatorio.builder import gerar_relatorio_mensal
+            from relatorio.builder_mensal import gerar_relatorio_mensal
             resultado = await loop.run_in_executor(
                 None, lambda: gerar_relatorio_mensal(cliente="source_of", publicar=True)
             )
         else:
-            from relatorio.builder import gerar_relatorio_semanal
+            from relatorio.builder_semanal import gerar_relatorio_semanal
             resultado = await loop.run_in_executor(
                 None,
                 lambda: gerar_relatorio_semanal(
