@@ -55,7 +55,8 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool | None:
         logger.warning("[%s] sem meta_account_id — pulando", cliente_key)
         return None
 
-    tabela = meta_cfg.get("tabela_db", f"{cliente_key}_meta_ads_diario")
+    tabela    = meta_cfg.get("tabela_db", f"{cliente_key}_meta_ads_diario")
+    token_env = meta_cfg.get("meta_token_env", "META_ACCESS_TOKEN")
 
     logger.info("[%s] Iniciando sync Meta Ads (account=%s, tabela=%s, dias=%d)",
                 cliente_key, account_id, tabela, dias)
@@ -73,8 +74,9 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool | None:
         linhas, periodo = carregar_meta(
             account_id=account_id,
             dias=dias,
-            append=False,   # limpa só o período sendo recarregado
+            append=False,
             tabela=tabela,
+            token_env=token_env,
         )
         registrar_run(
             cliente_key=cliente_key,

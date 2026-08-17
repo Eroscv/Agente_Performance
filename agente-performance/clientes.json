@@ -53,6 +53,15 @@
           "loader_fn":      "carregar_gads",
           "loader_params":  {"dias": 8},
           "tabela_db":      "pod_kombucha_gads_diario"
+        },
+        "meta_ads": {
+          "ativo":          true,
+          "meta_account_id": "act_324906945710366",
+          "meta_token_env": "META_POD_ACCESS_TOKEN",
+          "loader":         "meta_ads.loader",
+          "loader_fn":      "carregar_meta",
+          "loader_params":  {"dias": 8},
+          "tabela_db":      "pod_kombucha_meta_ads_diario"
         }
       },
       "builder":        "relatorio.builder_pod",

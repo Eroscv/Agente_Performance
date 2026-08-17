@@ -94,10 +94,10 @@ FIELDS = ",".join([
 ])
 
 
-def _get_token() -> str:
-    token = os.environ.get("META_ACCESS_TOKEN", "")
+def _get_token(token_env: str = "META_ACCESS_TOKEN") -> str:
+    token = os.environ.get(token_env, "")
     if not token:
-        raise EnvironmentError("META_ACCESS_TOKEN não definido no .env")
+        raise EnvironmentError(f"{token_env} não definido no .env")
     return token
 
 
@@ -171,9 +171,10 @@ def _normalizar(row: dict) -> dict:
     }
 
 
-def buscar_insights_periodo(account_id: str, date_start: date, date_end: date) -> list[dict]:
+def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
+                            token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
     """Busca insights para um período específico (máx 30 dias recomendado)."""
-    token = _get_token()
+    token = _get_token(token_env)
 
     logger.info("[%s] Buscando %s → %s", account_id, date_start, date_end)
 
@@ -214,21 +215,22 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date) -
     return rows
 
 
-def buscar_insights(account_id: str, dias: int = 30) -> list[dict]:
-    """Busca insights de anúncios via API em lotes de 28 dias."""
-    token     = _get_token()  # valida token antes de iterar
+def buscar_insights(account_id: str, dias: int = 30,
+                    token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
+    """Busca insights de anúncios via API em lotes de 14 dias."""
+    _get_token(token_env)  # valida token antes de iterar
     date_end   = date.today() - timedelta(days=1)
     date_start = date_end - timedelta(days=dias - 1)
 
     logger.info("[%s] Buscando %d dias (%s → %s) em lotes", account_id, dias, date_start, date_end)
 
-    LOTE = 14  # 14 dias por lote — seguro para contas com muitos anúncios
+    LOTE = 14
     all_rows = []
     cursor   = date_start
 
     while cursor <= date_end:
         lote_fim = min(cursor + timedelta(days=LOTE - 1), date_end)
-        rows = buscar_insights_periodo(account_id, cursor, lote_fim)
+        rows = buscar_insights_periodo(account_id, cursor, lote_fim, token_env=token_env)
         all_rows.extend(rows)
         logger.info("[%s] Lote %s → %s: %d linhas", account_id, cursor, lote_fim, len(rows))
         cursor = lote_fim + timedelta(days=1)
@@ -305,7 +307,8 @@ def resumo_banco(tabela: str = "source_of_meta_ads_diario") -> dict:
 
 
 def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
-                  tabela: str = "source_of_meta_ads_diario"):
+                  tabela: str = "source_of_meta_ads_diario",
+                  token_env: str = "META_ACCESS_TOKEN"):
     """
     Wrapper programático — busca via API e salva no SQLite.
 
@@ -314,6 +317,7 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         dias: quantos dias puxar (padrão 30)
         append: se True, não limpa o período antes de inserir
         tabela: nome da tabela destino
+        token_env: variável de ambiente com o token (padrão META_ACCESS_TOKEN)
 
     Returns:
         (linhas_inseridas: int, periodo: str)
@@ -321,7 +325,7 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
     if not account_id.startswith("act_"):
         account_id = f"act_{account_id}"
 
-    rows   = buscar_insights(account_id=account_id, dias=dias)
+    rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
     linhas = salvar(rows, append=append, tabela=tabela)
     info   = resumo_banco(tabela)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
