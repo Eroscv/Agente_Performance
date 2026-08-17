@@ -563,7 +563,14 @@ def consultar(
     campanha_raw = params.get("raw", {}).get("campanha")
     periodo_nota = params.get("periodo_nota")
 
-    # ── Detecta cliente_key e plataforma ─────────────────────────────────────
+    # Melhoria 5: aplicar preferências do usuário se período não especificado
+    try:
+        from agent.user_prefs import aplicar_prefs as _aplicar_prefs
+        data_inicio, data_fim = _aplicar_prefs(user_id or "", data_inicio, data_fim)
+    except Exception as _up_err:
+        logger.debug("[engine] user_prefs.aplicar_prefs: %s", _up_err)
+
+    # ── Detecta cliente_key e plataforma ─────────────────────────────────────────
     # Prioridade: NLP > canal > None (None ativa modo segmentado)
     nlp_raw_full = params.get("raw", {})
     cliente_key  = nlp_raw_full.get("cliente_key") or None
@@ -743,47 +750,95 @@ def consultar(
     if dados_principais_vazios:
         dados_vazios_msg = _dados_vazios_sugestao(intents[0], campanha, data_inicio, data_fim)
 
-    # Item 2: Delta vs período anterior (só quando não é consulta de campanha específica)
+    # Melhoria 6 + Item 2: Delta vs período anterior
+    # Para resumo_geral: sempre calcula delta com queries.resumo_periodo para consistência
+    # Para outros intents: usa ads_diario direto (comportamento legado)
     delta_consulta = {}
     if not campanha and data_inicio and data_fim and not dados_principais_vazios:
-        try:
-            from datetime import date as _ddate, timedelta as _dtd
-            _d0 = _ddate.fromisoformat(data_inicio)
-            _d1 = _ddate.fromisoformat(data_fim)
-            _span = (_d1 - _d0).days + 1
-            _ant0 = _d0 - _dtd(days=_span)
-            _ant1 = _d1 - _dtd(days=_span)
-            import sqlite3 as _sql3
-            _c = get_conn()
-            _c.row_factory = _sql3.Row
-            _row_ant = _c.execute("""
-                SELECT
-                    SUM(investimento) AS invest,
-                    CASE WHEN SUM(investimento)>0
-                         THEN SUM(valor_compras)/SUM(investimento) END AS roas,
-                    SUM(compras) AS conversoes
-                FROM ads_diario
-                WHERE data_inicio BETWEEN ? AND ?
-            """, (str(_ant0), str(_ant1))).fetchone()
-            # Extrai atuais
-            _invest_a = None; _roas_a = None; _conv_a = None
-            if isinstance(dados, dict):
-                _invest_a = dados.get("invest") or dados.get("total_invest")
-                _roas_a   = dados.get("roas")
-                _conv_a   = dados.get("compras") or dados.get("conversoes")
-            elif isinstance(dados, list) and dados:
-                _invest_a = sum((r.get("investimento") or 0) for r in dados if isinstance(r, dict))
-                _roas_a   = sum((r.get("roas") or 0) for r in dados if isinstance(r, dict)) / len(dados) if dados else None
-            if _row_ant and _row_ant["invest"]:
-                def _pct(a, b): return ((a - b) / b * 100) if b else None
-                if _invest_a and _row_ant["invest"]:
-                    delta_consulta["invest"] = (_invest_a, _row_ant["invest"], _pct(_invest_a, _row_ant["invest"]))
-                if _roas_a and _row_ant["roas"]:
-                    delta_consulta["roas"] = (_roas_a, _row_ant["roas"], _pct(_roas_a, _row_ant["roas"]))
-                if _conv_a and _row_ant["conversoes"]:
-                    delta_consulta["conversoes"] = (_conv_a, _row_ant["conversoes"], _pct(_conv_a, _row_ant["conversoes"]))
-        except Exception as _e:
-            logger.debug("[Delta consulta] Falhou: %s", _e)
+        # --- Melhoria 6: comparativo automático para resumo_geral ---
+        if "resumo_geral" in intents and isinstance(dados, dict):
+            try:
+                from datetime import date as _date, timedelta as _td
+                ini = _date.fromisoformat(data_inicio)
+                fim = _date.fromisoformat(data_fim)
+                delta_dias = (fim - ini).days + 1
+                ant_fim = ini - _td(days=1)
+                ant_ini = ant_fim - _td(days=delta_dias - 1)
+
+                from agent.queries import resumo_periodo as _rp_m6
+                dados_ant = _rp_m6(str(ant_ini), str(ant_fim), cliente_key=cliente_key, plataforma=plataforma)
+
+                if dados_ant and dados_ant.get("investimento_total"):
+                    def _pct(atual, ant):
+                        if not ant or ant == 0:
+                            return None
+                        return round((atual - ant) / ant * 100, 1)
+
+                    delta_consulta = {
+                        "investimento": (
+                            dados.get("investimento_total", 0),
+                            dados_ant.get("investimento_total", 0),
+                            _pct(dados.get("investimento_total", 0), dados_ant.get("investimento_total", 0)),
+                        ),
+                        "receita": (
+                            dados.get("receita_total", 0),
+                            dados_ant.get("receita_total", 0),
+                            _pct(dados.get("receita_total", 0), dados_ant.get("receita_total", 0)),
+                        ),
+                        "roas": (
+                            dados.get("roas", 0),
+                            dados_ant.get("roas", 0),
+                            _pct(dados.get("roas", 0), dados_ant.get("roas", 0)),
+                        ),
+                        "compras": (
+                            dados.get("compras_total", 0),
+                            dados_ant.get("compras_total", 0),
+                            _pct(dados.get("compras_total", 0), dados_ant.get("compras_total", 0)),
+                        ),
+                    }
+                    logger.debug("[engine] delta automático resumo_geral: %s", {k: v[2] for k, v in delta_consulta.items()})
+            except Exception as _de:
+                logger.debug("[engine] delta automático falhou (não crítico): %s", _de)
+        else:
+            # Legado: outros intents usam ads_diario direto
+            try:
+                from datetime import date as _ddate, timedelta as _dtd
+                _d0 = _ddate.fromisoformat(data_inicio)
+                _d1 = _ddate.fromisoformat(data_fim)
+                _span = (_d1 - _d0).days + 1
+                _ant0 = _d0 - _dtd(days=_span)
+                _ant1 = _d1 - _dtd(days=_span)
+                import sqlite3 as _sql3
+                _c = get_conn()
+                _c.row_factory = _sql3.Row
+                _row_ant = _c.execute("""
+                    SELECT
+                        SUM(investimento) AS invest,
+                        CASE WHEN SUM(investimento)>0
+                             THEN SUM(valor_compras)/SUM(investimento) END AS roas,
+                        SUM(compras) AS conversoes
+                    FROM ads_diario
+                    WHERE data_inicio BETWEEN ? AND ?
+                """, (str(_ant0), str(_ant1))).fetchone()
+                # Extrai atuais
+                _invest_a = None; _roas_a = None; _conv_a = None
+                if isinstance(dados, dict):
+                    _invest_a = dados.get("invest") or dados.get("total_invest")
+                    _roas_a   = dados.get("roas")
+                    _conv_a   = dados.get("compras") or dados.get("conversoes")
+                elif isinstance(dados, list) and dados:
+                    _invest_a = sum((r.get("investimento") or 0) for r in dados if isinstance(r, dict))
+                    _roas_a   = sum((r.get("roas") or 0) for r in dados if isinstance(r, dict)) / len(dados) if dados else None
+                if _row_ant and _row_ant["invest"]:
+                    def _pct_leg(a, b): return ((a - b) / b * 100) if b else None
+                    if _invest_a and _row_ant["invest"]:
+                        delta_consulta["invest"] = (_invest_a, _row_ant["invest"], _pct_leg(_invest_a, _row_ant["invest"]))
+                    if _roas_a and _row_ant["roas"]:
+                        delta_consulta["roas"] = (_roas_a, _row_ant["roas"], _pct_leg(_roas_a, _row_ant["roas"]))
+                    if _conv_a and _row_ant["conversoes"]:
+                        delta_consulta["conversoes"] = (_conv_a, _row_ant["conversoes"], _pct_leg(_conv_a, _row_ant["conversoes"]))
+            except Exception as _e:
+                logger.debug("[Delta consulta] Falhou: %s", _e)
 
     # ── Enriquecimento com receita Shopify real ─────────────────────────────
     shopify_dados = {}
@@ -821,6 +876,14 @@ def consultar(
     # 6. Salva no cache (não cacheia resultados vazios)
     if not dados_principais_vazios:
         cache_set(pergunta, resultado)
+
+    # Melhoria 5: atualizar preferências do usuário
+    if not dados_principais_vazios and intents and intents[0] != "desconhecida":
+        try:
+            from agent.user_prefs import atualizar_prefs as _atualizar_prefs
+            _atualizar_prefs(user_id or "", intents[0], data_inicio, data_fim, cliente_key)
+        except Exception as _up_err:
+            logger.debug("[engine] user_prefs.atualizar: %s", _up_err)
 
     # Log centralizado no handler Slack (tem resposta completa + latência ponta-a-ponta)
     return resultado

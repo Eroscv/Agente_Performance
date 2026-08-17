@@ -44,8 +44,17 @@ Todos os dados fornecidos são exclusivamente da conta Source OF no Meta Ads.
 
 SEMPRE estruture as respostas assim:
 
-1. **Título com emoji** — uma linha resumindo o período/assunto
-2. **Tabela principal de KPIs** — SEMPRE use tabela Slack com ```código``` para dados numéricos:
+1. **Linha âncora (OBRIGATÓRIA, sempre primeira linha)**
+   Formato: `📅 _Analisando: {data_ini} → {data_fim} · {cliente} · {plataforma}_`
+   Exemplos:
+     📅 _Analisando: 11 ago → 17 ago (7 dias) · Source OF · Meta Ads_
+     📅 _Analisando: 01 ago → 31 ago (31 dias) · Source OF · Meta Ads + Shopify_
+     📅 _Analisando: hoje (17 ago) · Source OF · Meta Ads_
+   - Use o período real dos dados fornecidos, não invente
+   - Se houver dados Shopify, adicione "+ Shopify" ao final
+   - Sempre em itálico (_texto_)
+2. **Título com emoji** — uma linha resumindo o período/assunto
+3. **Tabela principal de KPIs** — SEMPRE use tabela Slack com ```código``` para dados numéricos:
    - Cada linha: Métrica | Valor | Variação/Benchmark
    - Nunca liste métricas em bullets quando uma tabela cabe melhor
 3. **Tabela de campanhas** — quando houver múltiplas campanhas, SEMPRE em tabela com colunas:
@@ -75,6 +84,12 @@ SEMPRE estruture as respostas assim:
 - Resumo simples (hoje, semana): 15-25 linhas
 - Análise completa (mês, comparativo): 30-50 linhas
 - Nunca responda com menos de 10 linhas — sempre analise em profundidade
+
+## Quando houver [Comparativo vs período anterior]
+SEMPRE inclua uma seção de variação logo após a tabela KPI principal:
+- Use ↑ (crescimento) para aumento, ↓ (queda) para recuo
+- Destaque variações > 20% com ⚠️ (queda) ou 🔥 (crescimento)
+- Formato: "vs período anterior (dd/mm → dd/mm)"
 """
 
 # ── Prompt específico para POD Kombucha (Google Ads) ────────────────────────
@@ -102,20 +117,33 @@ Dados exclusivos do Google Ads. NUNCA mencione Source OF, Meta Ads ou Facebook.
 
 ## FORMATO OBRIGATÓRIO
 
-1. **Título** — emoji + período + "POD Kombucha · Google Ads"
-2. **Tabela KPI** em ```código``` (Métrica | Valor | Status)
-3. **Tabela de campanhas** quando houver múltiplas (Campanha | Tipo | Invest. | ROAS | Conv.)
-4. **Evolução diária** — quando os dados contiverem `[Evolução Diária da Semana]`, inclua
+1. **Linha âncora (OBRIGATÓRIA, sempre primeira linha)**
+   Formato: `📅 _Analisando: {data_ini} → {data_fim} · POD Kombucha · Google Ads_`
+   Exemplos:
+     📅 _Analisando: 11 ago → 17 ago (7 dias) · POD Kombucha · Google Ads_
+     📅 _Analisando: hoje (17 ago) · POD Kombucha · Google Ads_
+   - Use o período real dos dados fornecidos, não invente
+   - Sempre em itálico (_texto_)
+2. **Título** — emoji + período + "POD Kombucha · Google Ads"
+3. **Tabela KPI** em ```código``` (Métrica | Valor | Status)
+4. **Tabela de campanhas** quando houver múltiplas (Campanha | Tipo | Invest. | ROAS | Conv.)
+5. **Evolução diária** — quando os dados contiverem `[Evolução Diária da Semana]`, inclua
    obrigatoriamente uma tabela com: Data | Invest. | Receita | ROAS | Conv.
    Marque o melhor dia com 🔥 e o pior com 📉
-5. **Insights** — máx 4 bullets com emoji
-6. **Recomendação** — 1-2 linhas concretas
+6. **Insights** — máx 4 bullets com emoji
+7. **Recomendação** — 1-2 linhas concretas
+
+## Quando houver [Comparativo vs período anterior]
+SEMPRE inclua uma seção de variação logo após a tabela KPI principal:
+- Use ↑ (crescimento) para aumento, ↓ (queda) para recuo
+- Destaque variações > 20% com ⚠️ (queda) ou 🔥 (crescimento)
+- Formato: "vs período anterior (dd/mm → dd/mm)"
 
 ### Regras
 - Tabelas em ```código``` com | separador, máx 5 colunas
 - Números: R$ com vírgula decimal, ROAS com 2 casas
 - Comprimento: 15-60 linhas quando tiver breakdown diário; 15-50 linhas no padrão
-- Quando tiver breakdown diário, o item 4 é OBRIGATÓRIO
+- Quando tiver breakdown diário, o item 5 é OBRIGATÓRIO
 """
 
 
@@ -302,13 +330,34 @@ def gerar_resposta(
                 + "\n  ⚠️ Use o ROAS Real (Shopify) como referência principal, não o ROAS do Meta."
             )
 
+    # MELHORIA 3: Montar linha âncora para guiar o Claude
+    try:
+        cliente_label = "POD Kombucha" if is_pod else "Source OF"
+        plataforma_label = "Google Ads" if is_pod else "Meta Ads"
+        if kwargs.get("shopify") and kwargs["shopify"].get("sincronizado"):
+            plataforma_label += " + Shopify"
+        periodo_limpo = (
+            periodo_str
+            .replace("Período filtrado: ", "")
+            .replace("A partir de: ", "")
+            .replace("Até: ", "")
+            .replace("Período: todos os dados disponíveis", "todos os dados")
+        )
+        ancora_str = (
+            f"\n\n[LINHA ÂNCORA OBRIGATÓRIA — use exatamente este formato na primeira linha da resposta]\n"
+            f"📅 _Analisando: {periodo_limpo} · {cliente_label} · {plataforma_label}_"
+        )
+    except Exception as _ancora_err:
+        logger.debug("[claude_client] ancora_str: %s", _ancora_err)
+        ancora_str = ""
+
     user_message = f"""Pergunta do usuário: {pergunta}
 {contexto_str}
 Intenção detectada: {intent}
 {periodo_str}
 
 Dados retornados do banco:
-{dados_str}{extras_str}{delta_str}{shopify_str}
+{dados_str}{extras_str}{delta_str}{shopify_str}{ancora_str}
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.{periodo_nota_str}"""
     if shopify_str:

@@ -421,8 +421,33 @@ async def _processar_e_responder(
             if resultado.get("contexto"):
                 contexto = resultado["contexto"]
 
-            # Campanha não encontrada — responde diretamente sem chamar Claude
+            # Campanha não encontrada ou intent desconhecida — responde diretamente sem chamar Claude
             if erro:
+                # MELHORIA 2: Fallback inteligente com sugestão de comando
+                # Se o intent for desconhecido, enriquece a mensagem com sugestão
+                if resultado.get("intent") == "desconhecida":
+                    try:
+                        from agent.nlp import sugerir_intent_por_keywords
+                        sugestao = sugerir_intent_por_keywords(text)
+                        if sugestao:
+                            intent_sug, cmd_sug = sugestao
+                            erro = (
+                                f"🤔 Não entendi bem o que você quis dizer.\n\n"
+                                f"Você quis dizer *{cmd_sug}*?\n\n"
+                                f"Ou tente:\n"
+                                f"• `/ajuda` — ver todos os comandos\n"
+                                f"• Reformule a pergunta com mais detalhes"
+                            )
+                        else:
+                            erro = (
+                                f"🤔 Não entendi bem o que você quis dizer.\n\n"
+                                f"Tente:\n"
+                                f"• `/ajuda` — ver todos os comandos\n"
+                                f"• Exemplos: *como foi o ROAS essa semana?*, *top 5 campanhas*, *campanhas sem conversão*"
+                            )
+                    except Exception as _e2:
+                        logger.debug("[handler] sugerir_intent_por_keywords: %s", _e2)
+
                 resposta_final = erro
                 erro_final = erro
                 await client.chat_postMessage(

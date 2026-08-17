@@ -741,6 +741,66 @@ def _fallback_regex(pergunta: str, campanhas: list[str], contexto: str = "") -> 
     }
 
 
+# ── MELHORIA 2: Fallback inteligente com sugestão de comando ─────────────────
+
+def sugerir_intent_por_keywords(pergunta: str) -> "tuple[str, str] | None":
+    """
+    Analisa palavras-chave da pergunta e retorna (intent_sugerida, comando_slack).
+    Retorna None se não houver sugestão confiante.
+    """
+    import unicodedata
+    import re as _re
+
+    def norm(s: str) -> str:
+        return unicodedata.normalize('NFKD', s.lower()).encode('ascii', 'ignore').decode()
+
+    p = norm(pergunta)
+
+    def _matches(kw: str, text: str) -> bool:
+        """Verifica match de palavra-chave no texto com limite de palavra."""
+        kw_n = norm(kw)
+        # Multi-palavra: substring exata é suficiente (ex: 'sem conversao')
+        if ' ' in kw_n:
+            return kw_n in text
+        # Palavra única: usa limite de palavra para evitar 'campanha' em 'campanhas'
+        return bool(_re.search(r'\b' + _re.escape(kw_n) + r'\b', text))
+
+    MAPA = [
+        # (palavras_chave, intent, comando_sugerido)
+        (["roas", "retorno", "roi"],                       "top_roas",              "/top roas"),
+        (["compra", "conversao", "venda", "pedido"],        "top_compras",           "/top compras"),
+        (["sem conversao", "sem compra", "zero", "desperdicio", "gastando sem", "gastando", "sem retorno"], "sem_conversao", "/sem conversão"),
+        (["semana", "semanal", "essa semana", "ultimos 7"],  "resumo_geral",          "/semana"),
+        (["hoje", "ontem", "diario", "dia"],                "resumo_geral",          "/hoje"),
+        (["mes", "mensal", "esse mes", "ultimos 30"],       "resumo_geral",          "/mes"),
+        (["campanhas", "listar"],                           "listar_campanhas",      "/campanhas"),
+        (["funil", "carrinho", "checkout", "abandono"],     "funil",                 "/funil"),
+        (["frequencia", "fadiga", "saturacao"],             "saturacao_frequencia",  "/frequência"),
+        (["ctr", "clique", "engajamento"],                  "top_ctr",               "/top ctr"),
+        (["cpm", "impressao", "alcance"],                   "top_cpm",               "/top cpm"),
+        (["inativo", "pausad", "parada", "sem dados"],      "campanhas_inativas",    "/inativos"),
+        (["alerta", "problema", "critico", "ruim"],         "alertas_roas_baixo",    "/alertas"),
+        (["comparar", "comparativo", "versus", "vs"],       "comparar",              "/compare"),
+        (["historico", "meses anteriores"],                 "historico_mensal",      "/histórico"),
+        (["google", "gads", "search", "pmax"],              "resumo_geral",          "/google"),
+        (["pod", "kombucha"],                               "resumo_geral",          "/pod"),
+        (["shopify", "receita real", "ecommerce"],          "resumo_geral",          "/shopify"),
+    ]
+
+    scores = []
+    for keywords, intent, comando in MAPA:
+        hits = sum(1 for kw in keywords if _matches(kw, p))
+        if hits > 0:
+            scores.append((hits, intent, comando))
+
+    if not scores:
+        return None
+
+    scores.sort(reverse=True)
+    _, intent, comando = scores[0]
+    return intent, comando
+
+
 # Re-exporta consultar do engine para compatibilidade com testes
 try:
     from agent.engine import consultar  # noqa: F401  # MELHORIA: re-export para importação direta
