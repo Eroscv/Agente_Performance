@@ -404,7 +404,7 @@ def executar_cliente(
         for _attempt in range(1, 4):  # até 3 tentativas
             try:
                 loader_fn()
-                import os as _os; _os.environ["SKIP_SHEETS_SYNC"] = "1"  # item 14: evita dupla sync
+                # sync via API já realizado pelos crons sync_*_diario.py
                 _loader_ok = True
                 break
             except Exception as e:
@@ -418,7 +418,7 @@ def executar_cliente(
         # ── Builder ───────────────────────────────────────────────────────
         builder_fn = get_builder(cliente_key, tipo_builder)
         resultado  = builder_fn(data_inicio=data_inicio, data_fim=data_fim, publicar=publicar)
-        import os as _os2; _os2.environ.pop("SKIP_SHEETS_SYNC", None)  # limpa flag
+        
 
         if resultado.get("erro"):
             raise RuntimeError(resultado["erro"])

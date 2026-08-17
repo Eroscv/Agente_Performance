@@ -2777,17 +2777,7 @@ def gerar_relatorio_semanal(
     Returns:
         dict com: page_id, url, resumo, num_campanhas, alertas
     """
-    # ── Atualiza dados da planilha Google Sheets antes de gerar ──────────────────
-    import os as _os_builder
-    if _os_builder.environ.get("SKIP_SHEETS_SYNC") == "1":
-        logger.info("[Builder] Sync já realizado pelo cron — pulando carregar_sheets()")
-    else:
-        try:
-            from db.legacy.loader_sheets import carregar_sheets
-            linhas, periodo = carregar_sheets(db_path=db_path)
-            logger.info("[Builder] Planilha atualizada: %d linhas | período: %s", linhas, periodo)
-        except Exception as _e:
-            logger.warning("[Builder] Atualização da planilha falhou: %s — usando dados locais", _e)
+    # Dados vêm do SQLite (sync diário via API Meta/Google — ver scripts/sync_*_diario.py)
 
 
     # ── Período ───────────────────────────────────────────────────────────
