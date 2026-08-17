@@ -30,6 +30,7 @@ load_dotenv(BASE_DIR / ".env")
 
 from db.connection import query, query_one
 from relatorio.builder_diario import gerar_relatorio_diario
+from utils.formatters import fmt_brl, fmt_x, fmt_pct, fmt_n, roas_emoji, delta_str
 import requests
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -56,44 +57,6 @@ def _post(payload: dict) -> dict:
     return r.json()
 
 
-# ── Formatadores ─────────────────────────────────────────────────────────────
-
-def _brl(v) -> str:
-    if v is None: return "—"
-    return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def _x(v) -> str:
-    if v is None: return "—"
-    return f"{float(v):.2f}x"
-
-def _pct(v) -> str:
-    if v is None: return "—"
-    return f"{float(v):.2f}%"
-
-def _n(v, dec=0) -> str:
-    if v is None: return "—"
-    return f"{float(v):,.{dec}f}".replace(",", ".")
-
-def _roas_emoji(roas) -> str:
-    if roas is None: return "⚪"
-    r = float(roas)
-    if r >= 4:  return "🟢"
-    if r >= 2:  return "🟡"
-    return "🔴"
-
-def _delta_str(atual, anterior, maior_melhor=True) -> str:
-    """Retorna string de variação ex: ↑ +12,3%"""
-    try:
-        a, b = float(atual), float(anterior)
-        if b == 0: return ""
-        pct = (a - b) / abs(b) * 100
-        if abs(pct) < 0.5: return "→ estável"
-        up = pct > 0
-        icon = "✅" if (up == maior_melhor) else "⚠️"
-        seta = "↑" if up else "↓"
-        return f"{icon} {seta} {abs(pct):.1f}%"
-    except Exception:
-        return ""
 
 
 # ── Block Kit helpers ─────────────────────────────────────────────────────────
@@ -206,7 +169,7 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
     ec       = EMOJIS_CLIENTE.get(cliente_key, "📊")
     ep       = EMOJIS_PLAT.get(plataforma, "📊")
     data_fmt = f"{data[8:10]}/{data[5:7]}/{data[:4]}"
-    roas_e   = _roas_emoji(d.get("roas"))
+    roas_e   = roas_emoji(d.get("roas"))
     invest_imp = round(float(d.get("investimento", 0)) * 1.1215, 2) if plataforma == "meta_ads" else None
 
     blocos: list[dict] = []
@@ -214,15 +177,15 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
     # ── 1. Visão Geral ────────────────────────────────────────────────────
     blocos.append(_bk_section("*📊 Visão Geral*"))
     vg_rows = [
-        ["💰 Investimento",       _brl(d.get("investimento"))],
-        ["💵 Receita",            _brl(d.get("receita"))],
-        [f"{roas_e} ROAS",        _x(d.get("roas"))],
-        ["🛒 Conversões",         _n(d.get("conversoes"))],
+        ["💰 Investimento",       fmt_brl(d.get("investimento"))],
+        ["💵 Receita",            fmt_brl(d.get("receita"))],
+        [f"{roas_e} ROAS",        fmt_x(d.get("roas"))],
+        ["🛒 Conversões",         fmt_n(d.get("conversoes"))],
         ["📊 Campanhas Ativas",   str(d.get("campanhas", "—"))],
-        ["👥 Alcance",            _n(d.get("alcance"))],
+        ["👥 Alcance",            fmt_n(d.get("alcance"))],
     ]
     if invest_imp:
-        vg_rows.insert(1, ["💸 c/ Imposto (1,1215x)",  _brl(invest_imp)])
+        vg_rows.insert(1, ["💸 c/ Imposto (1,1215x)",  fmt_brl(invest_imp)])
     blocos.append(_bk_section(_tabela_codigo(["Métrica", "Valor"], vg_rows)))
     blocos.append(_bk_divider())
 
@@ -231,9 +194,9 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
     conv_r   = (float(d.get("conversoes") or 0) / float(d.get("cliques") or 1) * 100) if d.get("cliques") else None
     blocos.append(_bk_section("*🔽 Funil de Conversão*"))
     funil_rows = [
-        ["👁️  Impressões",  _n(d.get("impressoes")),   "100%"],
-        ["🖱️  Cliques",     _n(d.get("cliques")),      _pct(ctr_v) + " CTR"],
-        ["✅  Conversões",  _n(d.get("conversoes")),   _pct(conv_r) + " conv/clique" if conv_r else "—"],
+        ["👁️  Impressões",  fmt_n(d.get("impressoes")),   "100%"],
+        ["🖱️  Cliques",     fmt_n(d.get("cliques")),      fmt_pct(ctr_v) + " CTR"],
+        ["✅  Conversões",  fmt_n(d.get("conversoes")),   fmt_pct(conv_r) + " conv/clique" if conv_r else "—"],
     ]
     blocos.append(_bk_section(_tabela_codigo(["Etapa", "Volume", "Taxa"], funil_rows)))
     blocos.append(_bk_divider())
@@ -241,9 +204,9 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
     # ── 3. Métricas de Custo ──────────────────────────────────────────────
     blocos.append(_bk_section("*📐 Métricas de Custo*"))
     mc_rows = [
-        ["🎯 CTR",       _pct(d.get("ctr"))],
-        ["💲 CPC",       _brl(d.get("cpc"))],
-        ["📢 CPM",       _brl(d.get("cpm"))],
+        ["🎯 CTR",       fmt_pct(d.get("ctr"))],
+        ["💲 CPC",       fmt_brl(d.get("cpc"))],
+        ["📢 CPM",       fmt_brl(d.get("cpm"))],
     ]
     blocos.append(_bk_section(_tabela_codigo(["Métrica", "Valor"], mc_rows)))
     blocos.append(_bk_divider())
@@ -252,16 +215,16 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
     if ant:
         blocos.append(_bk_section("*📈 Comparativo — Dia Anterior*"))
         comp_rows = [
-            ["💰 Investimento", _brl(ant.get("investimento")), _brl(d.get("investimento")),
-             _delta_str(d.get("investimento"), ant.get("investimento"), False)],
-            ["💵 Receita",      _brl(ant.get("receita")),      _brl(d.get("receita")),
-             _delta_str(d.get("receita"),      ant.get("receita"))],
-            ["ROAS",            _x(ant.get("roas")),           _x(d.get("roas")),
-             _delta_str(d.get("roas"),         ant.get("roas"))],
-            ["🛒 Conversões",   _n(ant.get("conversoes")),     _n(d.get("conversoes")),
-             _delta_str(d.get("conversoes"),   ant.get("conversoes"))],
-            ["🎯 CTR",          _pct(ant.get("ctr")),          _pct(d.get("ctr")),
-             _delta_str(d.get("ctr"),          ant.get("ctr"))],
+            ["💰 Investimento", fmt_brl(ant.get("investimento")), fmt_brl(d.get("investimento")),
+             delta_str(d.get("investimento"), ant.get("investimento"), False)],
+            ["💵 Receita",      fmt_brl(ant.get("receita")),      fmt_brl(d.get("receita")),
+             delta_str(d.get("receita"),      ant.get("receita"))],
+            ["ROAS",            fmt_x(ant.get("roas")),           fmt_x(d.get("roas")),
+             delta_str(d.get("roas"),         ant.get("roas"))],
+            ["🛒 Conversões",   fmt_n(ant.get("conversoes")),     fmt_n(d.get("conversoes")),
+             delta_str(d.get("conversoes"),   ant.get("conversoes"))],
+            ["🎯 CTR",          fmt_pct(ant.get("ctr")),          fmt_pct(d.get("ctr")),
+             delta_str(d.get("ctr"),          ant.get("ctr"))],
         ]
         blocos.append(_bk_section(_tabela_codigo(["Métrica", "Ontem", "Hoje", "Var."], comp_rows)))
         blocos.append(_bk_divider())
@@ -272,13 +235,13 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
         camp_rows = []
         for c in camps:
             nome = (c.get("campanha") or "—")[:36]
-            re   = _roas_emoji(c.get("roas"))
+            re   = roas_emoji(c.get("roas"))
             camp_rows.append([
                 nome,
-                _brl(c.get("invest")),
-                _brl(c.get("receita")),
-                f"{re} {_x(c.get('roas'))}",
-                _n(c.get("conv")),
+                fmt_brl(c.get("invest")),
+                fmt_brl(c.get("receita")),
+                f"{re} {fmt_x(c.get('roas'))}",
+                fmt_n(c.get("conv")),
             ])
         blocos.append(_bk_section(_tabela_codigo(
             ["Campanha", "Invest.", "Receita", "ROAS", "Conv."],
@@ -294,7 +257,7 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
             roas_v = a.get("roas")
             nome   = (a.get("campanha") or "—")[:36]
             motivo = "Sem conversão" if conv == 0 else f"ROAS {roas_v:.2f}x"
-            alerta_rows.append([nome, _brl(a.get("invest")), motivo])
+            alerta_rows.append([nome, fmt_brl(a.get("invest")), motivo])
         if alerta_rows:
             blocos.append(_bk_section("*⚠️ Alertas — Campanhas para Revisar*"))
             blocos.append(_bk_section(_tabela_codigo(
@@ -307,13 +270,13 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
     if shopify and cliente_key == "source_of":
         blocos.append(_bk_section("*🛒 Shopify — Dados da Loja*"))
         shp_rows = [
-            ["📦 Pedidos",           _n(shopify.get("pedidos"))],
-            ["💰 Receita",           _brl(shopify.get("receita"))],
-            ["🆕 Novos Clientes",    _n(shopify.get("novos_clientes"))],
-            ["🔁 Recompradores",     _n(shopify.get("recompradores"))],
-            ["🏷️  Ticket Médio",    _brl(shopify.get("ticket_medio"))],
-            ["🎟️  Total Desconto",  _brl(shopify.get("total_desconto"))],
-            ["🏅 Pedidos >R$300",    _n(shopify.get("pedidos_acima_300"))],
+            ["📦 Pedidos",           fmt_n(shopify.get("pedidos"))],
+            ["💰 Receita",           fmt_brl(shopify.get("receita"))],
+            ["🆕 Novos Clientes",    fmt_n(shopify.get("novos_clientes"))],
+            ["🔁 Recompradores",     fmt_n(shopify.get("recompradores"))],
+            ["🏷️  Ticket Médio",    fmt_brl(shopify.get("ticket_medio"))],
+            ["🎟️  Total Desconto",  fmt_brl(shopify.get("total_desconto"))],
+            ["🏅 Pedidos >R$300",    fmt_n(shopify.get("pedidos_acima_300"))],
         ]
         blocos.append(_bk_section(_tabela_codigo(["Métrica", "Valor"], shp_rows)))
         blocos.append(_bk_divider())
@@ -390,17 +353,17 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
     logger.info("[%s·%s] Título postado ts=%s", cliente_key, plataforma, thread_ts)
 
     # ── Msg 2 (thread): resumo em tabela ────────────────────────────────────
-    roas_e = _roas_emoji(d.get("roas"))
+    roas_e = roas_emoji(d.get("roas"))
     invest_imp = round(float(d.get("investimento", 0)) * 1.1215, 2) if plataforma == "meta_ads" else None
     resumo_rows = [
-        [f"{roas_e} ROAS",       _x(d.get("roas"))],
-        ["💰 Investimento",      _brl(d.get("investimento"))],
-        ["💵 Receita",           _brl(d.get("receita"))],
-        ["🛒 Conversões",        _n(d.get("conversoes"))],
+        [f"{roas_e} ROAS",       fmt_x(d.get("roas"))],
+        ["💰 Investimento",      fmt_brl(d.get("investimento"))],
+        ["💵 Receita",           fmt_brl(d.get("receita"))],
+        ["🛒 Conversões",        fmt_n(d.get("conversoes"))],
         ["📊 Campanhas",         str(d.get("campanhas", "—"))],
     ]
     if invest_imp:
-        resumo_rows.insert(2, ["💸 c/ Imposto",  _brl(invest_imp)])
+        resumo_rows.insert(2, ["💸 c/ Imposto",  fmt_brl(invest_imp)])
     ancora_blocos = [
         _bk_section(_tabela_codigo(["Métrica", "Valor"], resumo_rows)),
         _bk_context(f"_{data_fmt} · {nome_c} · {nome_p} · {d.get('campanhas', 0)} campanhas ativas_"),

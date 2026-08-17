@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
     from db.connection import DB_PATH
     if not DB_PATH.exists():
         logger.info("Banco não encontrado — executando loader...")
-        from db.loader import load_csv
+        from db.legacy.loader_csv import load_csv
         n = load_csv()
         logger.info("Banco criado com %d registros", n)
     else:

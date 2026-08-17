@@ -19,6 +19,7 @@ import time
 from typing import Optional
 
 import requests
+from utils.formatters import fmt_brl, fmt_x, fmt_pct, fmt_n, delta_str as _delta_calc
 
 logger = logging.getLogger(__name__)
 
@@ -87,59 +88,6 @@ def _tabela_txt(header: list[str], rows: list[list[str]], sep: str = " │ ") ->
     return "```\n" + "\n".join(lines) + "\n```"
 
 
-# ── Formatadores detalhados ───────────────────────────────────────────────────
-
-def _fmt_brl(v) -> str:
-    if v is None:
-        return "—"
-    try:
-        return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except Exception:
-        return "—"
-
-
-def _fmt_x(v) -> str:
-    if v is None:
-        return "—"
-    try:
-        return f"{float(v):.2f}x"
-    except Exception:
-        return "—"
-
-
-def _fmt_n(v, decimais=0) -> str:
-    if v is None:
-        return "—"
-    try:
-        return f"{float(v):,.{decimais}f}".replace(",", ".")
-    except Exception:
-        return "—"
-
-
-def _fmt_pct(v) -> str:
-    if v is None:
-        return "—"
-    try:
-        return f"{float(v):.2f}%"
-    except Exception:
-        return "—"
-
-
-def _delta(atual, anterior, maior_melhor=True) -> str:
-    """Retorna emoji de variação ↑ / ↓ / → comparando com período anterior."""
-    try:
-        a, b = float(atual), float(anterior)
-        if b == 0:
-            return ""
-        pct = (a - b) / abs(b) * 100
-        if abs(pct) < 1:
-            return f"→ ({pct:+.1f}%)"
-        up = pct > 0
-        sinal = "↑" if up else "↓"
-        emoji = "✅" if (up == maior_melhor) else "⚠️"
-        return f"{emoji} {sinal} {abs(pct):.1f}%"
-    except Exception:
-        return ""
 
 
 # ── Blocos Slack Block Kit ────────────────────────────────────────────────────

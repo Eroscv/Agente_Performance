@@ -21,6 +21,8 @@ from typing import Optional
 
 from db.connection import query, query_one
 from notion.historico import criar_relatorio_no_historico
+from utils.formatters import fmt_brl, fmt_x, fmt_pct, fmt_n, roas_emoji
+from notion.blocks import h2, h3, paragrafo, divider, callout, bullet, tabela, toggle
 
 logger = logging.getLogger(__name__)
 
@@ -39,88 +41,8 @@ EMOJIS_CLIENTE = {
 }
 
 
-# ── Helpers de formatação ─────────────────────────────────────────────────────
-
-def _fmt_brl(v) -> str:
-    if v is None: return "—"
-    return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-
-def _fmt_x(v) -> str:
-    if v is None: return "—"
-    return f"{float(v):.2f}x"
-
-def _fmt_pct(v) -> str:
-    if v is None: return "—"
-    return f"{float(v):.2f}%"
-
-def _fmt_n(v, dec=0) -> str:
-    if v is None: return "—"
-    return f"{float(v):,.{dec}f}".replace(",", ".")
-
-def _roas_emoji(roas) -> str:
-    if roas is None: return "⚪"
-    r = float(roas)
-    if r >= 4:  return "🟢"
-    if r >= 2:  return "🟡"
-    return "🔴"
 
 
-# ── Blocos Notion ─────────────────────────────────────────────────────────────
-
-
-def _h2(texto: str) -> dict:
-    return {"object": "block", "type": "heading_2",
-            "heading_2": {"rich_text": [{"type": "text", "text": {"content": texto}}]}}
-
-
-def _paragrafo(texto: str, bold: bool = False) -> dict:
-    return {"object": "block", "type": "paragraph",
-            "paragraph": {"rich_text": [{"type": "text", "text": {"content": texto},
-                                          "annotations": {"bold": bold}}]}}
-
-def _divider() -> dict:
-    return {"object": "block", "type": "divider", "divider": {}}
-
-def _callout(texto: str, emoji: str = "📊") -> dict:
-    return {
-        "object": "block", "type": "callout",
-        "callout": {
-            "rich_text": [{"type": "text", "text": {"content": texto}}],
-            "icon": {"type": "emoji", "emoji": emoji},
-            "color": "gray_background",
-        }
-    }
-
-def _tabela_notion(header: list[str], linhas: list[list[str]]) -> dict:
-    """Bloco tabela Notion com cabeçalho."""
-    def _cel(txt: str) -> list:
-        return [{"type": "text", "text": {"content": str(txt)}}]
-
-    rows = []
-    # Header
-    rows.append({
-        "type": "table_row",
-        "table_row": {"cells": [_cel(h) for h in header]}
-    })
-    for linha in linhas:
-        rows.append({
-            "type": "table_row",
-            "table_row": {"cells": [_cel(c) for c in linha]}
-        })
-    return {
-        "object": "block",
-        "type": "table",
-        "table": {
-            "table_width": len(header),
-            "has_column_header": True,
-            "has_row_header": False,
-            "children": rows,
-        }
-    }
-
-def _bullet(texto: str) -> dict:
-    return {"object": "block", "type": "bulleted_list_item",
-            "bulleted_list_item": {"rich_text": [{"type": "text", "text": {"content": texto}}]}}
 
 
 # ── Consultas de dados ────────────────────────────────────────────────────────
@@ -181,51 +103,51 @@ def _buscar_dia_anterior(data: str, cliente_key: str, plataforma: str) -> dict |
 
 def _blocos_visao_geral(resumo: dict, plataforma: str, data_fmt: str) -> list[dict]:
     invest_imp = round(float(resumo.get("investimento", 0)) * 1.1215, 2) if plataforma == "meta_ads" else None
-    roas_e = _roas_emoji(resumo.get("roas"))
+    roas_e = roas_emoji(resumo.get("roas"))
 
     linhas = [
-        ["💰 Investimento",        _fmt_brl(resumo.get("investimento"))],
+        ["💰 Investimento",        fmt_brl(resumo.get("investimento"))],
     ]
     if invest_imp:
-        linhas.append(["💰 +Imposto (1,1215x)", _fmt_brl(invest_imp)])
+        linhas.append(["💰 +Imposto (1,1215x)", fmt_brl(invest_imp)])
     linhas += [
-        ["💵 Receita",             _fmt_brl(resumo.get("receita"))],
-        [f"{roas_e} ROAS",         _fmt_x(resumo.get("roas"))],
-        ["🛒 Conversões",          _fmt_n(resumo.get("conversoes"))],
+        ["💵 Receita",             fmt_brl(resumo.get("receita"))],
+        [f"{roas_e} ROAS",         fmt_x(resumo.get("roas"))],
+        ["🛒 Conversões",          fmt_n(resumo.get("conversoes"))],
         ["📊 Campanhas Ativas",    str(resumo.get("campanhas", "—"))],
     ]
 
     return [
-        _h2("📊 Visão Geral"),
-        _tabela_notion(["Métrica", "Resultado"], linhas),
-        _divider(),
+        h2("📊 Visão Geral"),
+        tabela(["Métrica", "Resultado"], linhas),
+        divider(),
     ]
 
 
 def _blocos_funil(resumo: dict) -> list[dict]:
     linhas = [
-        ["👁️ Impressões",  _fmt_n(resumo.get("impressoes")),  "—"],
-        ["🖱️ Cliques",     _fmt_n(resumo.get("cliques")),     _fmt_pct(resumo.get("ctr"))],
-        ["✅ Conversões",  _fmt_n(resumo.get("conversoes")),  "—"],
+        ["👁️ Impressões",  fmt_n(resumo.get("impressoes")),  "—"],
+        ["🖱️ Cliques",     fmt_n(resumo.get("cliques")),     fmt_pct(resumo.get("ctr"))],
+        ["✅ Conversões",  fmt_n(resumo.get("conversoes")),  "—"],
     ]
     return [
-        _h2("🔽 Funil de Conversão"),
-        _tabela_notion(["Etapa", "Volume", "Taxa"], linhas),
-        _divider(),
+        h2("🔽 Funil de Conversão"),
+        tabela(["Etapa", "Volume", "Taxa"], linhas),
+        divider(),
     ]
 
 
 def _blocos_metricas_avancadas(resumo: dict) -> list[dict]:
     linhas = [
-        ["🎯 CTR",      _fmt_pct(resumo.get("ctr"))],
-        ["💲 CPC",      _fmt_brl(resumo.get("cpc"))],
-        ["📢 CPM",      _fmt_brl(resumo.get("cpm"))],
-        ["👥 Alcance",  _fmt_n(resumo.get("alcance"))],
+        ["🎯 CTR",      fmt_pct(resumo.get("ctr"))],
+        ["💲 CPC",      fmt_brl(resumo.get("cpc"))],
+        ["📢 CPM",      fmt_brl(resumo.get("cpm"))],
+        ["👥 Alcance",  fmt_n(resumo.get("alcance"))],
     ]
     return [
-        _h2("📐 Métricas Avançadas"),
-        _tabela_notion(["Métrica", "Valor"], linhas),
-        _divider(),
+        h2("📐 Métricas Avançadas"),
+        tabela(["Métrica", "Valor"], linhas),
+        divider(),
     ]
 
 
@@ -242,24 +164,24 @@ def _blocos_campanhas(campanhas: list[dict]) -> list[dict]:
     linhas = []
     for c in campanhas_exibir:
         nome = (c.get("campanha") or "—")[:50]
-        roas_e = _roas_emoji(c.get("roas"))
+        roas_e = roas_emoji(c.get("roas"))
         linhas.append([
             nome,
-            _fmt_brl(c.get("investimento")),
-            _fmt_brl(c.get("receita")),
-            f"{roas_e} {_fmt_x(c.get('roas'))}",
-            _fmt_n(c.get("conversoes")),
-            _fmt_pct(c.get("ctr")),
-            _fmt_brl(c.get("cpc")),
+            fmt_brl(c.get("investimento")),
+            fmt_brl(c.get("receita")),
+            f"{roas_e} {fmt_x(c.get('roas'))}",
+            fmt_n(c.get("conversoes")),
+            fmt_pct(c.get("ctr")),
+            fmt_brl(c.get("cpc")),
         ])
 
     blocos = [
-        _h2("📋 Desempenho por Campanha"),
-        _tabela_notion(header, linhas),
+        h2("📋 Desempenho por Campanha"),
+        tabela(header, linhas),
     ]
     if truncado:
-        blocos.append(_paragrafo(f"... e mais {len(campanhas) - MAX_LINHAS} anúncios. Ver Notion para lista completa."))
-    blocos.append(_divider())
+        blocos.append(paragrafo(f"... e mais {len(campanhas) - MAX_LINHAS} anúncios. Ver Notion para lista completa."))
+    blocos.append(divider())
     return blocos
 
 
@@ -267,18 +189,18 @@ def _blocos_shopify(shopify: dict) -> list[dict]:
     if not shopify:
         return []
     linhas = [
-        ["📦 Pedidos",           _fmt_n(shopify.get("pedidos"))],
-        ["💰 Receita",           _fmt_brl(shopify.get("receita"))],
-        ["🆕 Novos Clientes",    _fmt_n(shopify.get("novos_clientes"))],
-        ["🔁 Recompradores",     _fmt_n(shopify.get("recompradores"))],
-        ["🏷️ Ticket Médio",     _fmt_brl(shopify.get("ticket_medio"))],
-        ["🎟️ Total Desconto",   _fmt_brl(shopify.get("total_desconto"))],
-        ["🏅 Pedidos >R$300",    _fmt_n(shopify.get("pedidos_acima_300"))],
+        ["📦 Pedidos",           fmt_n(shopify.get("pedidos"))],
+        ["💰 Receita",           fmt_brl(shopify.get("receita"))],
+        ["🆕 Novos Clientes",    fmt_n(shopify.get("novos_clientes"))],
+        ["🔁 Recompradores",     fmt_n(shopify.get("recompradores"))],
+        ["🏷️ Ticket Médio",     fmt_brl(shopify.get("ticket_medio"))],
+        ["🎟️ Total Desconto",   fmt_brl(shopify.get("total_desconto"))],
+        ["🏅 Pedidos >R$300",    fmt_n(shopify.get("pedidos_acima_300"))],
     ]
     return [
-        _h2("🛒 Shopify — Dados da Loja"),
-        _tabela_notion(["Métrica", "Valor"], linhas),
-        _divider(),
+        h2("🛒 Shopify — Dados da Loja"),
+        tabela(["Métrica", "Valor"], linhas),
+        divider(),
     ]
 
 
@@ -292,21 +214,21 @@ def _blocos_comparativo(resumo: dict, anterior: dict) -> list[dict]:
         return f"{seta} {abs(v):.1f}%"
 
     linhas = [
-        ["💰 Investimento", _fmt_brl(anterior.get("investimento")), _fmt_brl(resumo.get("investimento")),
+        ["💰 Investimento", fmt_brl(anterior.get("investimento")), fmt_brl(resumo.get("investimento")),
          _var(resumo.get("investimento"), anterior.get("investimento"), False)],
-        ["💵 Receita",      _fmt_brl(anterior.get("receita")),      _fmt_brl(resumo.get("receita")),
+        ["💵 Receita",      fmt_brl(anterior.get("receita")),      fmt_brl(resumo.get("receita")),
          _var(resumo.get("receita"), anterior.get("receita"))],
-        ["ROAS",            _fmt_x(anterior.get("roas")),           _fmt_x(resumo.get("roas")),
+        ["ROAS",            fmt_x(anterior.get("roas")),           fmt_x(resumo.get("roas")),
          _var(resumo.get("roas"), anterior.get("roas"))],
-        ["🛒 Conversões",   _fmt_n(anterior.get("conversoes")),     _fmt_n(resumo.get("conversoes")),
+        ["🛒 Conversões",   fmt_n(anterior.get("conversoes")),     fmt_n(resumo.get("conversoes")),
          _var(resumo.get("conversoes"), anterior.get("conversoes"))],
-        ["🎯 CTR",          _fmt_pct(anterior.get("ctr")),          _fmt_pct(resumo.get("ctr")),
+        ["🎯 CTR",          fmt_pct(anterior.get("ctr")),          fmt_pct(resumo.get("ctr")),
          _var(resumo.get("ctr"), anterior.get("ctr"))],
     ]
     return [
-        _h2("📈 Comparativo Dia Anterior"),
-        _tabela_notion(["Métrica", "Ontem", "Hoje", "Var."], linhas),
-        _divider(),
+        h2("📈 Comparativo Dia Anterior"),
+        tabela(["Métrica", "Ontem", "Hoje", "Var."], linhas),
+        divider(),
     ]
 
 
@@ -324,12 +246,12 @@ def _blocos_alertas(campanhas: list[dict]) -> list[dict]:
             alertas.append(f"🔴 {nome} — ROAS {roas:.2f}x abaixo do breakeven (invest R$ {invest:.0f})")
 
     if not alertas:
-        return [_h2("✅ Alertas"), _paragrafo("Nenhum alerta crítico no período."), _divider()]
+        return [h2("✅ Alertas"), paragrafo("Nenhum alerta crítico no período."), divider()]
 
-    blocos = [_h2("⚠️ Alertas")]
+    blocos = [h2("⚠️ Alertas")]
     for a in alertas:
-        blocos.append(_bullet(a))
-    blocos.append(_divider())
+        blocos.append(bullet(a))
+    blocos.append(divider())
     return blocos
 
 
@@ -379,15 +301,15 @@ def gerar_relatorio_diario(
 
     # ── Monta blocos Notion ───────────────────────────────────────────────
     blocos = [
-        _callout(
+        callout(
             f"{nome_c} · {nome_p} · {data_fmt} — "
-            f"ROAS: {_fmt_x(resumo.get('roas'))} · "
-            f"Invest: {_fmt_brl(resumo.get('investimento'))} · "
-            f"Receita: {_fmt_brl(resumo.get('receita'))} · "
-            f"Conv: {_fmt_n(resumo.get('conversoes'))}",
+            f"ROAS: {fmt_x(resumo.get('roas'))} · "
+            f"Invest: {fmt_brl(resumo.get('investimento'))} · "
+            f"Receita: {fmt_brl(resumo.get('receita'))} · "
+            f"Conv: {fmt_n(resumo.get('conversoes'))}",
             emoji=emoji_c,
         ),
-        _divider(),
+        divider(),
     ]
 
     blocos += _blocos_visao_geral(resumo, plataforma, data_fmt)
@@ -403,7 +325,7 @@ def gerar_relatorio_diario(
     if shopify:
         blocos += _blocos_shopify(shopify)
 
-    blocos.append(_paragrafo(
+    blocos.append(paragrafo(
         f"Gerado em {time.strftime('%d/%m/%Y %H:%M')} · Dados via API direta: {nome_p}",
         bold=False
     ))

@@ -2783,7 +2783,7 @@ def gerar_relatorio_semanal(
         logger.info("[Builder] Sync já realizado pelo cron — pulando carregar_sheets()")
     else:
         try:
-            from db.loader_sheets import carregar_sheets
+            from db.legacy.loader_sheets import carregar_sheets
             linhas, periodo = carregar_sheets(db_path=db_path)
             logger.info("[Builder] Planilha atualizada: %d linhas | período: %s", linhas, periodo)
         except Exception as _e:

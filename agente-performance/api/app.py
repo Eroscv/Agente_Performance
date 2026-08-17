@@ -192,7 +192,7 @@ def get_evolucao(
 def reload_db():
     """Recarrega o CSV no banco (idempotente)."""
     try:
-        from db.loader import load_csv
+        from db.legacy.loader_csv import load_csv
         from agent.cache import clear as cache_clear
         n = load_csv()
         cache_clear()

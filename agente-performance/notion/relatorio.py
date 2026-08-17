@@ -20,87 +20,13 @@ from notion.client import (
 
 logger = logging.getLogger(__name__)
 
-
-# ── Helpers de blocos Notion ──────────────────────────────────────────────────
-
-def bloco_heading1(texto: str) -> dict:
-    return {"object": "block", "type": "heading_1",
-            "heading_1": {"rich_text": [{"text": {"content": texto}}]}}
-
-def bloco_heading2(texto: str) -> dict:
-    return {"object": "block", "type": "heading_2",
-            "heading_2": {"rich_text": [{"text": {"content": texto}}]}}
-
-def bloco_heading3(texto: str) -> dict:
-    return {"object": "block", "type": "heading_3",
-            "heading_3": {"rich_text": [{"text": {"content": texto}}]}}
-
-def bloco_paragrafo(texto: str, negrito: bool = False) -> dict:
-    rich = [{"text": {"content": texto}, "annotations": {"bold": negrito}}]
-    return {"object": "block", "type": "paragraph", "paragraph": {"rich_text": rich}}
-
-def bloco_divisor() -> dict:
-    return {"object": "block", "type": "divider", "divider": {}}
-
-def bloco_callout(texto: str, emoji: str = "💡") -> dict:
-    return {
-        "object": "block", "type": "callout",
-        "callout": {
-            "rich_text": [{"text": {"content": texto}}],
-            "icon": {"type": "emoji", "emoji": emoji},
-        },
-    }
-
-def bloco_bullet(texto: str) -> dict:
-    return {
-        "object": "block", "type": "bulleted_list_item",
-        "bulleted_list_item": {"rich_text": [{"text": {"content": texto}}]},
-    }
-
-def bloco_codigo(texto: str, linguagem: str = "plain text") -> dict:
-    return {
-        "object": "block", "type": "code",
-        "code": {
-            "rich_text": [{"text": {"content": texto}}],
-            "language": linguagem,
-        },
-    }
-
-def bloco_toggle(titulo: str, filhos: list[dict]) -> dict:
-    return {
-        "object": "block", "type": "toggle",
-        "toggle": {
-            "rich_text": [{"text": {"content": titulo}}],
-            "children": filhos,
-        },
-    }
+from utils.formatters import fmt_brl as _fmt_brl, fmt_n as _fmt_num, fmt_pct as _fmt_pct, fmt_x as _fmt_x
+from notion.blocks import h2 as bloco_heading2, h3 as bloco_heading3, paragrafo as bloco_paragrafo
+from notion.blocks import divider as bloco_divisor, callout as bloco_callout, bullet as bloco_bullet
+from notion.blocks import toggle as bloco_toggle, codigo as bloco_codigo
 
 
-# ── Formatadores de dados ─────────────────────────────────────────────────────
 
-def _fmt_brl(valor) -> str:
-    if valor is None:
-        return "—"
-    try:
-        return f"R$ {float(valor):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except Exception:
-        return str(valor)
-
-def _fmt_num(valor, decimais: int = 0) -> str:
-    if valor is None:
-        return "—"
-    try:
-        return f"{float(valor):,.{decimais}f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except Exception:
-        return str(valor)
-
-def _fmt_pct(valor) -> str:
-    if valor is None:
-        return "—"
-    try:
-        return f"{float(valor)*100:.2f}%"
-    except Exception:
-        return str(valor)
 
 
 # ── Tabela em código (Notion não tem tabela nativa simples) ──────────────────
@@ -291,7 +217,7 @@ def _blocos_alertas(dados: list[dict], meta: dict) -> list[dict]:
 
 # ── Função principal ──────────────────────────────────────────────────────────
 
-def publicar_relatorio_campanha(
+def publicar_relatorio_consulta(
     resultado:   dict,
     pergunta:    str,
     cliente_key: str = None,

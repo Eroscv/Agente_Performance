@@ -414,7 +414,7 @@ def gerar_relatorio_pod(
     """
     # ── Atualiza dados da planilha ────────────────────────────────────────
     try:
-        from db.loader_pod import carregar_pod
+        from db.legacy.loader_pod import carregar_pod
         linhas, periodo = carregar_pod()
         logger.info("[POD] Planilha atualizada: %d linhas | %s", linhas, periodo)
     except Exception as e:
