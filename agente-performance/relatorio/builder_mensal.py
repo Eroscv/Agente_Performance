@@ -277,15 +277,17 @@ def _blocos_visao_mensal_diaria(
     # Busca receita Shopify por dia (com fallback para None)
     shopify_por_dia: dict[str, float] = {}
     try:
-        from shopify.client import _paginar_pedidos
-        from collections import defaultdict
-        _rec_dia: dict[str, float] = defaultdict(float)
-        for pedido in _paginar_pedidos(data_inicio, data_fim, campos="id,created_at,total_price"):
-            dia_iso = pedido.get("created_at", "")[:10]
-            _rec_dia[dia_iso] += float(pedido.get("total_price") or 0)
-        shopify_por_dia = dict(_rec_dia)
+        import sqlite3 as _sq3
+        _conn_shp = _sq3.connect(str(db_path))
+        _rows_shp = _conn_shp.execute(
+            "SELECT data, receita FROM source_of_shopify_diario WHERE data BETWEEN ? AND ?",
+            (data_inicio.isoformat(), data_fim.isoformat())
+        ).fetchall()
+        _conn_shp.close()
+        shopify_por_dia = {r[0]: float(r[1] or 0) for r in _rows_shp}
+        logger.info("[Builder] Shopify SQLite: %d dias carregados", len(shopify_por_dia))
     except Exception as _e:
-        logger.warning("[Builder] Shopify diário indisponível: %s", _e)
+        logger.warning("[Builder] Shopify SQLite indisponível: %s", _e)
 
     # ── Helper: monta tabela Notion ──────────────────────────────────────
     def _mk_table(header, rows_data):
