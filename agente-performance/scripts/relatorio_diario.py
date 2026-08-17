@@ -26,6 +26,7 @@ from dotenv import load_dotenv
 load_dotenv(BASE_DIR / ".env")
 
 from db.connection import query, query_one
+from relatorio.builder_diario import gerar_relatorio_diario
 import requests
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -256,7 +257,7 @@ def montar_relatorio_bloco(data: str, cliente_key: str, plataforma: str,
 
 def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str,
                               shopify: dict = None) -> bool:
-    """Envia âncora + thread para um cliente+plataforma."""
+    """Publica no Notion + envia âncora + thread no Slack."""
     dados   = buscar_dados_dia(data, cliente_key, plataforma)
     if not dados:
         logger.info("[%s·%s] Sem dados para %s — pulando", cliente_key, plataforma, data)
@@ -265,13 +266,27 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str,
     tops    = buscar_top_campanhas(data, cliente_key, plataforma)
     alertas = buscar_alertas(data, cliente_key, plataforma)
 
+    # ── Publica no Notion ──────────────────────────────────────────────────
+    notion_url = None
+    try:
+        resultado_notion = gerar_relatorio_diario(
+            cliente_key=cliente_key,
+            plataforma=plataforma,
+            data=data,
+            publicar=True,
+        )
+        notion_url = resultado_notion.get("url")
+        logger.info("[%s·%s] Notion publicado: %s", cliente_key, plataforma, notion_url)
+    except Exception as e:
+        logger.warning("[%s·%s] Falha no Notion: %s", cliente_key, plataforma, e)
+
     emoji_c  = EMOJIS.get(cliente_key, "📊")
     nome_c   = LABELS.get(cliente_key, cliente_key)
     nome_p   = LABELS.get(plataforma, plataforma)
     data_fmt = f"{data[8:10]}/{data[5:7]}/{data[:4]}"
     roas_e   = _roas_emoji(dados.get("roas"))
 
-    # ── Âncora ────────────────────────────────────────────────────────────
+    # ── Âncora no canal ────────────────────────────────────────────────────
     ancora_txt = (
         f"{emoji_c} *{nome_c} · {nome_p} · Relatório Diário · {data_fmt}*\n"
         f"> {roas_e} ROAS: *{_fmt_x(dados.get('roas'))}* · "
@@ -298,6 +313,10 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str,
         data, cliente_key, plataforma, dados, tops, alertas,
         shopify=shopify if cliente_key == "source_of" else None
     )
+
+    # Adiciona link Notion no rodapé da thread
+    if notion_url:
+        relatorio_txt += f"\n\n<{notion_url}|\ud83d� Ver relatório completo no Notion>"
 
     resp = _post({
         "channel": SLACK_CHANNEL,
