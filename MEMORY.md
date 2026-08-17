@@ -10,6 +10,17 @@ Qualquer trabalho no **Agente de Performance Guará** NUNCA deve afetar:
 - Config Apache: `flora-webhook.conf`
 - Webhook: `https://44.204.251.251/webhook`
 
+## Regras de Workflow
+
+### 📝 Após cada commit + push no Flora-Agente
+Criar arquivo em `alteracoes/YYYY-MM-DD_<slug>.md` com:
+- **Commit** (hash + mensagem)
+- **Arquivos alterados**
+- **O que foi alterado** (descrição objetiva)
+- **Impacto** (tabela antes/depois)
+
+Depois commitar e pushar o arquivo de alteração junto ou em seguida.
+
 ## Projetos Ativos
 
 ### Agente de Performance Guará
