@@ -7,3 +7,4 @@ data/campanhas.db
 *.db
 *.log
 .DS_Store
+dev-report/
