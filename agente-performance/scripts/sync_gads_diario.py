@@ -3,17 +3,18 @@ scripts/sync_gads_diario.py
 
 Sync diário automático — Google Ads API → SQLite.
 
-Executa para todos os clientes ativos com plataforma=google_ads
+Executa para todos os clientes ativos com plataforma google_ads ativa
 e gads_customer_id definido em clientes.json.
 
 Comportamento:
   - Puxa os últimos 8 dias (append=True) para cobrir dados atrasados
+  - Grava na tabela {cliente_key}_gads_diario de cada cliente
   - Registra execução em cron_runs
-  - Loga resultado no stdout (capturado pelo cron OpenClaw)
+  - Loga resultado no stdout
 
 Uso manual:
     python scripts/sync_gads_diario.py
-    python scripts/sync_gads_diario.py --dias 30   # reprocessa mais dias
+    python scripts/sync_gads_diario.py --dias 30
     python scripts/sync_gads_diario.py --cliente source_of
 """
 
@@ -21,7 +22,7 @@ import argparse
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.parent
@@ -47,16 +48,25 @@ def carregar_clientes() -> dict:
 
 
 def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool:
-    """Executa sync para um cliente. Retorna True se sucesso."""
-    customer_id = cfg.get("gads_customer_id")
+    """Executa sync Google Ads para um cliente. Retorna True se sucesso."""
+    plataformas = cfg.get("plataformas", {})
+    gads_cfg    = plataformas.get("google_ads", {})
+
+    if not gads_cfg.get("ativo", False):
+        logger.info("[%s] google_ads inativo — pulando", cliente_key)
+        return None  # None = pulado, não é erro
+
+    customer_id = gads_cfg.get("gads_customer_id")
     if not customer_id:
         logger.warning("[%s] sem gads_customer_id — pulando", cliente_key)
-        return False
+        return None  # None = pulado
 
-    logger.info("[%s] Iniciando sync Google Ads (customer_id=%s, dias=%d)",
-                cliente_key, customer_id, dias)
+    tabela = gads_cfg.get("tabela_db", f"{cliente_key}_gads_diario")
 
-    hoje = datetime.utcnow().strftime("%Y-%m-%d")
+    logger.info("[%s] Iniciando sync Google Ads (customer_id=%s, tabela=%s, dias=%d)",
+                cliente_key, customer_id, tabela, dias)
+
+    hoje = datetime.now(UTC).strftime("%Y-%m-%d")
     run_id = registrar_run(
         cliente_key=cliente_key,
         periodo="diario",
@@ -69,7 +79,8 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool:
         linhas, periodo = carregar_gads(
             customer_id=customer_id,
             dias=dias,
-            append=True,  # nunca limpa — só insere/atualiza
+            append=True,
+            tabela=tabela,
         )
         registrar_run(
             cliente_key=cliente_key,
@@ -79,7 +90,8 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool:
             status="sucesso",
             run_id=run_id,
         )
-        logger.info("[%s] ✅ %d linhas | período: %s", cliente_key, linhas, periodo)
+        logger.info("[%s] ✅ %d linhas | período: %s | tabela: %s",
+                    cliente_key, linhas, periodo, tabela)
         return True
 
     except Exception as exc:
@@ -110,17 +122,16 @@ def main():
 
     for key, cfg in clientes.items():
         if not cfg.get("ativo", False):
-            logger.info("[%s] inativo — pulando", key)
-            continue
-        if cfg.get("plataforma") != "google_ads":
-            logger.info("[%s] plataforma=%s — pulando", key, cfg.get("plataforma"))
+            logger.info("[%s] cliente inativo — pulando", key)
             continue
         if args.cliente and key != args.cliente:
             continue
 
         ok = sync_cliente(key, cfg, dias=args.dias)
-        if ok:
+        if ok is True:
             sucessos += 1
+        elif ok is None:
+            pass  # pulado (inativo ou sem customer_id)
         else:
             erros += 1
 

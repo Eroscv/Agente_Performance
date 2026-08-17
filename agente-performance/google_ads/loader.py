@@ -127,26 +127,49 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
         raise
 
 
-def salvar(rows: list[dict], append: bool = False) -> int:
-    """Salva dados no SQLite."""
+# DDL para tabelas nomeadas por cliente
+_CREATE_TABLE_TPL = """
+CREATE TABLE IF NOT EXISTS {tabela} (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    data            TEXT NOT NULL,
+    campanha        TEXT,
+    campaign_id     TEXT,
+    tipo_campanha   TEXT,
+    status          TEXT,
+    impressoes      REAL DEFAULT 0,
+    cliques         REAL DEFAULT 0,
+    investimento    REAL DEFAULT 0,
+    conversoes      REAL DEFAULT 0,
+    valor_conversao REAL DEFAULT 0,
+    ctr             REAL,
+    cpc_medio       REAL,
+    UNIQUE(data, campaign_id)
+)
+"""
+
+
+def salvar(rows: list[dict], append: bool = False,
+           tabela: str = "gads_campanhas_diario") -> int:
+    """Salva dados no SQLite na tabela especificada."""
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute(CREATE_TABLE)
+    conn.execute(_CREATE_TABLE_TPL.format(tabela=tabela))
+    # Índices na tabela destino
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_data ON {tabela}(data)")
+    conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_camp ON {tabela}(campanha)")
 
     if not append and rows:
-        customer_id = rows[0]["customer_id"]
-        conn.execute("DELETE FROM gads_campanhas_diario WHERE customer_id = ?",
-                     (customer_id,))
-        logger.info("[%s] Tabela limpa (modo replace)", customer_id)
+        conn.execute(f"DELETE FROM {tabela}")
+        logger.info("[%s] Tabela %s limpa (modo replace)", rows[0].get('customer_id','?'), tabela)
 
     cols = [
-        "customer_id", "data", "campaign_id", "campanha", "tipo_campanha",
+        "data", "campaign_id", "campanha", "tipo_campanha",
         "status", "impressoes", "cliques", "investimento",
         "conversoes", "valor_conversao", "ctr", "cpc_medio",
     ]
     sql = f"""
-        INSERT OR REPLACE INTO gads_campanhas_diario ({', '.join(cols)})
+        INSERT OR REPLACE INTO {tabela} ({', '.join(cols)})
         VALUES ({', '.join(['?'] * len(cols))})
     """
     for r in rows:
@@ -154,42 +177,47 @@ def salvar(rows: list[dict], append: bool = False) -> int:
 
     conn.commit()
     conn.close()
-    logger.info("%d linhas salvas em gads_campanhas_diario", len(rows))
+    logger.info("%d linhas salvas em %s", len(rows), tabela)
     return len(rows)
 
 
-def resumo_banco(customer_id: str) -> dict:
-    """Estatísticas do banco para um customer_id."""
+def resumo_banco(tabela: str = "gads_campanhas_diario") -> dict:
+    """Estatísticas do banco para uma tabela."""
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
-    r = conn.execute("""
-        SELECT COUNT(*) AS n,
-               MIN(data) AS inicio,
-               MAX(data) AS fim,
-               COUNT(DISTINCT campaign_id) AS campanhas,
-               ROUND(SUM(investimento), 2) AS investimento_total
-        FROM gads_campanhas_diario
-        WHERE customer_id = ?
-    """, (customer_id,)).fetchone()
-    conn.close()
-    return dict(r)
+    try:
+        r = conn.execute(f"""
+            SELECT COUNT(*) AS n,
+                   MIN(data) AS inicio,
+                   MAX(data) AS fim,
+                   COUNT(DISTINCT campaign_id) AS campanhas,
+                   ROUND(SUM(investimento), 2) AS investimento_total
+            FROM {tabela}
+        """).fetchone()
+        return dict(r)
+    except Exception:
+        return {}
+    finally:
+        conn.close()
 
 
-def carregar_gads(customer_id: str, dias: int = 30, append: bool = False):
+def carregar_gads(customer_id: str, dias: int = 30, append: bool = False,
+                  tabela: str = "gads_campanhas_diario"):
     """
     Wrapper programático — busca via API e salva no SQLite.
-    
+
     Args:
         customer_id: ID da conta Google Ads (sem hífens)
         dias: quantos dias puxar (padrão 30)
         append: se True, não limpa antes de inserir
+        tabela: nome da tabela destino (padrão: gads_campanhas_diario)
 
     Returns:
         (linhas_inseridas: int, periodo: str)
     """
     rows   = buscar_campanhas(customer_id=customer_id, dias=dias)
-    linhas = salvar(rows, append=append)
-    info   = resumo_banco(customer_id)
+    linhas = salvar(rows, append=append, tabela=tabela)
+    info   = resumo_banco(tabela)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
     return linhas, periodo
 

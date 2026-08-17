@@ -1,21 +1,42 @@
 {
   "_comentario": "Registry de clientes do Agente de Performance Guará. Adicionar novo cliente = novo bloco aqui, sem mexer em código.",
+  "_padrao_tabelas": "{cliente_key}_{plataforma}_diario",
   "clientes": {
     "source_of": {
       "nome":           "Source OF",
       "ativo":          true,
-      "plataforma":     "google_ads",
-      "gads_customer_id": "4311260590",
-      "loader":         "google_ads.loader",
-      "loader_fn":      "carregar_gads",
-      "loader_params":  {"dias": 90},
+      "plataformas": {
+        "google_ads": {
+          "ativo":          true,
+          "gads_customer_id": "4311260590",
+          "loader":         "google_ads.loader",
+          "loader_fn":      "carregar_gads",
+          "loader_params":  {"dias": 8},
+          "tabela_db":      "source_of_gads_diario"
+        },
+        "meta_ads": {
+          "ativo":          false,
+          "_comentario":    "Aguardando access token Meta Ads API",
+          "meta_account_id": "act_1059884611898142",
+          "loader":         "meta_ads.loader",
+          "loader_fn":      "carregar_meta",
+          "loader_params":  {"dias": 8},
+          "tabela_db":      "source_of_meta_ads_diario"
+        },
+        "shopify": {
+          "ativo":          true,
+          "loader":         "db.shopify_sync",
+          "loader_fn":      "sync_shopify",
+          "loader_params":  {"dias": 8},
+          "tabela_db":      "source_of_shopify_diario"
+        }
+      },
       "builder":        "relatorio.builder",
       "builder_semanal":"gerar_relatorio_semanal",
       "builder_mensal": "gerar_relatorio_mensal",
       "notion_key":     "source_of",
       "slack_emoji":    "🔵",
-      "slack_label":    "Source OF · Google Ads",
-      "tabela_db":      "gads_campanhas_diario",
+      "slack_label":    "Source OF",
       "schedules": {
         "semanal": "0 8 * * 1",
         "mensal":  "0 8 1 * *"
@@ -23,20 +44,24 @@
     },
     "pod_kombucha": {
       "nome":           "POD Kombucha",
-      "ativo":          false,
-      "_comentario":    "Google Ads API: aguardando customer_id. Temporariamente inativo.",
-      "plataforma":     "google_ads",
-      "gads_customer_id": null,
-      "loader":         "google_ads.loader",
-      "loader_fn":      "carregar_gads",
-      "loader_params":  {"dias": 90},
+      "ativo":          true,
+      "plataformas": {
+        "google_ads": {
+          "ativo":          false,
+          "_comentario":    "API: aguardando customer_id. Dados históricos via Sheets migrados.",
+          "gads_customer_id": null,
+          "loader":         "google_ads.loader",
+          "loader_fn":      "carregar_gads",
+          "loader_params":  {"dias": 8},
+          "tabela_db":      "pod_kombucha_gads_diario"
+        }
+      },
       "builder":        "relatorio.builder_pod",
       "builder_semanal":"gerar_relatorio_semanal_pod",
       "builder_mensal": "gerar_relatorio_mensal_pod",
       "notion_key":     "pod_kombucha",
       "slack_emoji":    "🟢",
-      "slack_label":    "POD Kombucha · Google Ads",
-      "tabela_db":      "gads_campanhas_diario",
+      "slack_label":    "POD Kombucha",
       "schedules": {
         "semanal": "0 8 * * 1",
         "mensal":  "0 8 1 * *"
