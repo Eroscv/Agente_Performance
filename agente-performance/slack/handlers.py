@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from agent.engine import consultar
 from agent.claude_client import gerar_resposta
 from agent.context_store import append_history, build_context_summary
+from db.consultas_log import registrar_consulta, aprovar_consulta as _aprovar_consulta_log
 from agent.conversation_log import registrar as log_registrar
 from agent.cache import get as cache_get
 from slack.formatter import markdown_to_blocks, truncar_blocos
@@ -595,6 +596,29 @@ async def _processar_e_responder(
                         )
                 except Exception as e_sug:
                     logger.debug("[handler] sugestão proativa: %s", e_sug)
+
+            # Salvar consulta no banco (consultas_usuarios)
+            try:
+                duracao_ms = int((time.time() - t_inicio) * 1000)
+                resp_msg_ts_log = msg.get("ts") if msg else None
+                registrar_consulta(
+                    pergunta=text,
+                    resposta=resposta_final or None,
+                    intent=intent if 'intent' in dir() else None,
+                    cliente_key=meta.get("cliente") if 'meta' in dir() else None,
+                    plataforma=meta.get("plataforma") if 'meta' in dir() else None,
+                    data_inicio=str(meta.get("data_inicio")) if 'meta' in dir() and meta.get("data_inicio") else None,
+                    data_fim=str(meta.get("data_fim")) if 'meta' in dir() and meta.get("data_fim") else None,
+                    user_id=user_id,
+                    channel=channel,
+                    thread_ts=thread_ts,
+                    slack_msg_ts=resp_msg_ts_log,
+                    cache_hit=cache_hit,
+                    tem_erro=bool(erro_final),
+                    duracao_ms=duracao_ms,
+                )
+            except Exception as e_clog:
+                logger.debug("[ConsultasLog] erro ao salvar (não crítico): %s", e_clog)
 
         except Exception as e:
             erro_final = str(e)
@@ -1188,6 +1212,12 @@ async def handle_reaction(event, client):
                 logger.info("KB local: entrada aprovada (ts=%s)", msg_ts)
         except Exception as e_kbl:
             logger.debug("KB local: erro ao aprovar (não crítico): %s", e_kbl)
+
+        # Marca consulta como aprovada em consultas_usuarios
+        try:
+            _aprovar_consulta_log(msg_ts)
+        except Exception as e_cu:
+            logger.debug("[ConsultasLog] erro ao aprovar (não crítico): %s", e_cu)
 
     except Exception as e:
         logger.debug("KB reaction handler erro (não crítico): %s", e)
