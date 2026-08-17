@@ -348,6 +348,22 @@ def gerar_relatorio_semanal(
         # 11. Tendência WoW
         blocos += _blocos_tendencia_semanal()
 
+
+    # ── Insights & Ações via Claude ──────────────────────────────────────────
+    try:
+        from relatorio.insights import gerar_insights
+        periodo_insights = "mensal" if tipo == "mensal" else "semanal"
+        blocos += gerar_insights(
+            resumo=resumo,
+            campanhas=campanhas,
+            periodo=periodo_insights,
+            cliente_key=cliente,
+            plataforma="meta_ads",
+            periodo_str=periodo_str,
+        )
+    except Exception as e:
+        logger.warning("[Semanal] Insights falhou: %s", e)
+
     # ── Publicação ─────────────────────────────────────────────────────────
     if not publicar:
         logger.info("[Builder] publicar=False — relatório gerado em memória")

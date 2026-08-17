@@ -345,6 +345,22 @@ def gerar_relatorio_diario(
     if shopify:
         blocos += _blocos_shopify(shopify)
 
+    # ── Insights & Ações via Claude ───────────────────────────────────────
+    try:
+        from relatorio.insights import gerar_insights
+        dados_extras = {"shopify": shopify} if shopify else None
+        blocos += gerar_insights(
+            resumo=resumo,
+            campanhas=campanhas,
+            periodo="diario",
+            cliente_key=cliente_key,
+            plataforma=plataforma,
+            periodo_str=data_fmt,
+            dados_extras=dados_extras,
+        )
+    except Exception as e:
+        logger.warning("[Diário] Insights falhou: %s", e)
+
     blocos.append(paragrafo(
         f"Gerado em {time.strftime('%d/%m/%Y %H:%M')} · Dados via API direta: {nome_p}",
         bold=False
