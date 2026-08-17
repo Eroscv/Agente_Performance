@@ -59,16 +59,26 @@ def get_builder(cliente_key: str, tipo: str = "semanal") -> Callable:
 
     Args:
         cliente_key: chave do cliente (ex: 'source_of')
-        tipo:        'semanal' ou 'mensal'
+        tipo:        'semanal', 'mensal' ou 'diario'
 
     Returns:
         Função builder pronta para chamar
     """
     cfg = get_cliente(cliente_key)
     fn_name = cfg.get(f"builder_{tipo}")
-    modulo_path = cfg.get("builder")
-    if not fn_name or not modulo_path:
+    if not fn_name:
         raise ValueError(f"Builder '{tipo}' não configurado para '{cliente_key}'")
+
+    # Resolve módulo por tipo
+    modulo_map = {
+        "semanal": "relatorio.builder_semanal",
+        "mensal":  "relatorio.builder_mensal",
+        "diario":  "relatorio.builder_diario",
+    }
+    modulo_path = modulo_map.get(tipo) or cfg.get("builder")
+    if not modulo_path:
+        raise ValueError(f"Módulo builder não resolvido para tipo '{tipo}' em '{cliente_key}'")
+
     modulo = import_module(modulo_path)
     return getattr(modulo, fn_name)
 

@@ -439,10 +439,11 @@ def executar_cliente(
         url = resultado.get("url", "—")
         logger.info("[%s] Slack: %s | Notion: %s", cliente_key, "OK" if ok_slack else "FALHOU", url)
 
-        # Posta link do Notion como mensagem standalone (somente no semanal)
-        if periodo == "semana" and url and url != "—":
+        # Posta link do Notion como mensagem standalone (semanal, mensal e diário)
+        if url and url != "—":
+            tipo_label_notion = {"semana": "Semanal", "mes": "Mensal", "diario": "Diário"}.get(periodo, tipo_label)
             postar_slack_fallback(
-                f"{emoji} *{label} · Relatório Semanal no Notion*\n"
+                f"{emoji} *{label} · Relatório {tipo_label_notion} no Notion*\n"
                 f"_{periodo_str}_\n"
                 f"📎 <{url}|Abrir relatório completo no Notion>"
             )
@@ -506,7 +507,7 @@ def main():
         data_fim = date.fromisoformat(args.data_fim)
     periodo_str  = f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}"
     tipo_label   = {"diario": "Diário", "semana": "Semanal", "mes": "Mensal"}.get(args.periodo, args.periodo.title())
-    tipo_builder = "mensal" if args.periodo == "mes" else "semanal"
+    tipo_builder = {"mes": "mensal", "semana": "semanal", "diario": "diario"}.get(args.periodo, "semanal")
 
     logger.info("=== Cron Todos os Clientes — %s (%s) ===", tipo_label, periodo_str)
 

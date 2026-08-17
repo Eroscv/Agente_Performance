@@ -259,25 +259,45 @@ def _blocos_alertas(campanhas: list[dict]) -> list[dict]:
 
 def gerar_relatorio_diario(
     cliente_key: str,
-    plataforma: str,
+    plataforma: str = None,
     data: str = None,
     publicar: bool = True,
+    data_inicio=None,
+    data_fim=None,
 ) -> dict:
     """
     Gera relatório diário para um cliente+plataforma e publica no Notion.
 
     Args:
         cliente_key: 'source_of' | 'pod_kombucha'
-        plataforma:  'meta_ads' | 'google_ads'
+        plataforma:  'meta_ads' | 'google_ads' (padrão: detecta automaticamente)
         data:        'YYYY-MM-DD' (padrão: ontem)
         publicar:    se False, retorna blocos sem publicar
+        data_inicio: date (alternativa a data, usa data_fim como referência)
+        data_fim:    date (alternativa a data)
 
     Returns:
         dict com url, page_id, resumo
     """
+    from datetime import date as _date
+
+    # Resolve data a partir de data_fim ou data_inicio se passados pelo cron
     if data is None:
-        from datetime import date as _date
-        data = (_date.today() - timedelta(days=1)).isoformat()
+        if data_fim is not None:
+            data = data_fim.isoformat() if hasattr(data_fim, 'isoformat') else str(data_fim)
+        else:
+            data = (_date.today() - timedelta(days=1)).isoformat()
+
+    # Detecta plataforma automaticamente se não informada
+    if plataforma is None:
+        from db.connection import query_one as _q
+        for _plat in ("meta_ads", "google_ads"):
+            _r = _buscar_resumo_dia(data, cliente_key, _plat)
+            if _r and _r.get("investimento"):
+                plataforma = _plat
+                break
+        if plataforma is None:
+            plataforma = "meta_ads"  # fallback
 
     resumo = _buscar_resumo_dia(data, cliente_key, plataforma)
     if not resumo or not resumo.get("investimento"):

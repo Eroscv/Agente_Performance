@@ -30,9 +30,10 @@
           "tabela_db":      "source_of_shopify_diario"
         }
       },
-      "builder":        "relatorio.builder",
+      "builder":        "relatorio.builder_diario",
       "builder_semanal":"gerar_relatorio_semanal",
       "builder_mensal": "gerar_relatorio_mensal",
+      "builder_diario": "gerar_relatorio_diario",
       "notion_key":     "source_of",
       "slack_emoji":    "🔵",
       "slack_label":    "Source OF",
@@ -67,6 +68,7 @@
       "builder":        "relatorio.builder_pod",
       "builder_semanal":"gerar_relatorio_semanal_pod",
       "builder_mensal": "gerar_relatorio_mensal_pod",
+      "builder_diario": "gerar_relatorio_diario",
       "notion_key":     "pod_kombucha",
       "slack_emoji":    "🟢",
       "slack_label":    "POD Kombucha",
