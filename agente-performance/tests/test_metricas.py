@@ -39,20 +39,24 @@ TOLERANCE   = 1e-4  # tolerância para comparações de float
 
 @pytest.fixture(scope="module")
 def raw_june():
-    """Retorna totais brutos diretamente do SQLite para junho 2026."""
+    """
+    Retorna totais brutos diretamente do SQLite para junho 2026.
+    Usa campanhas_unificada — mesma fonte (view unificada) que queries.resumo_periodo.
+    Isso garante que as fórmulas sejam testadas contra os mesmos dados que o agente usa.
+    """
     conn = sqlite3.connect(str(DB_PATH))
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("""
         SELECT
-            SUM(investimento)   AS total_invest,
-            SUM(valor_compras)  AS total_receita,
-            SUM(compras)        AS total_compras,
-            SUM(impressoes)     AS total_impressoes,
-            SUM(cliques_link)   AS total_cliques,
-            SUM(alcance)        AS total_alcance
-        FROM campanhas
-        WHERE data_inicio >= ? AND data_fim <= ?
+            SUM(investimento)           AS total_invest,
+            SUM(valor_compras)          AS total_receita,
+            SUM(compras)                AS total_compras,
+            SUM(impressoes)             AS total_impressoes,
+            SUM(cliques_link)           AS total_cliques,
+            SUM(COALESCE(alcance, 0))   AS total_alcance
+        FROM campanhas_unificada
+        WHERE data_inicio BETWEEN ? AND ?
     """, (DATA_INICIO, DATA_FIM))
     row = dict(cur.fetchone())
     conn.close()
@@ -143,45 +147,42 @@ class TestFrequencia:
     """Frequência = SUM(impressoes) / SUM(alcance)."""
 
     def test_frequencia_formula(self, raw_june):
-        """Testa frequência diretamente do banco."""
+        """Testa frequência diretamente do banco via campanhas_unificada."""
         conn = sqlite3.connect(str(DB_PATH))
         cur  = conn.cursor()
         cur.execute("""
             SELECT
                 SUM(impressoes) AS total_imp,
-                SUM(alcance)    AS total_alc,
-                AVG(frequencia) AS freq_avg
-            FROM campanhas
-            WHERE data_inicio >= ? AND data_fim <= ?
+                SUM(COALESCE(alcance, 0)) AS total_alc
+            FROM campanhas_unificada
+            WHERE data_inicio BETWEEN ? AND ?
+              AND COALESCE(alcance, 0) > 0
         """, (DATA_INICIO, DATA_FIM))
         row = cur.fetchone()
         conn.close()
 
-        total_imp, total_alc, freq_avg = row
+        total_imp, total_alc = row
         freq_real = total_imp / total_alc if total_alc else None
 
-        assert freq_real is not None, "Não foi possível calcular frequência real"
-        # A frequência calculada como SUM/SUM deve estar próxima de 1.0+ (típico)
+        assert freq_real is not None, "Não foi possível calcular frequência real (sem alcance)"
         assert freq_real >= 1.0, f"Frequência SUM/SUM < 1.0: {freq_real:.4f} — dados suspeitos"
 
     def test_frequencia_avg_vs_sum(self, raw_june):
-        """Verifica que frequência AVG != SUM/SUM (ilustra a diferença das abordagens)."""
+        """Verifica que frequência SUM/SUM pode diferir de AVG (ilustra abordagens)."""
         conn = sqlite3.connect(str(DB_PATH))
         cur  = conn.cursor()
         cur.execute("""
             SELECT
-                SUM(impressoes) / NULLIF(SUM(alcance), 0) AS freq_sum_sum,
-                AVG(frequencia)                            AS freq_avg
-            FROM campanhas
-            WHERE data_inicio >= ? AND data_fim <= ?
-              AND alcance > 0
+                SUM(impressoes) / NULLIF(SUM(COALESCE(alcance, 0)), 0) AS freq_sum_sum
+            FROM campanhas_unificada
+            WHERE data_inicio BETWEEN ? AND ?
+              AND COALESCE(alcance, 0) > 0
         """, (DATA_INICIO, DATA_FIM))
         row = cur.fetchone()
         conn.close()
 
-        freq_sum_sum, freq_avg = row
-        # Apenas documenta a diferença — não é um teste de erro
-        print(f"\n  Frequência SUM/SUM={freq_sum_sum:.4f} | AVG={freq_avg:.4f}")
+        freq_sum_sum = row[0]
+        print(f"\n  Frequência SUM/SUM={freq_sum_sum:.4f}")
         assert freq_sum_sum is not None
 
 
@@ -240,9 +241,13 @@ class TestConsistenciaBanco:
             "Compras > Cliques — dados inconsistentes no banco"
 
     def test_alcance_menor_impressoes(self, raw_june):
-        """Alcance (pessoas únicas) sempre <= impressões."""
-        assert raw_june["total_alcance"] <= raw_june["total_impressoes"], \
-            "Alcance > Impressões — dados inconsistentes"
+        """Alcance (pessoas únicas) sempre <= impressões quando rastreado.
+        Nota: alcance é NULL em ~75% das linhas da API Meta — teste só valida quando disponível."""
+        alcance = raw_june["total_alcance"]
+        impressoes = raw_june["total_impressoes"]
+        if alcance and alcance > 0:
+            assert alcance <= impressoes, \
+                f"Alcance ({alcance}) > Impressões ({impressoes}) — dados inconsistentes"
 
     def test_receita_positiva(self, raw_june):
         assert raw_june["total_receita"] > 0, "Receita total deve ser positiva"

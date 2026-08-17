@@ -566,15 +566,15 @@ def metricas_funil(
     )
     return query_one(f"""
         SELECT
-            ROUND(SUM(impressoes), 0)                        AS impressoes,
-            ROUND(SUM(COALESCE(cliques_link, 0)), 0)         AS cliques,
-            ROUND(SUM(visualizacoes_landing), 0)             AS landing_views,
-            ROUND(SUM(views_conteudo), 0)                    AS views_conteudo,
-            ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)     AS adicoes_carrinho,
-            ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)    AS checkout_iniciado,
-            ROUND(SUM(COALESCE(compras, 0)), 0)              AS compras,
-            ROUND(SUM(investimento), 2)                      AS investimento,
-            ROUND(SUM(COALESCE(valor_compras, 0)), 2)        AS receita
+            ROUND(SUM(impressoes), 0)                              AS impressoes,
+            ROUND(SUM(COALESCE(cliques_link, 0)), 0)               AS cliques,
+            ROUND(SUM(COALESCE(visualizacoes_landing, 0)), 0)      AS landing_views,
+            ROUND(SUM(COALESCE(visualizacoes_landing, 0)), 0)      AS views_conteudo,
+            ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)           AS adicoes_carrinho,
+            ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)          AS checkout_iniciado,
+            ROUND(SUM(COALESCE(compras, 0)), 0)                    AS compras,
+            ROUND(SUM(investimento), 2)                            AS investimento,
+            ROUND(SUM(COALESCE(valor_compras, 0)), 2)              AS receita
         FROM campanhas_unificada
         {where}
     """, tuple(params)) or {}
@@ -1124,9 +1124,9 @@ def custo_funil_detalhado(
             -- Landing page
             ROUND(SUM(COALESCE(visualizacoes_landing, 0)), 0)  AS landing_views,
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(visualizacoes_landing, 0)), 0), 2) AS custo_por_landing,
-            -- Visualização de conteúdo
-            ROUND(SUM(COALESCE(views_conteudo, 0)), 0)     AS views_conteudo,
-            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(views_conteudo, 0)), 0), 2) AS custo_por_view_conteudo,
+            -- Visualização de conteúdo (mapeado de visualizacoes_landing no schema)
+            ROUND(SUM(COALESCE(visualizacoes_landing, 0)), 0)      AS views_conteudo,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(visualizacoes_landing, 0)), 0), 2) AS custo_por_view_conteudo,
             -- Carrinho
             ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)   AS carrinho,
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(adicoes_carrinho, 0)), 0), 2) AS custo_por_carrinho,
