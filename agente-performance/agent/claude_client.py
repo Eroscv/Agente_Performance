@@ -5,6 +5,7 @@ Cliente Anthropic para o Agente de Performance Guará.
 Recebe dados estruturados das queries e gera resposta conversacional em PT-BR.
 """
 
+import json
 import logging
 import os
 from typing import Any
@@ -384,24 +385,89 @@ Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.
         return f"⚠️ Erro ao gerar análise: {e}"
 
 
+# ── Colunas numéricas conhecidas para sumário estatístico ─────────────────────
+_NUMERIC_COLS = {
+    "investimento", "valor_compras", "compras", "impressoes", "cliques_link",
+    "cliques_todos", "alcance", "frequencia", "cpm", "ctr_link", "cpc_link",
+    "cpa", "roas_compras", "roas", "video_3s", "thruplays", "reproducoes_video",
+    "visualizacoes_landing", "adicoes_carrinho", "checkout_iniciado",
+    "compras_app", "compras_site", "conversas_iniciadas",
+    # aliases de SQL dinâmico
+    "roas_atual", "roas_anterior", "delta_roas", "delta_roas_pct",
+    "investimento_atual", "investimento_anterior", "delta_investimento",
+    "delta_investimento_pct", "total_compras", "total_cliques",
+    "investimento_total", "valor_compras_total", "ctr_percentual",
+}
+
+
+def _sumario_lista(rows: list[dict]) -> str:
+    """
+    Para list[dict] produz:
+      1. sumário estatístico (totais/médias das colunas numéricas)
+      2. JSON compacto das primeiras 30 linhas
+    Evita serializar centenas de linhas como texto bruto.
+    """
+    if not rows:
+        return "Nenhum resultado encontrado."
+
+    amostra = rows[:30]
+    cols = list(rows[0].keys()) if rows else []
+    num_cols = [c for c in cols if c in _NUMERIC_COLS or
+                any(rows[0].get(c) is not None and isinstance(rows[0].get(c), (int, float))
+                    for _ in [None])]
+
+    # Sumário: total e média das colunas numéricas (se útil)
+    sumario_parts = []
+    for col in num_cols:
+        vals = [r[col] for r in rows if r.get(col) is not None and isinstance(r.get(col), (int, float))]
+        if not vals:
+            continue
+        total = sum(vals)
+        media = total / len(vals)
+        # ROAS e deltas: média faz mais sentido que total
+        if any(x in col for x in ("roas", "ctr", "frequencia", "cpm", "cpc", "cpa", "delta_pct", "pct")):
+            sumario_parts.append(f"{col}: média={media:.2f}")
+        else:
+            sumario_parts.append(f"{col}: total={total:.2f}")
+
+    linhas = []
+    n_total = len(rows)
+    n_exibido = len(amostra)
+    linhas.append(f"Total de linhas: {n_total}" + (f" (exibindo primeiras {n_exibido})" if n_total > n_exibido else ""))
+    if sumario_parts:
+        linhas.append("Sumário: " + " | ".join(sumario_parts))
+    linhas.append("")
+
+    # JSON compacto — uma linha por registro
+    for i, row in enumerate(amostra, 1):
+        # Omite valores None para reduzir ruído
+        compacto = {k: v for k, v in row.items() if v is not None}
+        linhas.append(f"  {i}. {json.dumps(compacto, ensure_ascii=False)}")
+
+    if n_total > n_exibido:
+        linhas.append(f"  ... e mais {n_total - n_exibido} registros")
+
+    return "\n".join(linhas)
+
+
 def _formatar_dados(dados: Any, intent: str) -> str:
-    """Serializa dados para texto estruturado legível pelo Claude."""
+    """
+    Serializa dados para JSON estruturado compacto legível pelo LLM.
+    Substitui serialização k=v por JSON real + sumário estatístico.
+    """
     if dados is None:
         return "Nenhum dado encontrado."
 
     if isinstance(dados, dict):
         if not dados:
             return "Nenhum dado encontrado."
-        linhas = []
-        breakdown = dados.get("breakdown_diario")
-        for k, v in dados.items():
-            if k == "breakdown_diario":
-                continue  # será formatado separado abaixo
-            if v is not None:
-                linhas.append(f"  {k}: {v}")
-        resultado = "\n".join(linhas)
 
-        # Injeta tabela de breakdown diário quando presente
+        breakdown = dados.get("breakdown_diario")
+        # Campos principais como JSON compacto (sem breakdown — será separado)
+        principais = {k: v for k, v in dados.items() if k != "breakdown_diario" and v is not None}
+        resultado = json.dumps(principais, ensure_ascii=False, indent=2)
+
+        # Tabela de breakdown diário (mais legível como tabela que como JSON)
         if breakdown:
             from datetime import date as _date
             _DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
@@ -416,12 +482,12 @@ def _formatar_dados(dados: Any, intent: str) -> str:
                     dia_label = f"{nome_dia} {_d.strftime('%d/%m')}"
                 except Exception:
                     dia_label = dia_str
-                invest = d.get("invest") or 0
-                receita= d.get("receita") or 0
-                roas   = d.get("roas")
-                conv   = d.get("conversoes") or 0
-                ctr    = d.get("ctr") or 0
-                roas_s = f"{roas:.2f}x" if roas else "—"
+                invest  = d.get("invest") or 0
+                receita = d.get("receita") or 0
+                roas    = d.get("roas")
+                conv    = d.get("conversoes") or 0
+                ctr     = d.get("ctr") or 0
+                roas_s  = f"{roas:.2f}x" if roas else "—"
                 resultado += (
                     f"\n  {dia_label:<16} | R$ {invest:>8.2f} | R$ {receita:>8.2f} "
                     f"| {roas_s:>5} | {conv:>5.1f} | {ctr:>4.2f}%"
@@ -429,20 +495,7 @@ def _formatar_dados(dados: Any, intent: str) -> str:
         return resultado
 
     if isinstance(dados, list):
-        if not dados:
-            return "Nenhum resultado encontrado para os filtros aplicados."
-
-        # Limita a 50 linhas para não estourar o contexto
-        amostra = dados[:50]
-        linhas = []
-        for i, row in enumerate(amostra, 1):
-            campos = ", ".join(f"{k}={v}" for k, v in row.items() if v is not None)
-            linhas.append(f"  {i}. {campos}")
-
-        resultado = "\n".join(linhas)
-        if len(dados) > 50:
-            resultado += f"\n  ... (e mais {len(dados) - 50} registros)"
-        return resultado
+        return _sumario_lista(dados)
 
     return str(dados)
 
