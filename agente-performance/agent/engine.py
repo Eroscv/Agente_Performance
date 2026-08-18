@@ -967,3 +967,49 @@ def consultar_sql(sql: str) -> list[dict]:
         raise ValueError("Apenas SELECT é permitido via consultar_sql()")
     return raw_query(sql_clean)
 
+
+# ── Multi-agentes: Fase 1 ──────────────────────────────────────────────────────────────
+#
+# OrchestratorAgent é a nova arquitetura. Por compatibilidade total,
+# a função consultar() acima permanece intacta como implementação de
+# referência. O orquestrador a substitui gradualmente.
+#
+# Para usar diretamente:
+#   from agent.orchestrator_agent import OrchestratorAgent
+#   orq = OrchestratorAgent()
+#   resultado = orq.consultar(pergunta)
+#
+# Os handlers Slack já usam a função consultar() deste módulo —
+# que em produção delegará ao orquestrador quando o feature flag
+# MULTI_AGENT=1 estiver ativo.
+
+_orchestrator_instance: "OrchestratorAgent | None" = None
+
+
+def _get_orchestrator():
+    global _orchestrator_instance
+    if _orchestrator_instance is None:
+        from agent.orchestrator_agent import OrchestratorAgent
+        _orchestrator_instance = OrchestratorAgent()
+    return _orchestrator_instance
+
+
+def consultar_v2(
+    pergunta: str,
+    thread_ts: Optional[str] = None,
+    channel: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> dict:
+    """
+    Nova implementação de consultar() via OrchestratorAgent.
+
+    Delega inteiramente para o orquestrador da Fase 1.
+    Compatível com a mesma assinatura e formato de retorno de consultar().
+    """
+    return _get_orchestrator().consultar(
+        pergunta=pergunta,
+        thread_ts=thread_ts,
+        channel=channel,
+        user_id=user_id,
+    )
+
