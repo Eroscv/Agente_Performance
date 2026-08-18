@@ -117,7 +117,7 @@ class TestPerformanceCampanha:
         assert isinstance(r, list) and len(r) > 0, f"Sem dados para campanha '{CAMPANHA_A}'"
 
     def test_match_like_fragmento(self):
-        r = queries.performance_campanha("hidratante", DATA_INICIO, DATA_FIM)
+        r = queries.performance_campanha("search", DATA_INICIO, DATA_FIM)
         assert isinstance(r, list) and len(r) > 0, "Fallback LIKE deve encontrar campanha por fragmento"
 
     def test_campos_serie_temporal(self):
