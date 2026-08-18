@@ -432,6 +432,47 @@ def executar_cliente(
         if resultado.get("erro"):
             raise RuntimeError(resultado["erro"])
 
+        # ── Validação obrigatória antes do envio ao Slack ─────────────────
+        _resumo_val  = resultado.get("resumo") or {}
+        _url_val     = resultado.get("url", "—")
+        _titulo_val  = resultado.get("titulo", "")
+        _blocos_val  = resultado.get("blocos", [])
+        _periodo_ok  = resultado.get("data") or resultado.get("data_inicio")
+
+        _falhas_val: list[str] = []
+        if not _resumo_val:
+            _falhas_val.append("resumo ausente ou vazio")
+        if not _resumo_val.get("investimento"):
+            _falhas_val.append("investimento zerado/ausente no resumo")
+        if not _titulo_val:
+            _falhas_val.append("título do relatório ausente")
+        if not _blocos_val:
+            _falhas_val.append("nenhum bloco de conteúdo gerado")
+        if not _periodo_ok:
+            _falhas_val.append("período do relatório não identificado")
+        if publicar and (_url_val == "—" or not _url_val):
+            _falhas_val.append("URL do Notion ausente (publicação falhou?)")
+
+        if _falhas_val:
+            _motivo_val = "; ".join(_falhas_val)
+            logger.error(
+                "[%s] ❌ VALIDAÇÃO PRÉ-SLACK FALHOU — bloqueando envio. Motivos: %s",
+                cliente_key, _motivo_val,
+            )
+            raise RuntimeError(
+                f"Relatório bloqueado: dados inválidos ou incompletos ({_motivo_val})"
+            )
+
+        logger.info(
+            "[%s] ✅ Validação pré-Slack OK — resumo=%s, título=%s, blocos=%d, url=%s, período=%s",
+            cliente_key,
+            bool(_resumo_val),
+            bool(_titulo_val),
+            len(_blocos_val),
+            _url_val[:60] if _url_val != "—" else "—",
+            _periodo_ok,
+        )
+
         # ── Item 9: Delta vs período anterior ─────────────────────────────
         delta = _calcular_delta(resultado, data_inicio, data_fim, cliente_key)
 
@@ -441,6 +482,13 @@ def executar_cliente(
         ok_slack = postar_slack_fallback(_msg_slack)
 
         url = resultado.get("url", "—")
+
+        # Confirma envio Slack
+        if not ok_slack:
+            logger.error("[%s] ❌ Slack: envio falhou após tentativas", cliente_key)
+        else:
+            logger.info("[%s] ✅ Slack: mensagem enviada com sucesso", cliente_key)
+
         logger.info("[%s] Slack: %s | Notion: %s", cliente_key, "OK" if ok_slack else "FALHOU", url)
 
         # Posta link do Notion como mensagem standalone (semanal, mensal e diário)
