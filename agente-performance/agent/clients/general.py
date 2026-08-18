@@ -33,7 +33,7 @@ class GeneralAgent(BaseClientAgent):
         """
         Executa para todos os segmentos ativos em paralelo e agrega.
         """
-        from agent.engine import _carregar_segmentos_ativos
+        from agent.registry import carregar_segmentos_ativos as _carregar_segmentos_ativos
 
         intent      = params.get("intent", "resumo_geral")
         intents     = params.get("intents", [intent])

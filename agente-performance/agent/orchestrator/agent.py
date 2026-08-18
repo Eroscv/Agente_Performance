@@ -48,7 +48,7 @@ class OrchestratorAgent:
     def _load_segmentos(self) -> list[dict]:
         if not self._segmentos_loaded:
             try:
-                from agent.engine import _carregar_segmentos_ativos
+                from agent.registry import carregar_segmentos_ativos as _carregar_segmentos_ativos
                 self._segmentos = _carregar_segmentos_ativos()
             except Exception as e:
                 logger.warning("[Orchestrator] Segmentos não carregados: %s", e)
@@ -59,7 +59,7 @@ class OrchestratorAgent:
     def _get_canal_cliente(self, channel: str) -> Optional[str]:
         """Retorna cliente_key associado ao canal, se configurado."""
         try:
-            from agent.engine import get_contexto_cliente
+            from agent.registry import get_contexto_cliente
             return get_contexto_cliente(channel or "")
         except Exception:
             return None

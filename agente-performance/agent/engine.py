@@ -35,83 +35,14 @@ from db.connection import query as raw_query, get_conn
 logger = logging.getLogger(__name__)
 
 # ── Segmentos / clientes ──────────────────────────────────────────────────────
+# Implementação movida para agent/registry.py.
+# Re-exportado aqui para compatibilidade com imports existentes.
+from agent.registry import (
+    carregar_segmentos_ativos as _carregar_segmentos_ativos,
+    get_contexto_cliente,
+    get_available_campaigns as _get_available_campaigns_registry,
+)
 
-import json as _json
-import os as _os
-
-_CLIENTES_JSON = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "clientes.json")
-
-# Labels amigáveis para exibição
-_PLATAFORMA_LABEL = {
-    "meta_ads":   "Meta Ads",
-    "google_ads": "Google Ads",
-}
-
-
-def _carregar_segmentos_ativos() -> list[dict]:
-    """
-    Lê clientes.json e retorna lista de segmentos ativos.
-
-    Cada item:
-        {
-          "cliente_key":  str,   # ex: "source_of"
-          "plataforma":   str,   # ex: "meta_ads"
-          "nome_cliente": str,   # ex: "Source OF"
-          "nome_plat":    str,   # ex: "Meta Ads"
-          "emoji":        str,   # ex: "🔵"
-          "label":        str,   # ex: "Source OF · Meta Ads"
-        }
-
-    Exclui shopify (não é plataforma de anúncios) e entradas com ativo=false.
-    Resultado é cacheado em memória (arquivo raramente muda).
-    """
-    try:
-        with open(_CLIENTES_JSON, encoding="utf-8") as f:
-            dados = _json.load(f)
-    except Exception as e:
-        logger.error("[segmentos] Falha ao ler clientes.json: %s", e)
-        return []
-
-    segmentos = []
-    for ck, cfg in dados.get("clientes", {}).items():
-        if not cfg.get("ativo", False):
-            continue
-        nome_cliente = cfg.get("nome", ck)
-        emoji        = cfg.get("slack_emoji", "📊")
-        for plat, pcfg in cfg.get("plataformas", {}).items():
-            if plat == "shopify":
-                continue
-            if not pcfg.get("ativo", False):
-                continue
-            nome_plat = _PLATAFORMA_LABEL.get(plat, plat)
-            segmentos.append({
-                "cliente_key":  ck,
-                "plataforma":   plat,
-                "nome_cliente": nome_cliente,
-                "nome_plat":    nome_plat,
-                "emoji":        emoji,
-                "label":        f"{nome_cliente} · {nome_plat}",
-            })
-    return segmentos
-
-
-def get_contexto_cliente(canal_id: str) -> Optional[str]:
-    """
-    Infere cliente_key a partir do nome/id do canal Slack.
-
-    Regras (case-insensitive):
-      - canal contém 'pod' ou 'kombucha' → 'pod_kombucha'
-      - canal contém 'source' ou 'sof'   → 'source_of'
-      - senão                            → None (canal genérico)
-    """
-    if not canal_id:
-        return None
-    c = canal_id.lower()
-    if "pod" in c or "kombucha" in c:
-        return "pod_kombucha"
-    if "source" in c or "sof" in c:
-        return "source_of"
-    return None
 
 
 # ── helpers legados (mantidos para fallback do nlp.py) ───────────────────────
@@ -290,14 +221,8 @@ def _dados_vazios_sugestao(intent: str, campanha: Optional[str], data_inicio: Op
 
 
 def _get_available_campaigns() -> list[str]:
-    """Retorna campanhas ordenadas por investimento total (mais relevantes primeiro)."""
-    rows = raw_query("""
-        SELECT campanha FROM v_performance
-        WHERE campanha IS NOT NULL AND campanha != ''
-        GROUP BY campanha
-        ORDER BY SUM(investimento) DESC
-    """)
-    return [r["campanha"] for r in rows]
+    """Retorna campanhas ordenadas por investimento total. Delega para registry."""
+    return _get_available_campaigns_registry()
 
 
 def _executar_intent(
@@ -973,13 +898,12 @@ def consultar_sql(sql: str) -> list[dict]:
 # referência. O orquestrador a substitui gradualmente.
 #
 # Para usar diretamente:
-#   from agent.orchestrator_agent import OrchestratorAgent
+#   from agent.orchestrator import OrchestratorAgent
 #   orq = OrchestratorAgent()
 #   resultado = orq.consultar(pergunta)
 #
 # Os handlers Slack já usam a função consultar() deste módulo —
-# que em produção delegará ao orquestrador quando o feature flag
-# MULTI_AGENT=1 estiver ativo.
+# que em produção delega ao orquestrador quando MULTI_AGENT=1.
 
 _orchestrator_instance: "OrchestratorAgent | None" = None
 
@@ -987,7 +911,7 @@ _orchestrator_instance: "OrchestratorAgent | None" = None
 def _get_orchestrator():
     global _orchestrator_instance
     if _orchestrator_instance is None:
-        from agent.orchestrator_agent import OrchestratorAgent
+        from agent.orchestrator import OrchestratorAgent
         _orchestrator_instance = OrchestratorAgent()
     return _orchestrator_instance
 
@@ -998,12 +922,7 @@ def consultar_v2(
     channel: Optional[str] = None,
     user_id: Optional[str] = None,
 ) -> dict:
-    """
-    Nova implementação de consultar() via OrchestratorAgent.
-
-    Delega inteiramente para o orquestrador da Fase 1.
-    Compatível com a mesma assinatura e formato de retorno de consultar().
-    """
+    """Alias de OrchestratorAgent.consultar() — mantido para compatibilidade."""
     return _get_orchestrator().consultar(
         pergunta=pergunta,
         thread_ts=thread_ts,
