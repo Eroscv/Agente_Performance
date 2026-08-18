@@ -677,40 +677,62 @@ def executar_cliente_multi_plataforma(
         postar_slack_fallback(f"❌ *{label} · Sync FALHOU*\n_3 tentativas sem sucesso._")
         return {"ok": False, "erro": "Sync falhou após 3 tentativas"}
 
-    # 2. Detecta plataformas com dados
+    # 2. Detecta plataformas com dados (dinâmico por cliente via clientes.json)
     from db.connection import query_one as _q
     data_ref = str(data_fim)
     plataformas_disponiveis = []
 
-    def _val(row, key):
+    def _val(row, key=0):
         """Extrai valor de query_one que retorna dict."""
         if not row: return None
         v = list(row.values())[0] if isinstance(row, dict) else (row[0] if row else None)
         return v
 
-    _r = _q("SELECT SUM(investimento) FROM source_of_gads_diario WHERE data=?", (data_ref,))
-    _v = _val(_r, 0)
-    if _v:
-        plataformas_disponiveis.append("google_ads")
-        logger.info("[%s] Google Ads: dados OK (investimento=%.2f)", cliente_key, _v)
-    else:
-        logger.warning("[%s] Google Ads: sem dados para %s", cliente_key, data_ref)
+    # Detecta tabelas configuradas para este cliente
+    plats_cfg = cfg.get("plataformas", {})
 
-    _r = _q("SELECT SUM(investimento) FROM source_of_meta_ads_diario WHERE data=?", (data_ref,))
-    _v = _val(_r, 0)
-    if _v:
-        plataformas_disponiveis.append("meta_ads")
-        logger.info("[%s] Meta Ads: dados OK (investimento=%.2f)", cliente_key, _v)
-    else:
-        logger.warning("[%s] Meta Ads: sem dados para %s", cliente_key, data_ref)
+    # Google Ads
+    gads_cfg = plats_cfg.get("google_ads", {})
+    if gads_cfg.get("ativo", False):
+        tabela_g = gads_cfg.get("tabela_db") or f"{cliente_key}_gads_diario"
+        try:
+            _r = _q(f"SELECT SUM(investimento) FROM {tabela_g} WHERE data=?", (data_ref,))
+            _v = _val(_r)
+            if _v:
+                plataformas_disponiveis.append("google_ads")
+                logger.info("[%s] Google Ads: dados OK (investimento=%.2f)", cliente_key, _v)
+            else:
+                logger.warning("[%s] Google Ads: sem dados para %s", cliente_key, data_ref)
+        except Exception as _e:
+            logger.warning("[%s] Google Ads: erro ao checar tabela %s: %s", cliente_key, tabela_g, _e)
 
-    _r = _q("SELECT SUM(receita) FROM source_of_shopify_diario WHERE data=?", (data_ref,))
-    _v = _val(_r, 0)
-    if _v:
-        plataformas_disponiveis.append("shopify")
-        logger.info("[%s] Shopify: dados OK (receita=%.2f)", cliente_key, _v)
-    else:
-        logger.warning("[%s] Shopify: sem dados para %s", cliente_key, data_ref)
+    # Meta Ads
+    meta_cfg = plats_cfg.get("meta_ads", {})
+    if meta_cfg.get("ativo", False):
+        tabela_m = meta_cfg.get("tabela_db") or f"{cliente_key}_meta_ads_diario"
+        try:
+            _r = _q(f"SELECT SUM(investimento) FROM {tabela_m} WHERE data=?", (data_ref,))
+            _v = _val(_r)
+            if _v:
+                plataformas_disponiveis.append("meta_ads")
+                logger.info("[%s] Meta Ads: dados OK (investimento=%.2f)", cliente_key, _v)
+            else:
+                logger.warning("[%s] Meta Ads: sem dados para %s", cliente_key, data_ref)
+        except Exception as _e:
+            logger.warning("[%s] Meta Ads: erro ao checar tabela %s: %s", cliente_key, tabela_m, _e)
+
+    # Shopify (apenas source_of por ora)
+    if cliente_key == "source_of":
+        try:
+            _r = _q("SELECT SUM(receita) FROM source_of_shopify_diario WHERE data=?", (data_ref,))
+            _v = _val(_r)
+            if _v:
+                plataformas_disponiveis.append("shopify")
+                logger.info("[%s] Shopify: dados OK (receita=%.2f)", cliente_key, _v)
+            else:
+                logger.warning("[%s] Shopify: sem dados para %s", cliente_key, data_ref)
+        except Exception as _e:
+            logger.warning("[%s] Shopify: erro: %s", cliente_key, _e)
 
     if not plataformas_disponiveis:
         msg = f"Sem dados em nenhuma plataforma para {cliente_key} em {data_ref}"
