@@ -5,15 +5,25 @@ Re-exporta todas as funções públicas dos submódulos para compatibilidade
 com imports existentes do tipo:
     from agent.queries import resumo_periodo, top_campanhas_roas, ...
 
-Submódulos:
-    base.py       — helpers internos e diagnóstico
-    resumo.py     — resumos agregados
-    ranking.py    — rankings de campanhas
-    alertas.py    — alertas de ROAS e conversão
-    evolucao.py   — evolução diária e comparativos
-    criativos.py      — criativos e engajamento
-    shopify.py        — receita Shopify
-    comparativos.py   — comparativos entre períodos e campanhas
+Estrutura de queries:
+    shared/            — queries agnósticas (v_performance + filtro cliente_key)
+    source_of/         — atalhos Source OF por plataforma
+      meta_ads.py      — Source OF · Meta Ads
+      google_ads.py    — Source OF · Google Ads
+      shopify.py       — Source OF · Shopify (exclusivo)
+    pod_kombucha/      — atalhos POD Kombucha por plataforma
+      meta_ads.py      — POD · Meta Ads
+      google_ads.py    — POD · Google Ads (⏳ aguardando customer_id)
+
+Submódulos compartilhados (fonte de verdade):
+    base.py            — helpers internos + diagnose
+    resumo.py          — resumos agregados
+    ranking.py         — rankings de campanhas
+    alertas.py         — alertas de ROAS e conversão
+    evolucao.py        — evolução diária e comparativos
+    criativos.py       — criativos e engajamento
+    shopify.py         — receita Shopify
+    comparativos.py    — comparativos entre períodos e campanhas
 """
 
 from agent.queries.base import data_range_disponivel, listar_campanhas, verificar_gap_dados

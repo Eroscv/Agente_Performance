@@ -71,29 +71,32 @@ def _build_where(
 def _meta_ads_union_source(cliente_key: Optional[str] = None) -> str:
     """
     Retorna a cláusula FROM correta para queries de criativo (ad-level).
-    Usa as tabelas brutas Meta Ads pois a view campanhas_unificada não expoe ad_name/ad_id.
-    Filtra por cliente_key quando informado.
+    Usa as tabelas brutas Meta Ads pois a view campanhas_unificada não expõe ad_name/ad_id.
+
+    Com a nova arquitetura federada, as tabelas são acessadas via schemas ATTACHados:
+      sof_meta.source_of_meta_ads_diario
+      pod_meta.pod_kombucha_meta_ads_diario
     """
-    # Mapeamento cliente_key -> tabela Meta Ads
+    # Mapeamento cliente_key -> (schema_attach, tabela)
     _META_TABLES = {
-        "source_of":    "source_of_meta_ads_diario",
-        "pod_kombucha": "pod_kombucha_meta_ads_diario",
+        "source_of":    ("sof_meta", "source_of_meta_ads_diario"),
+        "pod_kombucha": ("pod_meta", "pod_kombucha_meta_ads_diario"),
     }
 
     if cliente_key and cliente_key in _META_TABLES:
-        tabela = _META_TABLES[cliente_key]
-        return f"FROM {tabela}"
+        schema, tabela = _META_TABLES[cliente_key]
+        return f"FROM {schema}.{tabela}"
 
     # Sem filtro de cliente: UNION de todas as tabelas Meta
     unions = []
-    for ck, tabela in _META_TABLES.items():
+    for ck, (schema, tabela) in _META_TABLES.items():
         unions.append(f"""
         SELECT '{ck}' AS cliente_key, 'meta_ads' AS plataforma,
                data, campanha, campaign_id, adset_name, adset_id,
                ad_name, ad_id, objetivo, impressoes, alcance,
                cliques_link, investimento, compras, valor_compras,
                frequencia
-        FROM {tabela}
+        FROM {schema}.{tabela}
         """)
     union_sql = " UNION ALL ".join(unions)
     return f"FROM ({union_sql}) AS meta_ads_union"
