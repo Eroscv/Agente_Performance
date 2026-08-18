@@ -49,15 +49,29 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     logger.info("⚙️  Agente de Performance Guará iniciando...")
 
-    # Garante que o banco existe
+    # Verifica banco legado (fallback)
     from db.connection import DB_PATH
     if not DB_PATH.exists():
-        logger.info("Banco não encontrado — executando loader...")
-        from db.legacy.loader_csv import load_csv
-        n = load_csv()
-        logger.info("Banco criado com %d registros", n)
+        logger.warning("Banco legado não encontrado: %s", DB_PATH)
     else:
-        logger.info("Banco encontrado: %s", DB_PATH)
+        logger.info("Banco legado: %s", DB_PATH)
+
+    # Inicializa conexão federada (multi-DB)
+    from db.connections import get_federated_conn, PERFORMANCE_DBS, INBOX_DB, OUTBOX_DB, AGENT_DB
+    try:
+        fed = get_federated_conn()
+        n_vp = fed.execute("SELECT COUNT(*) FROM v_performance").fetchone()[0]
+        logger.info("🗄️  DB federado OK — v_performance: %d rows", n_vp)
+        for (ck, plat), path in PERFORMANCE_DBS.items():
+            if path.exists():
+                logger.info("  ✅ %s/%s → %s", ck, plat, path.name)
+            else:
+                logger.warning("  ⚠️  %s/%s → AUSENTE: %s", ck, plat, path)
+        for label, path in [("inbox", INBOX_DB), ("outbox", OUTBOX_DB), ("agent", AGENT_DB)]:
+            status = "✅" if path.exists() else "⚠️ "
+            logger.info("  %s logs/%s → %s", status, label, path.name)
+    except Exception as e:
+        logger.error("Erro ao inicializar DB federado: %s", e)
 
     logger.info("✅ Pronto para receber consultas")
     yield
