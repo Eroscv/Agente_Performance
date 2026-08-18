@@ -56,7 +56,13 @@ CREATE INDEX IF NOT EXISTS idx_rellog_channel     ON relatorios_log(slack_channe
 def _conn() -> sqlite3.Connection:
     """Abre conexão via db.connections (outbox.db) e garante que a tabela existe."""
     conn = _get_db_conn()
-    conn.executescript(CREATE_TABLE)
+    # Executa DDL statement a statement (evita executescript que fecha a conexão)
+    for stmt in [s.strip() for s in CREATE_TABLE.split(";") if s.strip()]:
+        try:
+            conn.execute(stmt)
+        except Exception:
+            pass
+    conn.commit()
     # Migração automática: adiciona slack_channel se não existir (bancos legados)
     _cols = [r[1] for r in conn.execute("PRAGMA table_info(relatorios_log)").fetchall()]
     if "slack_channel" not in _cols:
@@ -161,7 +167,7 @@ def registrar_relatorio(
         )
         return new_id
     finally:
-        conn.close()
+            pass
 
 
 def listar_relatorios(
@@ -201,7 +207,7 @@ def listar_relatorios(
         rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
     finally:
-        conn.close()
+            pass
 
 
 def alerta_ja_enviado_hoje(
@@ -232,7 +238,7 @@ def alerta_ja_enviado_hoje(
         """, (cliente_key, str(data_ref))).fetchone()
         return row is not None
     finally:
-        conn.close()
+            pass
 
 
 def registrar_alerta(
@@ -288,7 +294,7 @@ def ultimo_relatorio(
         """, (cliente_key, periodicidade)).fetchone()
         return dict(row) if row else None
     finally:
-        conn.close()
+            pass
 
 
 # ── Helpers internos ───────────────────────────────────────────────────────────

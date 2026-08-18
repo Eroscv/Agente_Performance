@@ -62,7 +62,11 @@ def _conn() -> sqlite3.Connection:
 def _init():
     try:
         conn = _conn()
-        conn.executescript(_DDL)
+        for _stmt in [s.strip() for s in _DDL.split(";") if s.strip()]:
+            try:
+                conn.execute(_stmt)
+            except Exception:
+                pass
         conn.commit()
     except Exception as e:
         logger.warning("[ConsultasLog] Erro ao criar tabela: %s", e)
@@ -119,7 +123,6 @@ def registrar_consulta(
         ))
         conn.commit()
         row_id = cur.lastrowid
-        conn.close()
         return row_id
     except Exception as e:
         logger.warning("[ConsultasLog] Erro ao registrar consulta: %s", e)
@@ -135,7 +138,6 @@ def aprovar_consulta(slack_msg_ts: str) -> bool:
             (slack_msg_ts,)
         )
         conn.commit()
-        conn.close()
         return True
     except Exception as e:
         logger.warning("[ConsultasLog] Erro ao aprovar consulta: %s", e)
@@ -173,7 +175,6 @@ def listar_consultas(
         params.append(limit)
 
         rows = conn.execute(sql, params).fetchall()
-        conn.close()
         return [dict(r) for r in rows]
     except Exception as e:
         logger.warning("[ConsultasLog] Erro ao listar consultas: %s", e)
@@ -198,7 +199,6 @@ def resumo_consultas(dias: int = 30) -> dict:
             FROM consultas_usuarios
             WHERE criado_em >= datetime('now', ?)
         """, (f"-{dias} days",)).fetchone()
-        conn.close()
         return dict(r) if r else {}
     except Exception as e:
         logger.warning("[ConsultasLog] Erro no resumo: %s", e)

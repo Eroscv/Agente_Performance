@@ -47,9 +47,18 @@ CREATE INDEX IF NOT EXISTS idx_cron_runs_criado   ON cron_runs(criado_em);
 """
 
 
+_tables_ensured = False
+
 def _conn() -> sqlite3.Connection:
+    global _tables_ensured
     conn = _get_db_conn()
-    conn.executescript(CREATE_TABLE)
+    if not _tables_ensured:
+        for _stmt in [s.strip() for s in CREATE_TABLE.split(";") if s.strip()]:
+            try:
+                conn.execute(_stmt)
+            except Exception:
+                pass
+        _tables_ensured = True
     return conn
 
 
@@ -84,7 +93,6 @@ def registrar_run(
             WHERE id = ?
         """, (status, notion_url, int(slack_ok), erro, agora, run_id))
         conn.commit()
-        conn.close()
         return run_id
     else:
         cur = conn.execute("""
@@ -94,7 +102,6 @@ def registrar_run(
         """, (cliente_key, periodo, data_inicio, data_fim, status, notion_url, int(slack_ok), erro, agora))
         conn.commit()
         new_id = cur.lastrowid
-        conn.close()
         logger.debug("[CronLog] Run %d registrado: %s / %s / %s", new_id, cliente_key, periodo, status)
         return new_id
 
@@ -126,7 +133,6 @@ def listar_runs(
     params.append(limit)
 
     rows = conn.execute(sql, params).fetchall()
-    conn.close()
     return [dict(r) for r in rows]
 
 
@@ -138,7 +144,6 @@ def ultimo_run_sucesso(cliente_key: str, periodo: str) -> Optional[dict]:
         WHERE cliente_key = ? AND periodo = ? AND status = 'sucesso'
         ORDER BY criado_em DESC LIMIT 1
     """, (cliente_key, periodo)).fetchone()
-    conn.close()
     return dict(row) if row else None
 
 
@@ -161,5 +166,4 @@ def resumo_runs(dias: int = 30) -> list[dict]:
         GROUP BY cliente_key, periodo
         ORDER BY cliente_key, periodo
     """, (f"-{dias} days",)).fetchall()
-    conn.close()
     return [dict(r) for r in rows]

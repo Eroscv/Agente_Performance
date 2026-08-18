@@ -57,9 +57,18 @@ CREATE INDEX IF NOT EXISTS idx_slack_log_channel  ON slack_disparos_log(channel)
 """
 
 
+_tables_ensured = False
+
 def _conn() -> sqlite3.Connection:
+    global _tables_ensured
     conn = _get_db_conn()
-    conn.executescript(_CREATE)
+    if not _tables_ensured:
+        for _stmt in [s.strip() for s in _CREATE.split(";") if s.strip()]:
+            try:
+                conn.execute(_stmt)
+            except Exception:
+                pass
+        _tables_ensured = True
     return conn
 
 
@@ -105,7 +114,7 @@ def registrar_disparo(
         logger.warning("[SlackLog] Erro ao registrar disparo: %s", e)
         return -1
     finally:
-        conn.close()
+            pass
 
 
 def disparo_ja_enviado_hoje(
@@ -139,7 +148,7 @@ def disparo_ja_enviado_hoje(
         ).fetchone()
         return row is not None
     finally:
-        conn.close()
+            pass
 
 
 def listar_disparos(
@@ -165,4 +174,4 @@ def listar_disparos(
         params.append(limit)
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
     finally:
-        conn.close()
+            pass
