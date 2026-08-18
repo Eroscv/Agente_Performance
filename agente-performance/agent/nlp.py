@@ -463,9 +463,9 @@ def _verificar_cobertura_dados(
         # Determina tabela conforme plataforma/cliente
         tabela = None
         if plataforma == "google_ads" or cliente_key == "pod_kombucha":
-            tabela = "pod_gads_diario"
+            tabela = "pod_kombucha_gads_diario"
         else:
-            tabela = "campanhas"
+            tabela = "campanhas_unificada"
 
         from db.connection import get_conn
         try:
@@ -474,7 +474,7 @@ def _verificar_cobertura_dados(
             return None
 
         # Detecta coluna de data
-        col_data = "data_inicio" if tabela == "pod_gads_diario" else "data_inicio"
+        col_data = "data_inicio" if tabela == "pod_kombucha_gads_diario" else "data_inicio"
         # Tenta detectar a coluna real
         try:
             info = conn.execute(f"PRAGMA table_info({tabela})").fetchall()

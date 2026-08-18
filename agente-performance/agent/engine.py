@@ -259,8 +259,8 @@ def _dados_vazios_sugestao(intent: str, campanha: Optional[str], data_inicio: Op
         # Verifica se há dados sem filtro de período
         if data_inicio or data_fim:
             sem_filtro = raw_query(
-                "SELECT MIN(data_inicio) AS ini, MAX(data_fim) AS fim, COUNT(*) AS n "
-                "FROM campanhas WHERE campanha IS NOT NULL AND campanha != ''"
+                "SELECT MIN(data) AS ini, MAX(data) AS fim, COUNT(*) AS n "
+                "FROM v_performance WHERE campanha IS NOT NULL AND campanha != ''"
                 + (f" AND campanha = '{campanha}'" if campanha else "")
             )
             if sem_filtro and sem_filtro[0].get("n", 0) > 0:
@@ -292,7 +292,7 @@ def _dados_vazios_sugestao(intent: str, campanha: Optional[str], data_inicio: Op
 def _get_available_campaigns() -> list[str]:
     """Retorna campanhas ordenadas por investimento total (mais relevantes primeiro)."""
     rows = raw_query("""
-        SELECT campanha FROM campanhas
+        SELECT campanha FROM v_performance
         WHERE campanha IS NOT NULL AND campanha != ''
         GROUP BY campanha
         ORDER BY SUM(investimento) DESC
@@ -727,7 +727,7 @@ def consultar(
                     CASE WHEN SUM(impressoes) > 0
                          THEN CAST(SUM(cliques_link) AS REAL)
                               / SUM(impressoes) * 100 END AS ctr
-                FROM ads_diario
+                FROM campanhas_unificada
                 WHERE data_inicio BETWEEN ? AND ?
                 GROUP BY data_inicio
                 ORDER BY data_inicio ASC
@@ -871,7 +871,7 @@ def consultar(
             except Exception as _de:
                 logger.debug("[engine] delta automático falhou (não crítico): %s", _de)
         else:
-            # Legado: outros intents usam ads_diario direto
+            # Comparativo via campanhas_unificada (fonte atual)
             try:
                 from datetime import date as _ddate, timedelta as _dtd
                 _d0 = _ddate.fromisoformat(data_inicio)
@@ -888,7 +888,7 @@ def consultar(
                         CASE WHEN SUM(investimento)>0
                              THEN SUM(valor_compras)/SUM(investimento) END AS roas,
                         SUM(compras) AS conversoes
-                    FROM ads_diario
+                    FROM campanhas_unificada
                     WHERE data_inicio BETWEEN ? AND ?
                 """, (str(_ant0), str(_ant1))).fetchone()
                 # Extrai atuais

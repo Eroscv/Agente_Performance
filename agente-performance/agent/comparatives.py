@@ -92,7 +92,7 @@ def comparar_periodos(
                 ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia,
                 ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)        AS carrinho,
                 ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)       AS checkout
-            FROM campanhas
+            FROM campanhas_unificada
             WHERE data_inicio >= ? AND data_fim <= ?
             {filtro_camp}
         """, tuple(params)) or {}
@@ -188,7 +188,7 @@ def comparar_campanhas_detalhado(
             ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)      AS checkout,
             MIN(data_inicio)                      AS periodo_inicio,
             MAX(data_fim)                         AS periodo_fim
-        FROM campanhas
+        FROM campanhas_unificada
         WHERE campanha IN ({placeholders})
         {filtro_data}
         GROUP BY campanha
@@ -248,7 +248,7 @@ def comparar_semana_a_semana(
                 ROUND(SUM(COALESCE(cliques_link, 0)), 0)     AS cliques,
                 ROUND(AVG(ctr_link), 4)         AS ctr,
                 ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc
-            FROM campanhas
+            FROM campanhas_unificada
             WHERE data_inicio >= ? AND data_fim <= ?
             {filtro_camp}
         """, tuple(params)) or {}
@@ -316,7 +316,7 @@ def comparar_mes_a_mes(
                 ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
                 ROUND(SUM(impressoes), 0)       AS impressoes,
                 ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra
-            FROM campanhas
+            FROM campanhas_unificada
             WHERE data_inicio >= ? AND data_fim <= ?
             {filtro_camp}
         """, tuple(params)) or {}
@@ -376,7 +376,7 @@ def comparar_antes_depois(
                 ROUND(SUM(impressoes), 0)              AS impressoes,
                 MIN(data_inicio)                       AS data_inicio_real,
                 MAX(data_fim)                          AS data_fim_real
-            FROM campanhas
+            FROM campanhas_unificada
             WHERE data_inicio {operador} ?
             {filtro_camp}
         """, tuple(params)) or {}
@@ -459,7 +459,7 @@ def ranking_comparativo(
             ROUND(SUM(compras), 0)               AS compras,
             ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 4) AS roas,
             COUNT(DISTINCT data_inicio)          AS dias_ativos
-        FROM campanhas
+        FROM campanhas_unificada
         WHERE campanha IS NOT NULL AND campanha != ''
         {filtro_data}
         GROUP BY campanha

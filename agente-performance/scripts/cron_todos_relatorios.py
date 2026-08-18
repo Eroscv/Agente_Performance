@@ -179,17 +179,8 @@ def _calcular_delta(resultado: dict, data_inicio: date, data_fim: date, cliente_
                     SUM(investimento) AS invest,
                     CASE WHEN SUM(investimento) > 0
                          THEN SUM(valor_conversao) / SUM(investimento) END AS roas
-                FROM pod_gads_diario
-                WHERE data_inicio BETWEEN ? AND ?
-            """, (str(ant_ini), str(ant_fim))).fetchone()
-        else:
-            row = conn.execute("""
-                SELECT
-                    SUM(investimento) AS invest,
-                    CASE WHEN SUM(investimento) > 0
-                         THEN SUM(valor_compras) / SUM(investimento) END AS roas
-                FROM campanhas
-                WHERE data_inicio BETWEEN ? AND ?
+                FROM pod_kombucha_gads_diario
+                WHERE data BETWEEN ? AND ?
             """, (str(ant_ini), str(ant_fim))).fetchone()
 
         conn.close()
@@ -240,8 +231,8 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
                        SUM(valor_conversao) AS receita,
                        CASE WHEN SUM(investimento) > 0
                             THEN SUM(valor_conversao) / SUM(investimento) END AS roas
-                FROM pod_gads_diario
-                WHERE data_inicio BETWEEN ? AND ?
+                FROM pod_kombucha_gads_diario
+                WHERE data BETWEEN ? AND ?
                   AND investimento > 0
                 GROUP BY campanha
                 HAVING roas < ? OR roas IS NULL
@@ -255,7 +246,7 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
                        SUM(valor_compras) AS receita,
                        CASE WHEN SUM(investimento) > 0
                             THEN SUM(valor_compras) / SUM(investimento) END AS roas
-                FROM campanhas
+                FROM campanhas_unificada
                 WHERE data_inicio BETWEEN ? AND ?
                   AND investimento > 0
                 GROUP BY campanha

@@ -292,7 +292,7 @@ class AnalysisAgent(BaseAnalysisAgent):
                     "SELECT SUM(investimento) AS invest, "
                     "CASE WHEN SUM(investimento)>0 THEN SUM(valor_compras)/SUM(investimento) END AS roas, "
                     "SUM(compras) AS conversoes "
-                    "FROM ads_diario WHERE data_inicio BETWEEN ? AND ?",
+                    "FROM campanhas_unificada WHERE data_inicio BETWEEN ? AND ?",
                     (str(_ant0), str(_ant1)),
                 ).fetchone()
                 _invest_a = (

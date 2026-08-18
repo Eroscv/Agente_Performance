@@ -509,9 +509,9 @@ def _ultimo_dia_com_dados(cliente_key, plataforma):
         conn.row_factory = _sq.Row
 
         if plataforma == "google_ads" or cliente_key == "pod_kombucha":
-            tabela, col = "pod_gads_diario", "data_inicio"
+            tabela, col = "pod_kombucha_gads_diario", "data"
         else:
-            tabela, col = "campanhas", "data_inicio"
+            tabela, col = "campanhas_unificada", "data_inicio"
 
         # verifica se a coluna existe
         info = conn.execute(f"PRAGMA table_info({tabela})").fetchall()
@@ -1215,7 +1215,7 @@ async def handle_pod(ack, respond, command, client):
             _c = _gcc()
             _c.row_factory = _sq.Row
             _last = _c.execute(
-                "SELECT MAX(data_inicio) AS ultimo FROM pod_gads_diario"
+                "SELECT MAX(data) AS ultimo FROM pod_kombucha_gads_diario"
             ).fetchone()
             _ultimo = _last["ultimo"] if _last else None
             if _ultimo:
@@ -1232,7 +1232,7 @@ async def handle_pod(ack, respond, command, client):
                         SUM(conversoes) AS conversoes,
                         CASE WHEN SUM(impressoes)>0
                              THEN CAST(SUM(cliques) AS REAL)/SUM(impressoes)*100 END AS ctr
-                    FROM pod_gads_diario WHERE data_inicio = ?
+                    FROM pod_kombucha_gads_diario WHERE data = ?
                 """, (_ultimo,)).fetchone()
                 def _brl(v): return f"R$ {v:,.2f}".replace(",","X").replace(".",",").replace("X",".") if v else "—"
                 def _x(v): return f"{v:.2f}x" if v else "—"
@@ -1463,7 +1463,7 @@ async def handle_status(ack, respond):
     # Banco
     try:
         conn = sqlite3.connect(DB_PATH)
-        row  = conn.execute("SELECT COUNT(*), MIN(data_inicio), MAX(data_fim) FROM campanhas").fetchone()
+        row  = conn.execute("SELECT COUNT(*), MIN(data), MAX(data) FROM v_performance").fetchone()
         conn.close()
         db_info = f"*{row[0]:,}* registros | {row[1]} → {row[2]}"
     except Exception:

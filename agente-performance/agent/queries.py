@@ -1319,7 +1319,7 @@ def receita_shopify_periodo(
     # Busca investimento Meta no mesmo período
     inv_row = query_one(
         "SELECT ROUND(SUM(investimento), 2) AS investimento "
-        "FROM campanhas WHERE data_inicio >= ? AND data_fim <= ?",
+        "FROM campanhas_unificada WHERE data_inicio >= ? AND data_fim <= ?",
         (data_inicio, data_fim),
     )
     invest_meta = (inv_row or {}).get("investimento") or 0.0
