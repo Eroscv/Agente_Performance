@@ -763,6 +763,44 @@ def consultar(
         (isinstance(dados, list) and len(dados) == 0) or
         (isinstance(dados, dict) and not dados)
     )
+
+    # ── SQL dinâmico: fallback para intent desconhecida ou dados vazios em intent não mapeada ──
+    _sql_dinamico_usado = False
+    if dados_principais_vazios and intents and intents[0] in ("desconhecida", "resumo_geral"):
+        # Tenta SQL dinâmico apenas se a pergunta parece conter filtros ad-hoc
+        # (evita rodar LLM extra em perguntas simples sem dados no período)
+        _ADOC_HINTS = re.compile(
+            r'(acima\s+de|abaixo\s+de|maior\s+que|menor\s+que|entre\s+\d'
+            r'|mais\s+de\s+\d|menos\s+de\s+\d|maior\s+ou\s+igual'
+            r'|filtrar?|onde\s+o?\s*(roas|ctr|cpm|cpa|compras|cliques|invest)'
+            r'|com\s+(roas|ctr|cpm|cpa)\s*(>|<|=|acima|abaixo))',
+            re.IGNORECASE
+        )
+        if intents[0] == "desconhecida" or _ADOC_HINTS.search(pergunta):
+            logger.info("[engine] Intent '%s' + pergunta ad-hoc — tentando SQL dinâmico", intents[0])
+            try:
+                from agent.sql_generator import executar_sql_dinamico
+                sql_result = executar_sql_dinamico(
+                    pergunta=pergunta,
+                    cliente_key=cliente_key or "source_of",
+                    data_inicio=data_inicio,
+                    data_fim=data_fim,
+                )
+                if sql_result["dados"] and not sql_result["erro"]:
+                    dados = sql_result["dados"]
+                    dados_principais_vazios = False
+                    _sql_dinamico_usado = True
+                    meta["sql_dinamico"] = sql_result["sql"]
+                    meta["sql_latencia_ms"] = sql_result["latencia_ms"]
+                    logger.info(
+                        "[engine] SQL dinâmico OK — %d linhas em %dms",
+                        len(dados), sql_result["latencia_ms"],
+                    )
+                elif sql_result["erro"]:
+                    dados_vazios_msg = sql_result["erro"]
+            except Exception as _sql_err:
+                logger.warning("[engine] SQL dinâmico falhou: %s", _sql_err)
+
     if dados_principais_vazios:
         dados_vazios_msg = _dados_vazios_sugestao(intents[0], campanha, data_inicio, data_fim)
 
