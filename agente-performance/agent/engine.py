@@ -225,6 +225,77 @@ def _get_available_campaigns() -> list[str]:
     return _get_available_campaigns_registry()
 
 
+def _aviso_delay_dados(
+    data_inicio: Optional[str],
+    data_fim: Optional[str],
+    cliente_key: Optional[str],
+    plataforma: Optional[str],
+) -> Optional[str]:
+    """
+    Verifica se a data solicitada é mais recente do que o último dado disponível.
+    Retorna uma string de aviso ou None se tudo estiver OK.
+    """
+    from datetime import date as _date
+    hoje = _date.today().isoformat()
+    data_ref = data_fim or data_inicio
+    if not data_ref or data_ref < hoje:
+        return None  # não pediu hoje — sem aviso
+
+    # Descobre o max disponível nos DBs relevantes
+    try:
+        from db.connections import get_performance_conn as _gpc
+        from agent.registry import carregar_segmentos_ativos as _get_segs
+
+        segmentos = _get_segs()
+        maximos: list[str] = []
+
+        for seg in segmentos:
+            ck = seg.get("cliente_key")
+            plat = seg.get("plataforma")
+            # Filtra pelo cliente/plataforma pedido, se especificado
+            if cliente_key and ck != cliente_key:
+                continue
+            if plataforma and plat != plataforma:
+                continue
+            try:
+                conn = _gpc(ck, plat)
+                tables = [r[0] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()]
+                for t in tables:
+                    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({t})").fetchall()]
+                    date_cols = [c for c in cols if c in ("data", "date", "data_ref")]
+                    if date_cols:
+                        row = conn.execute(f"SELECT MAX({date_cols[0]}) FROM {t}").fetchone()
+                        if row and row[0]:
+                            maximos.append(row[0])
+            except Exception:
+                pass
+
+        if not maximos:
+            return None
+
+        db_max = max(maximos)
+        if db_max >= hoje:
+            return None  # dados de hoje já disponíveis
+
+        # Formata aviso
+        from datetime import date as _date2
+        try:
+            db_max_fmt = _date2.fromisoformat(db_max).strftime("%d/%m/%Y")
+        except Exception:
+            db_max_fmt = db_max
+
+        return (
+            f"⚠️ *Dados de hoje ({_date2.today().strftime('%d/%m/%Y')}) ainda não estão disponíveis* — "
+            f"as APIs de anúncios têm delay de ~24h para consolidar. "
+            f"Mostrando o período mais recente disponível: *{db_max_fmt}*."
+        )
+    except Exception as _e:
+        logger.debug("[_aviso_delay_dados] erro: %s", _e)
+        return None
+
+
 def _executar_intent(
     intent:      str,
     campanha:    Optional[str],
@@ -473,16 +544,24 @@ def consultar(
     """
     Processa uma pergunta em linguagem natural.
 
-    Fluxo de roteamento por cliente/plataforma:
+    Quando MULTI_AGENT=1, delega para OrchestratorAgent (roteamento por cliente).
+    Caso contrário, executa o fluxo clássico de engine.
+
+    Fluxo clássico:
       1. NLP detectou cliente_key OU plataforma  → query filtrada
       2. Canal tem contexto de cliente definido  → query filtrada pelo canal
       3. Nenhum dos acima                        → executar_por_segmento()
-                                                   (uma seção por segmento ativo)
-
-    POD Kombucha é roteado pelo NLP (cliente_key='pod_kombucha') via fluxo principal.
     """
-    import time
+    import os
+    if os.environ.get("MULTI_AGENT", "0") == "1":
+        return consultar_v2(
+            pergunta=pergunta,
+            thread_ts=thread_ts,
+            channel=channel,
+            user_id=user_id,
+        )
 
+    import time
     t_inicio = time.time()
 
     # 1. Verifica cache
@@ -577,6 +656,11 @@ def consultar(
         "plataforma":      plataforma,
         "modo_segmentado": modo_segmentado,
     }
+
+    # 3b. Aviso de delay de dados (hoje pedido mas DB só tem até ontem)
+    aviso_delay = _aviso_delay_dados(data_inicio, data_fim, cliente_key, plataforma)
+    if aviso_delay:
+        meta["aviso_delay"] = aviso_delay
 
     # 4. Executa queries
     _SEMANA_PARCIAL_SOF = re.compile(

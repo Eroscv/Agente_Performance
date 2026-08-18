@@ -54,6 +54,7 @@ async def _processar_e_responder(
             dados_extra = resultado.get("dados_extra", {})
             erro        = resultado.get("erro")
             aviso_vazio = resultado.get("aviso_vazio")
+            aviso_delay = meta.get("aviso_delay")
 
             # cache_hit baseado no cliente correto (POD usa prefixo "pod::")
             is_pod_result = meta.get("cliente") == "pod_kombucha"
@@ -211,6 +212,10 @@ async def _processar_e_responder(
             # Prefixo de aviso de período ajustado (POD, item 13)
             if aviso_periodo_pod:
                 resposta_final = aviso_periodo_pod + "\n\n" + resposta_final
+
+            # Aviso de delay de dados (hoje pedido, banco só tem até ontem)
+            if aviso_delay:
+                resposta_final = aviso_delay + "\n\n" + resposta_final
 
             # MELHORIA 8: Prefixo de alerta de cobertura de dados
             if aviso_cobertura:
