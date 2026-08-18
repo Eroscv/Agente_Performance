@@ -24,7 +24,7 @@ from utils.formatters import fmt_brl, fmt_x, fmt_pct, fmt_n, delta_str as _delta
 logger = logging.getLogger(__name__)
 
 _BASE = "https://slack.com/api"
-_CHANNEL_ENV_KEYS = ["SLACK_CHANNEL", "FLORA_SLACK_CHANNEL"]
+_CHANNEL_ENV_KEYS = ["SLACK_CHANNEL"]
 _TIMEOUT = 15
 
 
