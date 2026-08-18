@@ -913,7 +913,9 @@ def consultar(
 
     # ── Enriquecimento com receita Shopify real ─────────────────────────────
     shopify_dados = {}
-    if data_inicio and data_fim and not dados_principais_vazios:
+    # Apenas Source OF tem Shopify — POD e outros clientes não têm
+    _cliente_tem_shopify = (cliente_key or "source_of") == "source_of"
+    if _cliente_tem_shopify and data_inicio and data_fim and not dados_principais_vazios:
         try:
             from agent.queries import receita_shopify_periodo as _rsp
             _sd = _rsp(data_inicio, data_fim)
