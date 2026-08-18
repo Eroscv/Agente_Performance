@@ -418,7 +418,15 @@ def executar_cliente(
         # ── Builder ───────────────────────────────────────────────────────
         builder_fn = get_builder(cliente_key, tipo_builder)
         _t_inicio  = _time.monotonic()
-        resultado  = builder_fn(data_inicio=data_inicio, data_fim=data_fim, publicar=publicar)
+        # Passa cliente_key/cliente apenas se o builder aceita (nem todos aceitam)
+        import inspect as _inspect
+        _builder_params = _inspect.signature(builder_fn).parameters
+        _builder_kwargs: dict = {"data_inicio": data_inicio, "data_fim": data_fim, "publicar": publicar}
+        if "cliente_key" in _builder_params:
+            _builder_kwargs["cliente_key"] = cliente_key
+        elif "cliente" in _builder_params:
+            _builder_kwargs["cliente"] = cliente_key
+        resultado  = builder_fn(**_builder_kwargs)
         _duracao_ms = int((_time.monotonic() - _t_inicio) * 1000)
 
         if resultado.get("erro"):

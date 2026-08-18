@@ -203,7 +203,7 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
     page = 0
 
     while url:
-        resp = requests.get(url, params=params if page == 0 else {}, timeout=30)
+        resp = requests.get(url, params=params if page == 0 else {}, timeout=60)
         if resp.status_code == 429:
             logger.warning("Rate limit — aguardando 60s")
             time.sleep(60)
