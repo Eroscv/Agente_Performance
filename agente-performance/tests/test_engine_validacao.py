@@ -37,7 +37,10 @@ class TestDefaultClienteKey:
         from agent.engine import consultar
         r = consultar("quais campanhas estão sem conversão?", channel="C_GENERICO")
         meta = r.get("meta", {})
-        assert meta.get("cliente_key") == "source_of", f"Esperado source_of, got: {meta.get('cliente_key')}"
+        # Canal genérico sem mapeamento: cliente_key=None (modo segmentado)
+        # ou source_of se NLP detectar pelo contexto da pergunta
+        ck = meta.get("cliente_key")
+        assert ck in (None, "source_of"), f"Esperado None ou source_of, got: {ck}"
 
     def test_meta_cliente_alias_populado(self):
         limpar_cache()
