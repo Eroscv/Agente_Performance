@@ -27,6 +27,12 @@ class PODAgent(BaseClientAgent):
     CLIENTE_KEY       = "pod_kombucha"
     PLATAFORMA_PADRAO = "meta_ads"  # Meta Ads é a plataforma ativa da POD
 
+    @property
+    def relatorio(self):
+        """Subagente de relatório da POD Kombucha."""
+        from agent.clients.relatorio import get_relatorio_agent
+        return get_relatorio_agent(self.CLIENTE_KEY)
+
     def _get_system_prompt(self) -> str:
         from clientes.pod.prompts import SYSTEM_PROMPT_POD
         return SYSTEM_PROMPT_POD

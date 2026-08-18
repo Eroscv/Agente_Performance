@@ -29,6 +29,12 @@ class SourceOFAgent(BaseClientAgent):
     CLIENTE_KEY       = "source_of"
     PLATAFORMA_PADRAO = "meta_ads"
 
+    @property
+    def relatorio(self):
+        """Subagente de relatório da Source OF."""
+        from agent.clients.relatorio import get_relatorio_agent
+        return get_relatorio_agent(self.CLIENTE_KEY)
+
     def _get_system_prompt(self) -> str:
         from clientes.source_of.prompts import SYSTEM_PROMPT
         return SYSTEM_PROMPT
