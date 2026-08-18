@@ -8,6 +8,7 @@ Recebe dados estruturados das queries e gera resposta conversacional em PT-BR.
 import json
 import logging
 import os
+import re
 from typing import Any
 
 import anthropic
@@ -211,6 +212,56 @@ def _buscar_kb_local(pergunta: str, intent: str, top_n: int = 3) -> str:
         return ""
 
 
+def _parse_structured_output(text: str) -> dict | None:
+    """
+    Camada 2 (Grounded Generation) — extrai JSON estruturado de uma resposta Claude.
+
+    Ativado quando `meta[\"structured_output\"] = True` na chamada a gerar_resposta().
+    O LLM é instruido a devolver JSON com rastreabilidade de cada métrica citada.
+
+    Schema esperado:
+    {
+      \"headline\": str,               # título da análise
+      \"periodo\": str,                # período analisado
+      \"metricas_citadas\": [          # cada número com proveniência
+        {\"nome\": str, \"valor\": float|str, \"fonte\": str}
+      ],
+      \"analise\": str,                # texto livre da análise
+      \"alertas\": [str],             # ⚠️ pontos de atenção
+      \"recomendacoes\": [str],        # próximos passos
+      \"dado_nao_disponivel\": [str]   # campos solicitados mas ausentes nos dados
+    }
+
+    Retorna dict se parse OK, None se o LLM não devolveu JSON válido.
+    """
+    json_match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not json_match:
+        return None
+    try:
+        return json.loads(json_match.group(0))
+    except json.JSONDecodeError:
+        return None
+
+
+_STRUCTURED_OUTPUT_SUFFIX = """
+
+[MODO STRUCTURED OUTPUT — CAMADA 2]
+Retorne APENAS um JSON válido com o schema abaixo. Sem markdown, sem texto antes ou depois.
+{
+  \"headline\": \"<título da análise>\",
+  \"periodo\": \"<período analisado>\",
+  \"metricas_citadas\": [
+    {\"nome\": \"<campo>\", \"valor\": <valor>, \"fonte\": \"<dados[N].campo>\"}
+  ],
+  \"analise\": \"<análise completa em texto livre, formatada para Slack>\",
+  \"alertas\": [\"<alerta 1>\", \"<alerta 2>\"],
+  \"recomendacoes\": [\"<ação 1>\", \"<ação 2>\"],
+  \"dado_nao_disponivel\": [\"<campo solicitado mas ausente nos dados>\"]
+}
+Regra: cada valor em metricas_citadas deve ser rastreável aos dados fornecidos.
+"""
+
+
 def get_client() -> anthropic.Anthropic:
     global _client
     if _client is None:
@@ -352,13 +403,24 @@ def gerar_resposta(
         logger.debug("[claude_client] ancora_str: %s", _ancora_err)
         ancora_str = ""
 
+    # ── Grounding rules (Camada 1) ───────────────────────────────────────────────
+    # Injetadas sempre — eliminam alucinação numérica sem custo extra de tokens
+    _grounding_rules = (
+        "\n\n[REGRAS DE GROUNDING — OBRIGATÓRIAS]\n"
+        "1. Cite APENAS valores que aparecem literalmente nos dados acima.\n"
+        "2. NUNCA estime, arredonde de forma inventada ou complete com conhecimento geral.\n"
+        "3. Se um dado não está disponível nos dados fornecidos, diga explicitamente: \"dado não disponível\".\n"
+        "4. Cada número na resposta deve ser rastreável a um campo nos dados acima.\n"
+        "5. Variações percentuais: calcule a partir dos valores fornecidos — não invente tendências."
+    )
+
     user_message = f"""Pergunta do usuário: {pergunta}
 {contexto_str}
 Intenção detectada: {intent}
 {periodo_str}
 
 Dados retornados do banco:
-{dados_str}{extras_str}{delta_str}{shopify_str}{ancora_str}
+{dados_str}{extras_str}{delta_str}{shopify_str}{ancora_str}{_grounding_rules}
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.{periodo_nota_str}"""
     if shopify_str:
@@ -370,6 +432,12 @@ Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.
     else:
         system = SYSTEM_PROMPT + ("\n\n" + kb_contexto if kb_contexto else "")
 
+    # Camada 2: structured output (ativado via meta["structured_output"] = True)
+    _use_structured = bool(meta.get("structured_output"))
+    if _use_structured:
+        user_message += _STRUCTURED_OUTPUT_SUFFIX
+        logger.info("[gerar_resposta] Modo structured output ativado")
+
     try:
         model = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
         response = client.messages.create(
@@ -378,7 +446,29 @@ Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.
             system=system,
             messages=[{"role": "user", "content": user_message}],
         )
-        return response.content[0].text
+        raw_text = response.content[0].text
+
+        # Camada 2: tenta extrair JSON estruturado se ativado
+        if _use_structured:
+            parsed = _parse_structured_output(raw_text)
+            if parsed:
+                # Retorna o campo analise (texto Slack) com metricas_citadas como log
+                logger.info(
+                    "[gerar_resposta] Structured output OK — %d métricas citadas, %d alertas",
+                    len(parsed.get("metricas_citadas", [])),
+                    len(parsed.get("alertas", [])),
+                )
+                if parsed.get("dado_nao_disponivel"):
+                    logger.warning(
+                        "[gerar_resposta] Dados não disponíveis reportados: %s",
+                        parsed["dado_nao_disponivel"],
+                    )
+                # Retorna a análise formatada; o dict fica disponível para uso futuro
+                return parsed.get("analise", raw_text)
+            else:
+                logger.warning("[gerar_resposta] Structured output: parse falhou, usando texto bruto")
+
+        return raw_text
 
     except anthropic.APIError as e:
         logger.error("Erro na API Anthropic: %s", e)
