@@ -7,20 +7,25 @@ Import: from notion.blocks import h2, paragrafo, divider, callout, tabela, bulle
 from __future__ import annotations
 
 
+def _rt(texto: str, bold: bool = False) -> list:
+    """Monta rich_text com chunking automático (limite Notion: 2000 chars/elemento)."""
+    chunks = [texto[i:i+2000] for i in range(0, max(len(texto), 1), 2000)]
+    return [{"type": "text", "text": {"content": c}, "annotations": {"bold": bold}} for c in chunks]
+
+
 def h2(texto: str) -> dict:
     return {"object": "block", "type": "heading_2",
-            "heading_2": {"rich_text": [{"type": "text", "text": {"content": texto}}]}}
+            "heading_2": {"rich_text": _rt(texto[:2000])}}
 
 
 def h3(texto: str) -> dict:
     return {"object": "block", "type": "heading_3",
-            "heading_3": {"rich_text": [{"type": "text", "text": {"content": texto}}]}}
+            "heading_3": {"rich_text": _rt(texto[:2000])}}
 
 
 def paragrafo(texto: str, bold: bool = False) -> dict:
     return {"object": "block", "type": "paragraph",
-            "paragraph": {"rich_text": [{"type": "text", "text": {"content": texto},
-                                          "annotations": {"bold": bold}}]}}
+            "paragraph": {"rich_text": _rt(texto, bold=bold)}}
 
 
 def divider() -> dict:
@@ -31,7 +36,7 @@ def callout(texto: str, emoji: str = "📊") -> dict:
     return {
         "object": "block", "type": "callout",
         "callout": {
-            "rich_text": [{"type": "text", "text": {"content": texto}}],
+            "rich_text": _rt(texto),
             "icon": {"type": "emoji", "emoji": emoji},
             "color": "gray_background",
         }
@@ -40,14 +45,14 @@ def callout(texto: str, emoji: str = "📊") -> dict:
 
 def bullet(texto: str) -> dict:
     return {"object": "block", "type": "bulleted_list_item",
-            "bulleted_list_item": {"rich_text": [{"type": "text", "text": {"content": texto}}]}}
+            "bulleted_list_item": {"rich_text": _rt(texto)}}
 
 
 def toggle(titulo: str, filhos: list[dict]) -> dict:
     return {
         "object": "block", "type": "toggle",
         "toggle": {
-            "rich_text": [{"type": "text", "text": {"content": titulo}}],
+            "rich_text": _rt(titulo[:2000]),
             "children": filhos,
         }
     }
@@ -57,7 +62,7 @@ def codigo(texto: str, linguagem: str = "plain text") -> dict:
     return {
         "object": "block", "type": "code",
         "code": {
-            "rich_text": [{"type": "text", "text": {"content": texto}}],
+            "rich_text": _rt(texto),
             "language": linguagem,
         }
     }

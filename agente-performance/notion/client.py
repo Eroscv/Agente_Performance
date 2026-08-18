@@ -300,7 +300,9 @@ def prop_titulo(texto: str) -> dict:
 
 
 def prop_texto(texto: str) -> dict:
-    return {"rich_text": [{"text": {"content": texto}}]}
+    """Propriedade rich_text com chunking automático (limite Notion: 2000 chars/elemento)."""
+    chunks = [texto[i:i+2000] for i in range(0, max(len(texto), 1), 2000)]
+    return {"rich_text": [{"text": {"content": c}} for c in chunks]}
 
 
 def prop_numero(valor: float) -> dict:
