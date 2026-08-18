@@ -196,9 +196,10 @@ def _obter_ou_criar_pagina_ano(pagina_mae_id: str, ano: int, cliente_key: str = 
 
 # ── Cache por período ───────────────────────────────────────────────────────
 
-def _cache_key_relatorio(cliente_key: str, tipo: str, data_inicio: str, data_fim: str) -> str:
-    """Gera chave de cache única por cliente + tipo + período."""
-    return f"relatorio_{cliente_key}_{tipo}_{data_inicio}_{data_fim}"
+def _cache_key_relatorio(cliente_key: str, tipo: str, data_inicio: str, data_fim: str, plataforma: str = "") -> str:
+    """Gera chave de cache única por cliente + tipo + período + plataforma."""
+    plat_suffix = f"_{plataforma}" if plataforma else ""
+    return f"relatorio_{cliente_key}_{tipo}_{data_inicio}_{data_fim}{plat_suffix}"
 
 
 def _buscar_relatorio_em_cache(
@@ -206,10 +207,11 @@ def _buscar_relatorio_em_cache(
     tipo: str,
     data_inicio: str,
     data_fim: str,
+    plataforma: str = "",
 ) -> str | None:
     """Retorna page_id se já existe um relatório para esse período no cache."""
     cache = _load_cache()
-    key   = _cache_key_relatorio(cliente_key, tipo, data_inicio, data_fim)
+    key   = _cache_key_relatorio(cliente_key, tipo, data_inicio, data_fim, plataforma)
     pid   = cache.get(key)
     if not pid:
         return None
@@ -230,10 +232,11 @@ def _salvar_relatorio_em_cache(
     data_inicio: str,
     data_fim: str,
     page_id: str,
+    plataforma: str = "",
 ):
     """Salva o page_id do relatório no cache local."""
     cache = _load_cache()
-    key   = _cache_key_relatorio(cliente_key, tipo, data_inicio, data_fim)
+    key   = _cache_key_relatorio(cliente_key, tipo, data_inicio, data_fim, plataforma)
     cache[key] = page_id
     _save_cache(cache)
 
@@ -379,6 +382,7 @@ def criar_relatorio_no_historico(
     data_inicio: date = None,
     data_fim: date = None,
     cliente_key: str = "source_of",
+    plataforma: str = "",
 ) -> dict:
     """
     Cria (ou atualiza) o relatório como subpágina dentro do histórico.
@@ -406,7 +410,7 @@ def criar_relatorio_no_historico(
     df_str = data_fim.isoformat()    if data_fim    else ""
 
     # 1. Verifica cache local: já existe relatório para esse período?
-    pid_existente = _buscar_relatorio_em_cache(cliente_key, tipo, di_str, df_str)
+    pid_existente = _buscar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, plataforma)
     cache_hit     = pid_existente is not None
 
     if cache_hit:
@@ -427,7 +431,7 @@ def criar_relatorio_no_historico(
             logger.info("[Histórico] Página encontrada na API (cache miss) — reaproveitando: %s", pid_api)
             pid       = pid_api
             cache_hit = True
-            _salvar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, pid)
+            _salvar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, pid, plataforma)
             _limpar_blocos_pagina(pid)
             url = f"https://notion.so/{pid.replace('-', '')}"
         else:
@@ -435,7 +439,7 @@ def criar_relatorio_no_historico(
             page = _criar_subpagina(pagina_ano_id, titulo, emoji=emoji)
             pid  = page["id"]
             url  = page.get("url", f"https://notion.so/{pid.replace('-', '')}")
-            _salvar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, pid)
+            _salvar_relatorio_em_cache(cliente_key, tipo, di_str, df_str, pid, plataforma)
 
     # 4. Escreve blocos (sempre — seja página nova ou reutilizada)
     LOTE = 95

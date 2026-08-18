@@ -388,6 +388,7 @@ def gerar_relatorio_diario(
         data_inicio=data_obj,
         data_fim=data_obj,
         cliente_key=cliente_key,
+        plataforma=plataforma,
     )
 
     logger.info("[Diário] %s·%s %s → Notion: %s", cliente_key, plataforma, data, resultado.get("url"))
@@ -416,6 +417,7 @@ def gerar_relatorio_diario(
         "page_id":     resultado.get("page_id"),
         "url":         resultado.get("url"),
         "resumo":      resumo,
+        "blocos":      blocos,
         "data":        data,
         "cliente_key": cliente_key,
         "plataforma":  plataforma,

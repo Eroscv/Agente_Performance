@@ -559,6 +559,305 @@ def executar_cliente(
         return {"ok": False, "erro": str(e)}
 
 
+
+# ── Relatório multi-plataforma ancorado (Source OF e similares) ──────────────
+
+def _postar_ancora_slack(emoji: str, label: str, tipo_label: str, periodo_str: str,
+                         plataformas_ok: list, channel: str = None):
+    """Posta mensagem âncora no canal. Retorna thread_ts ou None."""
+    from slack.poster import _post_api, _channel
+    ch = (channel or _channel()).lstrip("#")
+    plat_str = " · ".join(plataformas_ok) if plataformas_ok else "todas as fontes"
+    ancora = (
+        f"{emoji} *{label} · Relatório {tipo_label}*\n"
+        f"_{periodo_str}_\n"
+        f"📡 Fontes: {plat_str}"
+    )
+    resp = _post_api("chat.postMessage", {"channel": ch, "text": ancora, "mrkdwn": True})
+    if not resp.get("ok"):
+        logger.error("[Âncora] Falha ao postar: %s", resp.get("error"))
+        return None
+    ts = resp["ts"]
+    logger.info("[Âncora] Postada ts=%s", ts)
+    return ts
+
+
+def _postar_relatorio_em_thread(resultado: dict, emoji: str, label: str,
+                                  tipo_label: str, periodo_str: str,
+                                  thread_ts: str, channel: str = None) -> bool:
+    """Posta resumo de uma plataforma na thread da âncora."""
+    from slack.poster import _post_api, _channel
+    from slack.handlers import formatar_resumo_relatorio
+    ch = (channel or _channel()).lstrip("#")
+
+    plataforma = resultado.get("plataforma", "")
+    plat_labels = {"meta_ads": "Meta Ads", "google_ads": "Google Ads", "shopify": "Shopify"}
+    titulo_plat = plat_labels.get(plataforma, plataforma.title())
+    url = resultado.get("url", "—")
+
+    resumo_fmt = formatar_resumo_relatorio(resultado)
+    msg_notion = f"\n📎 <{url}|Abrir no Notion>" if url and url != "—" else ""
+    texto = (
+        f"*{emoji} {label} · {titulo_plat} · {tipo_label}*\n"
+        f"_{periodo_str}_\n"
+        f"{resumo_fmt}{msg_notion}"
+    )
+    resp = _post_api("chat.postMessage", {
+        "channel":   ch,
+        "thread_ts": thread_ts,
+        "text":      texto,
+        "mrkdwn":    True,
+    })
+    ok = resp.get("ok", False)
+    logger.info("[Thread] %s->%s: %s", plataforma, thread_ts[:8],
+                "OK" if ok else f"FALHOU: {resp.get('error')}")
+    return ok
+
+
+def executar_cliente_multi_plataforma(
+    cliente_key: str,
+    cfg: dict,
+    periodo: str,
+    data_inicio,
+    data_fim,
+    periodo_str: str,
+    tipo_label: str,
+    tipo_builder: str,
+    publicar: bool,
+    apenas_alertas: bool = False,
+) -> dict:
+    """
+    Gera relatórios separados por plataforma (Google Ads, Meta Ads, Shopify)
+    com estrutura âncora + threads no Slack.
+    """
+    from db.cron_log import registrar_run
+    from db.registry import get_loader
+    import time as _time
+
+    nome  = cfg.get("nome", cliente_key)
+    emoji = cfg.get("slack_emoji", "📊")
+    label = cfg.get("slack_label", nome)
+
+    logger.info("--- [%s] %s (multi-plataforma) ---", cliente_key, label)
+
+    # Alertas proativos
+    alertas = verificar_alertas(cliente_key, data_inicio, data_fim)
+    for alerta in alertas:
+        ok = postar_alerta_ancorado(alerta)
+        logger.info("[%s] Alerta postado: %s", cliente_key, "OK" if ok else "FALHOU")
+
+    if apenas_alertas:
+        if not alertas:
+            logger.info("[%s] Sem alertas.", cliente_key)
+        return {"ok": True, "alertas": len(alertas)}
+
+    run_id = registrar_run(
+        cliente_key=cliente_key, periodo=periodo,
+        data_inicio=str(data_inicio), data_fim=str(data_fim),
+        status="iniciado",
+    )
+
+    # 1. Loader
+    loader_fn = get_loader(cliente_key)
+    _loader_ok = False
+    for _attempt in range(1, 4):
+        try:
+            loader_fn()
+            _loader_ok = True
+            break
+        except Exception as e:
+            logger.warning("[%s] Loader tentativa %d/3 falhou: %s", cliente_key, _attempt, e)
+            if _attempt < 3:
+                _time.sleep(10)
+    if not _loader_ok:
+        logger.error("[%s] Loader falhou após 3 tentativas", cliente_key)
+        registrar_run(cliente_key=cliente_key, periodo=periodo,
+                      data_inicio=str(data_inicio), data_fim=str(data_fim),
+                      status="erro", erro="Sync falhou após 3 tentativas", run_id=run_id)
+        postar_slack_fallback(f"❌ *{label} · Sync FALHOU*\n_3 tentativas sem sucesso._")
+        return {"ok": False, "erro": "Sync falhou após 3 tentativas"}
+
+    # 2. Detecta plataformas com dados
+    from db.connection import query_one as _q
+    data_ref = str(data_fim)
+    plataformas_disponiveis = []
+
+    def _val(row, key):
+        """Extrai valor de query_one que retorna dict."""
+        if not row: return None
+        v = list(row.values())[0] if isinstance(row, dict) else (row[0] if row else None)
+        return v
+
+    _r = _q("SELECT SUM(investimento) FROM source_of_gads_diario WHERE data=?", (data_ref,))
+    _v = _val(_r, 0)
+    if _v:
+        plataformas_disponiveis.append("google_ads")
+        logger.info("[%s] Google Ads: dados OK (investimento=%.2f)", cliente_key, _v)
+    else:
+        logger.warning("[%s] Google Ads: sem dados para %s", cliente_key, data_ref)
+
+    _r = _q("SELECT SUM(investimento) FROM source_of_meta_ads_diario WHERE data=?", (data_ref,))
+    _v = _val(_r, 0)
+    if _v:
+        plataformas_disponiveis.append("meta_ads")
+        logger.info("[%s] Meta Ads: dados OK (investimento=%.2f)", cliente_key, _v)
+    else:
+        logger.warning("[%s] Meta Ads: sem dados para %s", cliente_key, data_ref)
+
+    _r = _q("SELECT SUM(receita) FROM source_of_shopify_diario WHERE data=?", (data_ref,))
+    _v = _val(_r, 0)
+    if _v:
+        plataformas_disponiveis.append("shopify")
+        logger.info("[%s] Shopify: dados OK (receita=%.2f)", cliente_key, _v)
+    else:
+        logger.warning("[%s] Shopify: sem dados para %s", cliente_key, data_ref)
+
+    if not plataformas_disponiveis:
+        msg = f"Sem dados em nenhuma plataforma para {cliente_key} em {data_ref}"
+        logger.error("[%s] ❌ %s", cliente_key, msg)
+        registrar_run(cliente_key=cliente_key, periodo=periodo,
+                      data_inicio=str(data_inicio), data_fim=str(data_fim),
+                      status="erro", erro=msg, run_id=run_id)
+        postar_slack_fallback(f"❌ *{label} · Sem dados para {data_ref}*")
+        return {"ok": False, "erro": msg}
+
+    # 3. Posta âncora no Slack
+    plat_labels_map = {"google_ads": "Google Ads", "meta_ads": "Meta Ads", "shopify": "Shopify"}
+    plats_str_list = [plat_labels_map.get(p, p) for p in plataformas_disponiveis]
+    thread_ts = _postar_ancora_slack(
+        emoji=emoji, label=label, tipo_label=tipo_label,
+        periodo_str=periodo_str, plataformas_ok=plats_str_list,
+    )
+    if not thread_ts:
+        logger.error("[%s] Âncora Slack falhou — abortando", cliente_key)
+        registrar_run(cliente_key=cliente_key, periodo=periodo,
+                      data_inicio=str(data_inicio), data_fim=str(data_fim),
+                      status="erro", erro="Âncora Slack falhou", run_id=run_id)
+        return {"ok": False, "erro": "Âncora Slack falhou"}
+
+    # 4. Gera e posta cada plataforma na thread
+    from relatorio.builder_diario import gerar_relatorio_diario
+    resultados_plats = {}
+    erros_plats = {}
+
+    for plataforma in plataformas_disponiveis:
+        logger.info("[%s] Gerando relatório %s...", cliente_key, plataforma)
+        try:
+            if plataforma == "shopify":
+                from relatorio.builder_diario import _buscar_shopify_dia, _blocos_shopify
+                from notion.historico import criar_relatorio_no_historico
+
+                shopify_data = _buscar_shopify_dia(data_ref)
+                if not shopify_data or not shopify_data.get("receita"):
+                    raise ValueError(f"Shopify sem dados para {data_ref}")
+
+                data_fmt = f"{data_ref[8:10]}/{data_ref[5:7]}/{data_ref[:4]}"
+                titulo_shop = f"{emoji} {nome} · Shopify · Relatório Diário · {data_fmt}"
+                blocos_shop = _blocos_shopify(shopify_data)
+
+                resultado_shop = {
+                    "titulo":      titulo_shop,
+                    "resumo":      {"investimento": None,
+                                    "receita_shopify": shopify_data.get("receita"),
+                                    "pedidos": shopify_data.get("pedidos"),
+                                    "shopify": shopify_data},
+                    "blocos":      blocos_shop,
+                    "data":        data_ref,
+                    "cliente_key": cliente_key,
+                    "plataforma":  "shopify",
+                }
+
+                if publicar:
+                    from datetime import date as _date
+                    data_obj = _date.fromisoformat(data_ref)
+                    r_notion = criar_relatorio_no_historico(
+                        titulo=titulo_shop, blocos=blocos_shop,
+                        periodo_str=data_fmt, tipo="diario",
+                        data_ref=data_obj, data_inicio=data_obj,
+                        data_fim=data_obj, cliente_key=cliente_key,
+                        plataforma="shopify",
+                    )
+                    resultado_shop["url"]     = r_notion.get("url")
+                    resultado_shop["page_id"] = r_notion.get("page_id")
+
+                resultados_plats["shopify"] = resultado_shop
+
+            else:
+                resultado_ads = gerar_relatorio_diario(
+                    cliente_key=cliente_key, plataforma=plataforma,
+                    data=data_ref, publicar=publicar,
+                )
+                if resultado_ads.get("erro"):
+                    raise ValueError(f"Builder: {resultado_ads['erro']}")
+
+                _r = resultado_ads.get("resumo") or {}
+                _falhas = []
+                if not _r: _falhas.append("resumo ausente")
+                if not _r.get("investimento"): _falhas.append("investimento zerado/ausente")
+                if not resultado_ads.get("titulo"): _falhas.append("título ausente")
+                if not resultado_ads.get("blocos"): _falhas.append("blocos vazios")
+                if publicar and not resultado_ads.get("url"): _falhas.append("URL Notion ausente")
+                if _falhas:
+                    raise ValueError(f"Validação falhou: {'; '.join(_falhas)}")
+
+                resultados_plats[plataforma] = resultado_ads
+
+            logger.info("[%s] ✅ %s: OK", cliente_key, plataforma)
+
+        except Exception as exc:
+            logger.error("[%s] ❌ %s: %s", cliente_key, plataforma, exc)
+            erros_plats[plataforma] = str(exc)
+
+    if not resultados_plats:
+        msg = f"Todos os relatórios falharam: {erros_plats}"
+        registrar_run(cliente_key=cliente_key, periodo=periodo,
+                      data_inicio=str(data_inicio), data_fim=str(data_fim),
+                      status="erro", erro=msg, run_id=run_id)
+        postar_slack_fallback(f"❌ *{label} · Todos os relatórios falharam*\n_{msg}_")
+        return {"ok": False, "erro": msg}
+
+    # 5. Posta cada plataforma na thread da âncora
+    slack_ok_count = 0
+    for plataforma, resultado in resultados_plats.items():
+        ok_thread = _postar_relatorio_em_thread(
+            resultado=resultado, emoji=emoji, label=label,
+            tipo_label=tipo_label, periodo_str=periodo_str,
+            thread_ts=thread_ts,
+        )
+        if ok_thread:
+            slack_ok_count += 1
+
+    slack_ok = slack_ok_count > 0
+
+    # Avisa fontes com erro na thread
+    if erros_plats:
+        logger.warning("[%s] ⚠️ Fontes com erro: %s", cliente_key, list(erros_plats))
+        from slack.poster import _post_api, _channel
+        _ch = _channel().lstrip("#")
+        _erros_str = ", ".join(f"{p}: {e[:60]}" for p, e in erros_plats.items())
+        _post_api("chat.postMessage", {
+            "channel":   _ch,
+            "thread_ts": thread_ts,
+            "text":      f"⚠️ Fontes com falha (dados podem estar desatualizados): {_erros_str}",
+            "mrkdwn":    True,
+        })
+
+    registrar_run(
+        cliente_key=cliente_key, periodo=periodo,
+        data_inicio=str(data_inicio), data_fim=str(data_fim),
+        status="sucesso" if slack_ok else "erro",
+        notion_url=next((r.get("url") for r in resultados_plats.values() if r.get("url")), None),
+        slack_ok=slack_ok, run_id=run_id,
+    )
+
+    logger.info(
+        "[%s] ✅ Multi-plataforma: %d/%d OK | Slack: %s",
+        cliente_key, len(resultados_plats), len(plataformas_disponiveis),
+        "OK" if slack_ok else "FALHOU",
+    )
+    return {"ok": slack_ok, "resultados": resultados_plats, "erros": erros_plats}
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
@@ -620,13 +919,18 @@ def main():
                 erros[cliente_key] = str(e)
             continue
 
-        res = executar_cliente(
+        # Clientes com múltiplas fontes usam fluxo multi-plataforma ancorado
+        _kwargs = dict(
             cliente_key=cliente_key, cfg=cfg,
             periodo=args.periodo,
             data_inicio=data_inicio, data_fim=data_fim,
             periodo_str=periodo_str, tipo_label=tipo_label, tipo_builder=tipo_builder,
             publicar=publicar, apenas_alertas=apenas_alertas,
         )
+        if cfg.get("multi_plataforma") and args.periodo == "diario":
+            res = executar_cliente_multi_plataforma(**_kwargs)
+        else:
+            res = executar_cliente(**_kwargs)
         if res.get("ok"):
             resultados[cliente_key] = res
         else:
