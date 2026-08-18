@@ -83,6 +83,32 @@ def get_builder(cliente_key: str, tipo: str = "semanal") -> Callable:
     return getattr(modulo, fn_name)
 
 
+def _resolve_loader_params(plat_key: str, plat_cfg: dict) -> dict:
+    """
+    Monta os kwargs a serem passados ao loader a partir da config da plataforma.
+
+    Parâmetros fixos (account_id, customer_id, tabela, token_env) são lidos
+    diretamente do bloco da plataforma; 'loader_params' sobrepõe os demais.
+    """
+    params: dict = {}
+
+    # Parâmetros de identificação por plataforma
+    if plat_cfg.get("meta_account_id"):
+        params["account_id"] = plat_cfg["meta_account_id"]
+    if plat_cfg.get("gads_customer_id"):
+        params["customer_id"] = plat_cfg["gads_customer_id"]
+    if plat_cfg.get("tabela_db"):
+        params["tabela"] = plat_cfg["tabela_db"]
+    if plat_cfg.get("meta_token_env"):
+        params["token_env"] = plat_cfg["meta_token_env"]
+
+    # loader_params sobrepõe (dias, append, etc.)
+    extra = plat_cfg.get("loader_params") or {}
+    params.update(extra)
+
+    return params
+
+
 def get_loader(cliente_key: str) -> Callable:
     """
     Importa e retorna uma função loader composta para o cliente.
@@ -90,7 +116,7 @@ def get_loader(cliente_key: str) -> Callable:
     Estratégia:
       1. Se o cliente tiver 'loader' + 'loader_fn' no nível raiz → usa diretamente.
       2. Senão itera sobre 'plataformas' e agrega os loaders de cada plataforma ativa
-         numa única função que os chama em sequência.
+         numa única função que os chama em sequência, passando os parâmetros corretos.
 
     Returns:
         Função loader composta pronta para chamar (sem argumentos)
@@ -106,7 +132,7 @@ def get_loader(cliente_key: str) -> Callable:
 
     # Caso 2: loaders por plataforma
     plataformas = cfg.get("plataformas", {})
-    loaders: list[Callable] = []
+    loaders: list[tuple[Callable, dict]] = []  # (fn, kwargs)
     for plat_key, plat_cfg in plataformas.items():
         if not plat_cfg.get("ativo", True):
             continue
@@ -116,7 +142,10 @@ def get_loader(cliente_key: str) -> Callable:
             continue
         try:
             modulo = import_module(m)
-            loaders.append(getattr(modulo, f))
+            fn = getattr(modulo, f)
+            kwargs = _resolve_loader_params(plat_key, plat_cfg)
+            loaders.append((fn, kwargs))
+            logger.debug("[Registry] Loader '%s.%s' registrado com params: %s", m, f, list(kwargs))
         except Exception as e:
             logger.warning("[Registry] Loader '%s.%s' indisponível: %s", m, f, e)
 
@@ -124,8 +153,8 @@ def get_loader(cliente_key: str) -> Callable:
         raise ValueError(f"Loader não configurado para '{cliente_key}'")
 
     def _loader_composto():
-        """Chama todos os loaders ativos do cliente em sequência."""
-        for fn in loaders:
-            fn()
+        """Chama todos os loaders ativos do cliente em sequência com seus parâmetros."""
+        for fn, kwargs in loaders:
+            fn(**kwargs)
 
     return _loader_composto

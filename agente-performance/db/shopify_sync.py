@@ -411,6 +411,29 @@ def status_sync() -> dict:
     }
 
 
+def carregar_shopify(dias: int = 8) -> dict:
+    """
+    Wrapper sem argumentos obrigatórios para uso como loader no registry.
+
+    Sincroniza os últimos `dias` dias de receita Shopify.
+    Se a tabela estiver vazia, faz carga inicial dos últimos 90 dias.
+
+    Args:
+        dias: quantidade de dias a sincronizar (padrão: 8)
+
+    Returns:
+        dict com resultado da sincronização
+    """
+    status = status_sync()
+    if not status.get("sincronizado", False):
+        logger.info("[Shopify] Tabela vazia — carga inicial (90 dias)")
+        dias = 90
+
+    d_fim    = date.today()
+    d_inicio = d_fim - timedelta(days=dias - 1)
+    return sincronizar(d_inicio, d_fim)
+
+
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

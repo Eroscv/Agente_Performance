@@ -25,7 +25,7 @@
         "shopify": {
           "ativo":          true,
           "loader":         "db.shopify_sync",
-          "loader_fn":      "sync_shopify",
+          "loader_fn":      "carregar_shopify",
           "loader_params":  {"dias": 8},
           "tabela_db":      "source_of_shopify_diario"
         }
