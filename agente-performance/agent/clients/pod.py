@@ -1,12 +1,16 @@
 """
 agent/clients/pod.py
 
-PODAgent — agente especializado em POD Kombucha (Google Ads).
+PODAgent — agente especializado em POD Kombucha.
+
+⚠️ REGRA PERMANENTE:
+  POD Kombucha tem: Meta Ads ✅ + Google Ads ✅ (ativo=false no clientes.json)
+  POD NÃO tem Shopify — nunca injetar dados Shopify em análises da POD.
 
 Diferencial vs BaseClientAgent:
-  - System prompt específico POD (Google Ads)
-  - PLATAFORMA_PADRAO = 'google_ads'
-  - Sem enriquecimento Shopify (POD não tem Shopify integrado)
+  - System prompt específico POD
+  - PLATAFORMA_PADRAO = 'meta_ads' (Meta Ads é a plataforma ativa)
+  - Sem enriquecimento Shopify
 """
 from __future__ import annotations
 
@@ -18,10 +22,10 @@ logger = logging.getLogger(__name__)
 
 
 class PODAgent(BaseClientAgent):
-    """Agente POD Kombucha — Google Ads."""
+    """Agente POD Kombucha — Meta Ads (principal) + Google Ads."""
 
     CLIENTE_KEY       = "pod_kombucha"
-    PLATAFORMA_PADRAO = "google_ads"
+    PLATAFORMA_PADRAO = "meta_ads"  # Meta Ads é a plataforma ativa da POD
 
     def _get_system_prompt(self) -> str:
         from clientes.pod.prompts import SYSTEM_PROMPT_POD

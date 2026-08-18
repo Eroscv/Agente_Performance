@@ -1,10 +1,15 @@
 """
 agent/clients/source_of.py
 
-SourceOFAgent — agente especializado em Source OF (Meta Ads + Shopify).
+SourceOFAgent — agente especializado em Source OF.
+
+⚠️ REGRA PERMANENTE:
+  Source OF tem: Meta Ads ✅ + Google Ads ✅ + Shopify ✅
+  É o único cliente com Shopify integrado.
 
 Diferencial vs BaseClientAgent:
   - System prompt específico Source OF (Meta Ads + Shopify)
+  - PLATAFORMA_PADRAO = 'meta_ads'
   - Enriquecimento Shopify automático: injeta receita real, ROAS real,
     CAC e taxa de recompra quando dados sincronizados disponíveis
 """
@@ -19,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class SourceOFAgent(BaseClientAgent):
-    """Agente Source OF — Meta Ads + Shopify."""
+    """Agente Source OF — Meta Ads + Google Ads + Shopify."""
 
     CLIENTE_KEY       = "source_of"
     PLATAFORMA_PADRAO = "meta_ads"
@@ -32,6 +37,7 @@ class SourceOFAgent(BaseClientAgent):
         """
         Enriquecimento Shopify: injeta receita real quando sincronizado.
         Só roda se o intent for de performance/resumo (não ranking puro).
+        Source OF é o ÚNICO cliente com Shopify — nunca chamar para POD.
         """
         intent = params.get("intent", "")
         _INTENTS_SHOPIFY = {
