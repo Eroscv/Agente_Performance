@@ -444,3 +444,117 @@ def publicar_relatorio_campanha(
 
     logger.info("[Notion] Relatório publicado: %s → %s", titulo, url)
     return {"page_id": page_id, "url": url}
+
+
+# ── Gestão de databases de relatórios ─────────────────────────────────────────
+# Movido de notion/client.py para separar lógica de negócio da camada HTTP.
+
+def get_relatorios_cliente(
+    cliente_key: str,
+    limit: int = 30,
+    data_inicio: str = None,
+    data_fim: str = None,
+) -> list[dict]:
+    """
+    Retorna relatórios de um cliente específico no Notion.
+
+    Args:
+        cliente_key: chave do DATABASES (ex: 'source_of')
+        limit:       número de registros
+        data_inicio: ISO date (ex: '2026-06-01')
+        data_fim:    ISO date (ex: '2026-06-30')
+
+    Returns:
+        Lista de dicts com os campos extraídos
+    """
+    from notion.client import DATABASES, query_database, pagina_para_dict
+
+    db = DATABASES.get(cliente_key)
+    if not db:
+        raise ValueError(
+            f"Cliente não encontrado: {cliente_key}. "
+            f"Disponíveis: {list(DATABASES.keys())}"
+        )
+
+    filtros = None
+    if data_inicio or data_fim:
+        date_filter: dict = {}
+        if data_inicio:
+            date_filter["on_or_after"] = data_inicio
+        if data_fim:
+            date_filter["on_or_before"] = data_fim
+        filtros = {"property": "Data", "date": date_filter}
+
+    pages = query_database(
+        data_source_id=db["data_source_id"],
+        filtros=filtros,
+        sorts=[{"property": "Data", "direction": "descending"}],
+        limit=limit,
+    )
+    return [pagina_para_dict(p) for p in pages]
+
+
+def publicar_relatorio(
+    cliente_key: str,
+    titulo: str,
+    plataforma: str,
+    data: str,
+    investimento: float,
+    roas: float,
+    conversoes: int,
+    cliente_nome: str = None,
+    conteudo_blocos: list[dict] = None,
+) -> dict:
+    """
+    Publica um novo relatório no database do cliente no Notion.
+
+    Args:
+        cliente_key:     chave do DATABASES (ex: 'source_of')
+        titulo:          título da página
+        plataforma:      'meta', 'google', etc.
+        data:            ISO date (ex: '2026-08-18')
+        investimento:    valor investido em R$
+        roas:            ROAS médio
+        conversoes:      número de conversões/compras
+        cliente_nome:    nome do cliente para a propriedade Cliente
+        conteudo_blocos: blocos Notion para o corpo da página
+
+    Returns:
+        Página criada no Notion
+    """
+    from notion.client import (
+        DATABASES, query_database, criar_pagina, adicionar_blocos,
+        prop_titulo, prop_select, prop_data, prop_numero,
+    )
+
+    db = DATABASES.get(cliente_key)
+    if not db:
+        raise ValueError(f"Cliente não encontrado: {cliente_key}")
+
+    if not db.get("database_id"):
+        pages = query_database(db["data_source_id"], limit=1)
+        if pages:
+            parent = pages[0].get("parent", {})
+            db["database_id"] = parent.get("database_id")
+
+    database_id = db.get("database_id")
+    if not database_id:
+        raise ValueError(f"Não foi possível obter database_id para {cliente_key}")
+
+    properties = {
+        "Título":       prop_titulo(titulo),
+        "Plataforma":   prop_select(plataforma),
+        "Data":         prop_data(data),
+        "Investimento": prop_numero(round(investimento, 2)),
+        "ROAS":         prop_numero(round(roas, 2)) if roas is not None else {"number": None},
+        "Conversões":   prop_numero(conversoes),
+    }
+    if cliente_nome:
+        properties["Cliente"] = prop_select(cliente_nome)
+
+    page = criar_pagina(database_id, properties)
+    if conteudo_blocos:
+        adicionar_blocos(page["id"], conteudo_blocos)
+
+    logger.info("[Notion] Relatório publicado: %s (%s)", titulo, page["id"])
+    return page

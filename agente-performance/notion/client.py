@@ -325,110 +325,24 @@ def prop_checkbox(valor: bool) -> dict:
 
 
 # ── Helpers para os databases de relatórios ──────────────────────────────────
+# Implementação movida para notion/relatorio.py (lógica de negócio separada do HTTP).
+# Wrappers com lazy import para evitar importação circular.
 
-def get_relatorios_cliente(
-    cliente_key: str,
-    limit: int = 30,
-    data_inicio: str = None,
-    data_fim: str = None,
-) -> list[dict]:
-    """
-    Retorna relatórios de um cliente específico.
-    
-    Args:
-        cliente_key: chave do DATABASES (ex: 'consorcio_sorteado')
-        limit: número de registros
-        data_inicio: ISO date (ex: '2026-06-01')
-        data_fim: ISO date (ex: '2026-06-30')
-    
-    Returns:
-        Lista de dicts com os campos extraídos
-    """
-    db = DATABASES.get(cliente_key)
-    if not db:
-        raise ValueError(f"Cliente não encontrado: {cliente_key}. Disponíveis: {list(DATABASES.keys())}")
+def get_relatorios_cliente(cliente_key, limit=30, data_inicio=None, data_fim=None):
+    """⚠️  Alias — implementação em notion/relatorio.py."""
+    from notion.relatorio import get_relatorios_cliente as _fn
+    return _fn(cliente_key=cliente_key, limit=limit, data_inicio=data_inicio, data_fim=data_fim)
 
-    filtros = None
-    if data_inicio or data_fim:
-        date_filter: dict[str, Any] = {}
-        if data_inicio and data_fim:
-            date_filter = {"on_or_after": data_inicio}
-        elif data_inicio:
-            date_filter = {"on_or_after": data_inicio}
-        elif data_fim:
-            date_filter = {"on_or_before": data_fim}
-        filtros = {"property": "Data", "date": date_filter}
 
-    pages = query_database(
-        data_source_id=db["data_source_id"],
-        filtros=filtros,
-        sorts=[{"property": "Data", "direction": "descending"}],
-        limit=limit,
+def publicar_relatorio(cliente_key, titulo, plataforma, data, investimento, roas,
+                       conversoes, cliente_nome=None, conteudo_blocos=None):
+    """⚠️  Alias — implementação em notion/relatorio.py."""
+    from notion.relatorio import publicar_relatorio as _fn
+    return _fn(
+        cliente_key=cliente_key, titulo=titulo, plataforma=plataforma,
+        data=data, investimento=investimento, roas=roas, conversoes=conversoes,
+        cliente_nome=cliente_nome, conteudo_blocos=conteudo_blocos,
     )
-    return [pagina_para_dict(p) for p in pages]
-
-
-def publicar_relatorio(
-    cliente_key: str,
-    titulo: str,
-    plataforma: str,
-    data: str,
-    investimento: float,
-    roas: float,
-    conversoes: int,
-    cliente_nome: str = None,
-    conteudo_blocos: list[dict] = None,
-) -> dict:
-    """
-    Publica um novo relatório no database do cliente.
-    
-    Args:
-        cliente_key:    chave do DATABASES (ex: 'consorcio_sorteado')
-        titulo:         título da página (ex: 'Consórcio Sorteado · meta · Ontem · 22/06/2026')
-        plataforma:     'meta', 'google', 'supabase' etc.
-        data:           ISO date (ex: '2026-06-22')
-        investimento:   valor investido em R$
-        roas:           ROAS médio
-        conversoes:     número de conversões/compras
-        cliente_nome:   nome do cliente para a propriedade Cliente
-        conteudo_blocos: lista de blocos Notion para adicionar no corpo da página
-    
-    Returns:
-        Página criada no Notion
-    """
-    db = DATABASES.get(cliente_key)
-    if not db:
-        raise ValueError(f"Cliente não encontrado: {cliente_key}")
-
-    if not db.get("database_id"):
-        # Busca o database_id a partir de uma página existente
-        pages = query_database(db["data_source_id"], limit=1)
-        if pages:
-            parent = pages[0].get("parent", {})
-            db["database_id"] = parent.get("database_id")
-
-    database_id = db.get("database_id")
-    if not database_id:
-        raise ValueError(f"Não foi possível obter database_id para {cliente_key}")
-
-    properties = {
-        "Título":       prop_titulo(titulo),
-        "Plataforma":   prop_select(plataforma),
-        "Data":         prop_data(data),
-        "Investimento": prop_numero(round(investimento, 2)),
-        "ROAS":         prop_numero(round(roas, 2)) if roas is not None else {"number": None},
-        "Conversões":   prop_numero(conversoes),
-    }
-    if cliente_nome:
-        properties["Cliente"] = prop_select(cliente_nome)
-
-    page = criar_pagina(database_id, properties)
-
-    if conteudo_blocos:
-        adicionar_blocos(page["id"], conteudo_blocos)
-
-    logger.info("Relatório publicado no Notion: %s (%s)", titulo, page["id"])
-    return page
 
 
 def listar_databases_disponiveis() -> list[dict]:
