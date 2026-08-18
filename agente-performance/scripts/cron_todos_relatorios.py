@@ -456,6 +456,9 @@ def executar_cliente(
             _cfg_cli  = _get_cli(cliente_key)
             _plataforma = _cfg_cli.get("plataforma", "meta_ads")
             _resumo   = resultado.get("resumo", {})
+            # Resolve canal Slack efetivamente usado
+            import os as _os
+            _slack_ch = _os.getenv("SLACK_CHANNEL", "performance").lstrip("#")
             _reg_rel(
                 cliente_key=cliente_key,
                 plataforma=_plataforma,
@@ -466,6 +469,7 @@ def executar_cliente(
                 notion_url=url if url != "—" else None,
                 notion_page_id=resultado.get("page_id"),
                 slack_ok=ok_slack,
+                slack_channel=_slack_ch if ok_slack else None,
                 blocos_n=len(resultado.get("blocos", [])),
                 resumo=_resumo,
                 status="ok",

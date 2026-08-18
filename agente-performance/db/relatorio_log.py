@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS relatorios_log (
     notion_url      TEXT,
     notion_page_id  TEXT,
     slack_ok        INTEGER DEFAULT 0,
+    slack_channel   TEXT,
     slack_ts        TEXT,
     blocos_n        INTEGER DEFAULT 0,
     invest_total    REAL,
@@ -47,6 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_rellog_cliente     ON relatorios_log(cliente_key)
 CREATE INDEX IF NOT EXISTS idx_rellog_periodo     ON relatorios_log(periodicidade);
 CREATE INDEX IF NOT EXISTS idx_rellog_data        ON relatorios_log(data_inicio, data_fim);
 CREATE INDEX IF NOT EXISTS idx_rellog_cliente_per ON relatorios_log(cliente_key, periodicidade);
+CREATE INDEX IF NOT EXISTS idx_rellog_channel     ON relatorios_log(slack_channel);
 """
 
 
@@ -57,6 +59,13 @@ def _conn() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(CREATE_TABLE)
+    # Migração automática: adiciona slack_channel se não existir (bancos legados)
+    _cols = [r[1] for r in conn.execute("PRAGMA table_info(relatorios_log)").fetchall()]
+    if "slack_channel" not in _cols:
+        conn.execute("ALTER TABLE relatorios_log ADD COLUMN slack_channel TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rellog_channel ON relatorios_log(slack_channel)")
+        conn.commit()
+        logger.info("[RelatorioLog] Migração: coluna slack_channel adicionada.")
     return conn
 
 
@@ -70,6 +79,7 @@ def registrar_relatorio(
     notion_url: str = None,
     notion_page_id: str = None,
     slack_ok: bool = False,
+    slack_channel: str = None,
     slack_ts: str = None,
     blocos_n: int = 0,
     resumo: dict = None,
@@ -90,6 +100,7 @@ def registrar_relatorio(
         notion_url:     URL pública da página no Notion
         notion_page_id: ID da página no Notion
         slack_ok:       True se postou no Slack com sucesso
+        slack_channel:  Canal Slack onde o relatório foi enviado (ex: '#performance')
         slack_ts:       Timestamp da mensagem no Slack
         blocos_n:       Número de blocos Notion gerados
         resumo:         Dict com métricas (invest_total, receita_total, roas, conversoes)
@@ -112,6 +123,9 @@ def registrar_relatorio(
         roas_val      = _to_float(resumo.get("roas"))
         conversoes    = _to_int(resumo.get("conversoes") or resumo.get("compras"))
 
+    # Normaliza canal Slack (garante que fica sem '#' no banco)
+    _canal = (slack_channel or "").lstrip("#") or None
+
     conn = _conn()
     try:
         cur = conn.execute("""
@@ -119,7 +133,7 @@ def registrar_relatorio(
                 cliente_key, plataforma, periodicidade,
                 data_inicio, data_fim,
                 titulo, notion_url, notion_page_id,
-                slack_ok, slack_ts,
+                slack_ok, slack_channel, slack_ts,
                 blocos_n,
                 invest_total, receita_total, roas, conversoes,
                 status, erro_msg, duracao_ms
@@ -127,7 +141,7 @@ def registrar_relatorio(
                 ?, ?, ?,
                 ?, ?,
                 ?, ?, ?,
-                ?, ?,
+                ?, ?, ?,
                 ?,
                 ?, ?, ?, ?,
                 ?, ?, ?
@@ -136,7 +150,7 @@ def registrar_relatorio(
             cliente_key, plataforma, periodicidade,
             str(data_inicio), str(data_fim),
             titulo, notion_url, notion_page_id,
-            int(bool(slack_ok)), slack_ts,
+            int(bool(slack_ok)), _canal, slack_ts,
             blocos_n or 0,
             invest_total, receita_total, roas_val, conversoes,
             status, erro_msg, duracao_ms,
@@ -144,8 +158,8 @@ def registrar_relatorio(
         conn.commit()
         new_id = cur.lastrowid
         logger.debug(
-            "[RelatorioLog] Registrado id=%d: %s/%s/%s (%s→%s) status=%s",
-            new_id, cliente_key, plataforma, periodicidade, data_inicio, data_fim, status,
+            "[RelatorioLog] Registrado id=%d: %s/%s/%s (%s→%s) status=%s canal=%s",
+            new_id, cliente_key, plataforma, periodicidade, data_inicio, data_fim, status, _canal,
         )
         return new_id
     finally:

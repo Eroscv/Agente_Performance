@@ -85,15 +85,47 @@ def get_builder(cliente_key: str, tipo: str = "semanal") -> Callable:
 
 def get_loader(cliente_key: str) -> Callable:
     """
-    Importa e retorna a função loader do cliente.
+    Importa e retorna uma função loader composta para o cliente.
+
+    Estratégia:
+      1. Se o cliente tiver 'loader' + 'loader_fn' no nível raiz → usa diretamente.
+      2. Senão itera sobre 'plataformas' e agrega os loaders de cada plataforma ativa
+         numa única função que os chama em sequência.
 
     Returns:
-        Função loader pronta para chamar (sem argumentos)
+        Função loader composta pronta para chamar (sem argumentos)
     """
     cfg = get_cliente(cliente_key)
+
+    # Caso 1: loader no nível raiz (legado)
     modulo_path = cfg.get("loader")
     fn_name = cfg.get("loader_fn")
-    if not modulo_path or not fn_name:
+    if modulo_path and fn_name:
+        modulo = import_module(modulo_path)
+        return getattr(modulo, fn_name)
+
+    # Caso 2: loaders por plataforma
+    plataformas = cfg.get("plataformas", {})
+    loaders: list[Callable] = []
+    for plat_key, plat_cfg in plataformas.items():
+        if not plat_cfg.get("ativo", True):
+            continue
+        m = plat_cfg.get("loader")
+        f = plat_cfg.get("loader_fn")
+        if not m or not f:
+            continue
+        try:
+            modulo = import_module(m)
+            loaders.append(getattr(modulo, f))
+        except Exception as e:
+            logger.warning("[Registry] Loader '%s.%s' indisponível: %s", m, f, e)
+
+    if not loaders:
         raise ValueError(f"Loader não configurado para '{cliente_key}'")
-    modulo = import_module(modulo_path)
-    return getattr(modulo, fn_name)
+
+    def _loader_composto():
+        """Chama todos os loaders ativos do cliente em sequência."""
+        for fn in loaders:
+            fn()
+
+    return _loader_composto
