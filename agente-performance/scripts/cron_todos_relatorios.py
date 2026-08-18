@@ -436,14 +436,9 @@ def executar_cliente(
         delta = _calcular_delta(resultado, data_inicio, data_fim, cliente_key)
 
         # ── Slack âncora + thread ─────────────────────────────────────────
-        from slack.poster import postar_relatorio
-        ok_slack = postar_relatorio(resultado, periodo_str, tipo_label, cliente=cliente_key, delta=delta)
-        if not ok_slack:
-            postar_slack_fallback(
-                f"{emoji} *{label} · Relatório {tipo_label}*\n_{periodo_str}_\n"
-                f"Invest.: {_fmt_brl(resultado.get('resumo', {}).get('invest') or resultado.get('resumo', {}).get('total_invest'))}"
-                f" · ROAS: {_fmt_x(resultado.get('resumo', {}).get('roas'))}"
-            )
+        from slack.handlers import formatar_resumo_relatorio
+        _msg_slack = f"{emoji} *{label} · Relatório {tipo_label}*\n_{periodo_str}_\n" + formatar_resumo_relatorio(resultado)
+        ok_slack = postar_slack_fallback(_msg_slack)
 
         url = resultado.get("url", "—")
         logger.info("[%s] Slack: %s | Notion: %s", cliente_key, "OK" if ok_slack else "FALHOU", url)
