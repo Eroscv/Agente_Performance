@@ -13,6 +13,7 @@ Fluxo de consulta (@mention):
 Requer: SLACK_BOT_TOKEN e SLACK_CHANNEL no .env
 """
 
+import json
 import logging
 import os
 import time
@@ -49,13 +50,61 @@ def _headers() -> dict:
 
 
 def _post_api(endpoint: str, payload: dict, tentativas: int = 3) -> dict:
-    """POST para API Slack com retry."""
+    """POST para API Slack com retry. Registra TODOS os disparos em slack_disparos_log."""
     url = f"{_BASE}/{endpoint}"
+
+    # ── Extrai metadados do payload para o log ─────────────────────
+    _channel      = str(payload.get("channel") or "")
+    _thread_ts    = payload.get("thread_ts")
+    _payload_size = len(json.dumps(payload).encode())
+    # Preview: texto direto ou primeiro bloco de texto
+    _preview = payload.get("text") or ""
+    if not _preview and payload.get("blocks"):
+        for _b in payload["blocks"]:
+            _t = _b.get("text") or {}
+            _v = _t.get("text") if isinstance(_t, dict) else str(_t)
+            if _v:
+                _preview = _v; break
+    # Infere tipo pelo conteúdo do preview/thread
+    _tipo = "thread" if _thread_ts else "outro"
+    _p = (_preview or "").lower()
+    if "alerta" in _p or "roas" in _p and ("abaixo" in _p or "breakeven" in _p):
+        _tipo = "alerta_roas"
+    elif "relatório diário" in _p or "relat\u00f3rio di\u00e1rio" in _p:
+        _tipo = "relatorio_diario"
+    elif "relatório semanal" in _p or "relat\u00f3rio semanal" in _p:
+        _tipo = "relatorio_semanal"
+    elif "relatório mensal" in _p or "relat\u00f3rio mensal" in _p:
+        _tipo = "relatorio_mensal"
+    elif "sync" in _p or "sincroniz" in _p:
+        _tipo = "sync"
+    elif "❌" in (_preview or "") or "falhou" in _p or "erro" in _p:
+        _tipo = "erro"
+    elif _thread_ts:
+        _tipo = "thread"
+    else:
+        _tipo = "ancora"
+
     for i in range(1, tentativas + 1):
         try:
             r = requests.post(url, headers=_headers(), json=payload, timeout=_TIMEOUT)
             data = r.json()
             if data.get("ok"):
+                # ── Registra disparo com sucesso ─────────────────────
+                try:
+                    from db.slack_log import registrar_disparo
+                    registrar_disparo(
+                        endpoint=endpoint,
+                        channel=_channel,
+                        tipo=_tipo,
+                        texto_preview=_preview,
+                        thread_ts=str(_thread_ts) if _thread_ts else None,
+                        slack_ts=data.get("ts"),
+                        ok=True,
+                        payload_size=_payload_size,
+                    )
+                except Exception as _le:
+                    logger.debug("[SlackLog] Erro no log (non-critical): %s", _le)
                 return data
             err = data.get("error", "unknown")
             logger.warning("[Slack] %s falhou (tentativa %d/%d): %s", endpoint, i, tentativas, err)
@@ -65,6 +114,22 @@ def _post_api(endpoint: str, payload: dict, tentativas: int = 3) -> dict:
             logger.warning("[Slack] %s erro (tentativa %d/%d): %s", endpoint, i, tentativas, e)
             if i < tentativas:
                 time.sleep(2 ** i)
+
+    # ── Registra falha final ────────────────────────────────
+    try:
+        from db.slack_log import registrar_disparo
+        registrar_disparo(
+            endpoint=endpoint,
+            channel=_channel,
+            tipo=_tipo,
+            texto_preview=_preview,
+            thread_ts=str(_thread_ts) if _thread_ts else None,
+            ok=False,
+            erro_msg=f"falhou após {tentativas} tentativas",
+            payload_size=_payload_size,
+        )
+    except Exception as _le:
+        logger.debug("[SlackLog] Erro no log (non-critical): %s", _le)
     return {}
 
 

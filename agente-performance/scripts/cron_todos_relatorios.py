@@ -115,30 +115,58 @@ def postar_slack_fallback(msg: str, max_tentativas: int = 3) -> bool:
     # Tenta primeiro via Bot API com o canal configurado
     token = os.getenv("SLACK_BOT_TOKEN", "")
     ch = os.getenv("SLACK_CHANNEL", "performance").lstrip("#")
+    _ok = False
+    _erro = None
+    _slack_ts = None
     if token:
         try:
             r = _req.post("https://slack.com/api/chat.postMessage",
                           headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
                           json={"channel": ch, "text": msg, "mrkdwn": True}, timeout=15)
-            if r.json().get("ok"):
-                return True
-            logger.warning("Bot API fallback falhou: %s", r.json().get("error"))
+            _rj = r.json()
+            if _rj.get("ok"):
+                _ok = True
+                _slack_ts = _rj.get("ts")
+            else:
+                _erro = _rj.get("error")
+                logger.warning("Bot API fallback falhou: %s", _erro)
         except Exception as e:
+            _erro = str(e)
             logger.warning("Bot API fallback erro: %s", e)
     # Último recurso: webhook (canal fixo)
-    webhook_url = os.getenv("SLACK_WEBHOOK_URL", "")
-    if not webhook_url: return False
-    payload = json.dumps({"text": msg}).encode()
-    for i in range(1, max_tentativas + 1):
-        try:
-            req = urllib.request.Request(webhook_url, data=payload,
-                                         headers={"Content-Type": "application/json"}, method="POST")
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                if resp.status == 200: return True
-        except Exception as e:
-            logger.warning("Slack webhook (tentativa %d): %s", i, e)
-            if i < max_tentativas: time.sleep(2 ** i)
-    return False
+    if not _ok:
+        webhook_url = os.getenv("SLACK_WEBHOOK_URL", "")
+        if not webhook_url:
+            _ok = False
+        else:
+            payload = json.dumps({"text": msg}).encode()
+            for i in range(1, max_tentativas + 1):
+                try:
+                    req = urllib.request.Request(webhook_url, data=payload,
+                                                 headers={"Content-Type": "application/json"}, method="POST")
+                    with urllib.request.urlopen(req, timeout=15) as resp:
+                        if resp.status == 200:
+                            _ok = True; break
+                except Exception as e:
+                    _erro = str(e)
+                    logger.warning("Slack webhook (tentativa %d): %s", i, e)
+                    if i < max_tentativas: time.sleep(2 ** i)
+    # ── Registra no log ───────────────────────────────────────────
+    try:
+        from db.slack_log import registrar_disparo
+        _tipo_fb = "erro" if "❌" in msg or "FALHOU" in msg else "fallback"
+        registrar_disparo(
+            endpoint="chat.postMessage/fallback",
+            channel=ch,
+            tipo=_tipo_fb,
+            texto_preview=msg[:200],
+            slack_ts=_slack_ts,
+            ok=_ok,
+            erro_msg=_erro if not _ok else None,
+        )
+    except Exception as _le:
+        logger.debug("[SlackLog] Erro no log (non-critical): %s", _le)
+    return _ok
 
 
 def _postar_slack_api(text: str, channel: str = None) -> bool:
