@@ -327,45 +327,21 @@ def formatar_resumo_relatorio(resultado: dict) -> str:
         tbl_comp += f"\n{sep_comp}"
         parts.append(f":chart_with_upwards_trend: *Comparativo — Dia Anterior*\n```\n{tbl_comp}\n```")
 
-    # Campanhas
+    # Tabela de campanhas removida — só alertas de campanhas sem conversão
     if campanhas:
-        rows_c = []
         alertas_camp = []
         for c in campanhas:
-            rv = c.get("roas", 0) or 0
-            em = roas_emoji(rv)
-            nome = (c.get("campanha") or "—")[:34]
-            rows_c.append((
-                nome,
-                brl(c.get("investimento")),
-                brl(c.get("receita")),
-                f"{em} {roas_str(rv)}",
-                num(c.get("conversoes")),
-            ))
-            # Alerta: sem conversão com investimento significativo
             if (c.get("conversoes") or 0) == 0 and (c.get("investimento") or 0) > 20:
+                nome = (c.get("campanha") or "—")[:34]
                 alertas_camp.append((nome, brl(c.get("investimento")), "Sem conversão"))
-
-        w0 = max(len(r[0]) for r in rows_c)
-        w1 = max(len(r[1]) for r in rows_c)
-        w2 = max(len(r[2]) for r in rows_c)
-        w3 = max(len(r[3]) for r in rows_c)
-        sep_c = "─" * (w0+w1+w2+w3+22)
-        tbl_c  = f"{sep_c}\n{'Campanha':{w0}} │ {'Invest.':{w1}} │ {'Receita':{w2}} │ {'ROAS':{w3}} │ Conv.\n{sep_c}\n"
-        tbl_c += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]:{w2}} │ {r[3]:{w3}} │ {r[4]}" for r in rows_c)
-        tbl_c += f"\n{sep_c}"
-        parts.append(f":trophy: *Desempenho por Campanha*\n```\n{tbl_c}\n```")
-
-        # Alertas de campanhas
         if alertas_camp:
             w0 = max(len(r[0]) for r in alertas_camp)
             w1 = max(len(r[1]) for r in alertas_camp)
             sep_a = "─" * (w0+w1+len(alertas_camp[0][2])+8)
-            tbl_a  = f"{sep_a}\n{'Campanha':{w0}} │ {'Invest.':{w1}} │ Motivo\n{sep_a}\n"
+            tbl_a  = f"{sep_a}\nCampanha{' '*(w0-8)} │ {'Invest.':{w1}} │ Motivo\n{sep_a}\n"
             tbl_a += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]}" for r in alertas_camp)
             tbl_a += f"\n{sep_a}"
             parts.append(f":warning: *Alertas — Campanhas para Revisar*\n```\n{tbl_a}\n```")
-
     # Shopify embutido (source_of google_ads/meta_ads inclui shopify no resultado)
     sh = resultado.get("shopify") or r.get("shopify")
     if sh and sh.get("receita") and plataforma != "shopify":

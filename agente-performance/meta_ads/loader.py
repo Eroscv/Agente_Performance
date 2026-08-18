@@ -234,18 +234,28 @@ def buscar_insights(account_id: str, dias: int = 30,
 
     logger.info("[%s] Buscando %d dias (%s → %s) em lotes", account_id, dias, date_start, date_end)
 
-    LOTE = 14
+    LOTE = 1  # 1 dia por vez — ranges maiores causam HTTP 500 intermitente na Meta API
     all_rows = []
     cursor   = date_start
 
     while cursor <= date_end:
         lote_fim = min(cursor + timedelta(days=LOTE - 1), date_end)
-        rows = buscar_insights_periodo(account_id, cursor, lote_fim, token_env=token_env)
-        all_rows.extend(rows)
-        logger.info("[%s] Lote %s → %s: %d linhas", account_id, cursor, lote_fim, len(rows))
+        # Retry por lote: até 3 tentativas com backoff
+        for tentativa in range(1, 4):
+            try:
+                rows = buscar_insights_periodo(account_id, cursor, lote_fim, token_env=token_env)
+                all_rows.extend(rows)
+                logger.info("[%s] Dia %s: %d linhas", account_id, cursor, len(rows))
+                break
+            except Exception as exc:
+                logger.warning("[%s] Dia %s tentativa %d/3 falhou: %s", account_id, cursor, tentativa, exc)
+                if tentativa < 3:
+                    time.sleep(5 * tentativa)
+                else:
+                    logger.error("[%s] Dia %s abortado após 3 tentativas", account_id, cursor)
         cursor = lote_fim + timedelta(days=1)
         if cursor <= date_end:
-            time.sleep(1)  # pausa entre lotes
+            time.sleep(0.5)  # pausa leve entre dias
 
     logger.info("[%s] Total: %d linhas", account_id, len(all_rows))
     return all_rows
