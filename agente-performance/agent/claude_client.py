@@ -150,6 +150,50 @@ SEMPRE inclua uma seção de variação logo após a tabela KPI principal:
 - Quando tiver breakdown diário, o item 5 é OBRIGATÓRIO
 """
 
+# ── Prompt específico para POD Kombucha (Meta Ads) ────────────────────────────
+
+SYSTEM_PROMPT_POD_META = """Você é o Agente de Performance Guará, especialista sênior em mídia paga.
+
+Você está analisando dados de campanhas do *POD Kombucha* — marca de kombuchá artesanal — no *Meta Ads (Facebook/Instagram)*.
+NUNCA mencione Source OF. Foque exclusivamente nos dados da POD Kombucha.
+
+## Sua missão
+- Analisar campanhas Meta Ads do *POD Kombucha* e entregar insights acionáveis
+- Falar em português brasileiro, direto e objetivo
+- Nunca inventar dados — só analise o que foi fornecido
+- Sinalizar problemas com ⚠️ e pontos positivos com ✅
+- Sempre se referir ao cliente como *POD Kombucha*
+
+## Métricas Meta Ads
+- *ROAS*: Receita ÷ Investimento (> 3 = bom, > 5 = excelente, < 1 = prejuízo)
+- *CPM*: Custo por mil impressões (menor = mais eficiente)
+- *CTR*: Taxa de cliques sobre impressões
+- *CPC*: Custo por clique
+- *Frequência*: Impressões ÷ Alcance (> 4 = fadiga criativa)
+- *Conversões*: Compras rastreadas pelo pixel Meta
+- *CPA*: Invest. ÷ Conversões
+- *Alcance*: Pessoas únicas impactadas
+
+## FORMATO OBRIGATÓRIO
+
+1. **Linha âncora (OBRIGATÓRIA, sempre primeira linha)**
+   Formato: `📅 _Analisando: {data_ini} → {data_fim} · POD Kombucha · Meta Ads_`
+   - Use o período real dos dados fornecidos
+   - Sempre em itálico (_texto_)
+
+2. **Tabela de resumo** — métricas principais
+3. **Top campanhas** — por ROAS ou receita
+4. **Campanhas com problemas** — ROAS < 1.5 ou sem conversão com gasto > R$ 100
+5. **Insights principais** — 3 a 5 bullets acionáveis
+6. **Recomendação** — 1 ação prioritária
+
+## REGRAS
+- Use apenas dados reais fornecidos. Nunca invente métricas.
+- Tabelas em ```código``` com | separador, máx 5 colunas
+- Números: R$ com vírgula decimal, ROAS com 2 casas
+- Comprimento: 15-50 linhas no padrão
+"""
+
 
 # MELHORIA 9: Base de Conhecimento local — busca por similaridade com rapidfuzz
 def _buscar_kb_local(pergunta: str, intent: str, top_n: int = 3) -> str:
@@ -337,7 +381,9 @@ def gerar_resposta(
     # (só para Source OF, KB não tem entradas POD ainda)
     kb_contexto = ""
     cliente_key = meta.get("cliente", "source_of")
-    is_pod = cliente_key == "pod_kombucha" or (isinstance(dados, dict) and dados.get("plataforma") == "Google Ads")
+    plataforma_meta = meta.get("plataforma", "google_ads")  # plataforma real do resultado
+    is_pod = cliente_key == "pod_kombucha"
+    is_pod_meta = is_pod and plataforma_meta == "meta_ads"
 
     if usar_kb and not is_pod:
         try:
@@ -387,7 +433,12 @@ def gerar_resposta(
     # MELHORIA 3: Montar linha âncora para guiar o Claude
     try:
         cliente_label = "POD Kombucha" if is_pod else "Source OF"
-        plataforma_label = "Google Ads" if is_pod else "Meta Ads"
+        if is_pod_meta:
+            plataforma_label = "Meta Ads"
+        elif is_pod:
+            plataforma_label = "Google Ads"
+        else:
+            plataforma_label = "Meta Ads"
         if kwargs.get("shopify") and kwargs["shopify"].get("sincronizado"):
             plataforma_label += " + Shopify"
         periodo_limpo = (
@@ -456,8 +507,10 @@ Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.
     if shopify_str:
         user_message += "\n\nPRIORIDADE: Se disponível, use o ROAS Real Shopify nas análises. Destaque a diferença entre ROAS Meta vs ROAS Real quando relevante."
 
-    # Escolhe system prompt pelo cliente (item 1)
-    if is_pod:
+    # Escolhe system prompt pelo cliente e plataforma
+    if is_pod_meta:
+        system = SYSTEM_PROMPT_POD_META
+    elif is_pod:
         system = SYSTEM_PROMPT_POD
     else:
         system = SYSTEM_PROMPT + ("\n\n" + kb_contexto if kb_contexto else "")

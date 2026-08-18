@@ -508,7 +508,9 @@ def _ultimo_dia_com_dados(cliente_key, plataforma):
         conn = _sq.connect(str(_db), check_same_thread=False)
         conn.row_factory = _sq.Row
 
-        if plataforma == "google_ads" or cliente_key == "pod_kombucha":
+        if cliente_key == "pod_kombucha" and plataforma == "meta_ads":
+            tabela, col = "pod_kombucha_meta_ads_diario", "data"
+        elif cliente_key == "pod_kombucha":  # google_ads ou default
             tabela, col = "pod_kombucha_gads_diario", "data"
         else:
             tabela, col = "campanhas_unificada", "data_inicio"
