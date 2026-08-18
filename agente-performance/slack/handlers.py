@@ -151,36 +151,262 @@ def _brl(v) -> str:
 
 def formatar_resumo_relatorio(resultado: dict) -> str:
     """
-    Formata o resumo de um resultado de relatório (semanal ou mensal) como texto Slack.
-    Reutilizada por /relatorio (handlers.py) e cron_relatorio.py.
-
-    Args:
-        resultado: dict retornado por gerar_relatorio_semanal / gerar_relatorio_mensal
-
-    Returns:
-        String formatada para Slack (mrkdwn)
+    Formata resumo de relatório diário/semanal/mensal no padrão visual:
+      tabelas ASCII com separadores, seções por tema, emojis.
+    Usado nos crons de relatório e no fluxo multi-plataforma.
     """
-    r           = resultado.get("resumo", {})
-    periodo_str = resultado.get("periodo", "")
-    url         = resultado.get("url") or f"https://notion.so/{resultado.get('page_id','').replace('-','')}"
-    alertas     = resultado.get("alertas", [])
-    alerta_txt  = "\n".join(f"  {a}" for a in alertas)
+    r          = resultado.get("resumo") or {}
+    plataforma = resultado.get("plataforma", "")
+    data_str   = resultado.get("data") or resultado.get("data_fim") or ""
+    campanhas  = resultado.get("campanhas") or []
+    anterior   = resultado.get("anterior") or {}
+    shopify    = r.get("shopify") or resultado.get("shopify") or {}
+    url        = resultado.get("url") or ""
 
-    roas_str = f"{r['roas']:.2f}x" if r.get('roas') else '—'
-    ctr_str  = f"{r['ctr']:.2f}%" if r.get('ctr') else '—'
+    plat_labels = {"meta_ads": "Meta Ads", "google_ads": "Google Ads", "shopify": "Shopify"}
+    plat_nome   = plat_labels.get(plataforma, plataforma.replace("_", " ").title())
 
-    return (
-        f"✅ *Relatório publicado no Notion!*\n\n"
-        f"📅 *Período:* {periodo_str}\n"
-        f"📊 *Campanhas:* {resultado.get('num_campanhas')}\n"
-        f"💰 *Investimento:* {_brl(r.get('total_invest'))}  (+imposto: {_brl(r.get('invest_imp'))})\n"
-        f"📈 *ROAS:* {roas_str}\n"
-        f"🛒 *Compras:* {r.get('total_compras', '—')}\n"
-        f"💵 *CPA:* {_brl(r.get('cpa'))}\n"
-        f"🎯 *CTR:* {ctr_str}\n\n"
-        f"🚨 *Alertas:*\n{alerta_txt}\n\n"
-        f"📎 <{url}|Abrir relatório no Notion>"
-    )
+    # Formatos
+    def brl(v):
+        if v is None: return "—"
+        try: return f"R$ {float(v):,.2f}".replace(",","X").replace(".",",").replace("X",".")
+        except: return "—"
+    def pct(v):
+        if v is None: return "—"
+        try: return f"{float(v):.2f}%"
+        except: return "—"
+    def num(v, dec=0):
+        if v is None: return "—"
+        try:
+            v = float(v)
+            if dec: return f"{v:,.{dec}f}".replace(",",".")
+            return f"{int(v):,}".replace(",",".")
+        except: return "—"
+    def roas_str(v):
+        if v is None: return "—"
+        try: return f"{float(v):.2f}x"
+        except: return "—"
+    def roas_emoji(v):
+        try:
+            f = float(v)
+            if f >= 3: return "🟢"
+            if f >= 1.5: return "🟡"
+            return "🔴"
+        except: return "⚪"
+
+    parts = []
+
+    # ── Shopify standalone ───────────────────────────────────────────────
+    if plataforma == "shopify":
+        sh = r.get("shopify") or r
+        sep = "─" * 33
+        rows = [
+            ("📦 Pedidos",          num(sh.get("pedidos"))),
+            ("💰 Receita",          brl(sh.get("receita"))),
+            ("🆕 Novos Clientes",   num(sh.get("novos_clientes"))),
+            ("🔁 Recompradores",    num(sh.get("recompradores"))),
+            ("🏷️ Ticket Médio",    brl(sh.get("ticket_medio"))),
+            ("🎟️ Total Desconto",  brl(sh.get("total_desconto"))),
+            ("🏅 Pedidos >R$300",   num(sh.get("pedidos_acima_300"))),
+        ]
+        w = max(len(k) for k,_ in rows)
+        tbl = f"{sep}\nMétrica{' '*(w-7)} │ Valor\n{sep}\n"
+        tbl += "\n".join(f"{k}{' '*(w-len(k))} │ {v}" for k,v in rows)
+        tbl += f"\n{sep}"
+        parts.append(f"🛒 *Shopify — Dados da Loja*\n```\n{tbl}\n```")
+        if url:
+            parts.append(f"📎 <{url}|Abrir no Notion>")
+        return "\n".join(parts)
+
+    # ── Visão Geral ──────────────────────────────────────────────────────
+    invest    = r.get("investimento")
+    receita   = r.get("receita")
+    roas_v    = r.get("roas")
+    convs     = r.get("conversoes")
+    camps_n   = r.get("campanhas")
+    alcance   = r.get("alcance")
+    impressoes= r.get("impressoes")
+    cliques   = r.get("cliques")
+    ctr_v     = r.get("ctr")
+    cpc_v     = r.get("cpc")
+    cpm_v     = r.get("cpm")
+
+    sep34 = "─" * 34
+    sep42 = "─" * 42
+    sep54 = "─" * 54
+
+    # Resumo executivo
+    rows_resumo = [
+        (f"🏆 ROAS",        roas_str(roas_v)),
+        (f"💰 Investimento", brl(invest)),
+        (f"📈 Receita",      brl(receita)),
+        (f"✅ Conversões",   num(convs)),
+        (f"📊 Campanhas",    num(camps_n)),
+    ]
+    w = max(len(k) for k,_ in rows_resumo)
+    tbl_res = f"{sep34}\nMétrica{' '*(w-7)} │ Valor\n{sep34}\n"
+    tbl_res += "\n".join(f"{k}{' '*(w-len(k))} │ {v}" for k,v in rows_resumo)
+    tbl_res += f"\n{sep34}"
+    parts.append(f"```\n{tbl_res}\n```")
+
+    # Visão Geral
+    rows_vg = [
+        ("💰 Investimento",  brl(invest)),
+        ("📈 Receita",       brl(receita)),
+        ("🏆 ROAS",          roas_str(roas_v)),
+        ("✅ Conversões",    num(convs)),
+        ("📊 Campanhas Ativas", num(camps_n)),
+        ("👥 Alcance",       num(alcance) if alcance else "—"),
+    ]
+    w = max(len(k) for k,_ in rows_vg)
+    tbl_vg = f"{sep42}\nMétrica{' '*(w-7)} │ Valor\n{sep42}\n"
+    tbl_vg += "\n".join(f"{k}{' '*(w-len(k))} │ {v}" for k,v in rows_vg)
+    tbl_vg += f"\n{sep42}"
+    parts.append(f":bar_chart: *Visão Geral*\n```\n{tbl_vg}\n```")
+
+    # Funil
+    if impressoes or cliques or convs:
+        imp = float(impressoes or 0)
+        cli = float(cliques or 0)
+        con = float(convs or 0)
+        ctr_funil  = f"{(cli/imp*100):.2f}% CTR"    if imp  else "—"
+        conv_funil = f"{(con/cli*100):.2f}% conv/clique" if cli else "—"
+        sep_funil = "─" * 46
+        rows_funil = [
+            ("🖥️ Impressões",  num(imp),        "100%"),
+            ("🔗 Cliques",     num(cli),         ctr_funil),
+            ("✅ Conversões",  num(con),         conv_funil),
+        ]
+        w0 = max(len(r[0]) for r in rows_funil)
+        w1 = max(len(r[1]) for r in rows_funil)
+        tbl_funil  = f"{sep_funil}\n{'Etapa':{w0}} │ {'Volume':{w1}} │ Taxa\n{sep_funil}\n"
+        tbl_funil += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]}" for r in rows_funil)
+        tbl_funil += f"\n{sep_funil}"
+        parts.append(f":arrow_down_small: *Funil de Conversão*\n```\n{tbl_funil}\n```")
+
+    # Métricas de custo
+    if ctr_v or cpc_v or cpm_v:
+        sep18 = "─" * 22
+        rows_custo = [
+            ("🎯 CTR", pct(ctr_v)),
+            ("💸 CPC", brl(cpc_v)),
+            ("📣 CPM", brl(cpm_v)),
+        ]
+        w = max(len(k) for k,_ in rows_custo)
+        tbl_custo = f"{sep18}\nMétrica{' '*(w-7)} │ Valor\n{sep18}\n"
+        tbl_custo += "\n".join(f"{k}{' '*(w-len(k))} │ {v}" for k,v in rows_custo)
+        tbl_custo += f"\n{sep18}"
+        parts.append(f":triangular_ruler: *Métricas de Custo*\n```\n{tbl_custo}\n```")
+
+    # Comparativo dia anterior
+    if anterior and anterior.get("investimento"):
+        def var_str(atual, ant, maior_melhor=True):
+            try:
+                a, b = float(atual or 0), float(ant or 0)
+                if b == 0: return "—"
+                pct_var = (a - b) / b * 100
+                arrow = "↑" if a > b else "↓"
+                ok = (a > b) == maior_melhor
+                icon = "✅" if ok else "⚠️"
+                return f"{icon} {arrow} {abs(pct_var):.1f}%"
+            except: return "—"
+
+        rows_comp = [
+            ("💰 Investimento", brl(anterior.get("investimento")), brl(invest),       var_str(invest, anterior.get("investimento"), False)),
+            ("📈 Receita",      brl(anterior.get("receita")),      brl(receita),      var_str(receita, anterior.get("receita"))),
+            ("ROAS",            roas_str(anterior.get("roas")),    roas_str(roas_v),  var_str(roas_v, anterior.get("roas"))),
+            ("✅ Conversões",   num(anterior.get("conversoes")),   num(convs),        var_str(convs, anterior.get("conversoes"))),
+            ("🎯 CTR",          pct(anterior.get("ctr")),          pct(ctr_v),        var_str(ctr_v, anterior.get("ctr"))),
+        ]
+        w0 = max(len(r[0]) for r in rows_comp)
+        w1 = max(len(r[1]) for r in rows_comp)
+        w2 = max(len(r[2]) for r in rows_comp)
+        sep_comp = "─" * (w0+w1+w2+14)
+        tbl_comp  = f"{sep_comp}\n{'Métrica':{w0}} │ {'Ontem':{w1}} │ {'Hoje':{w2}} │ Var.\n{sep_comp}\n"
+        tbl_comp += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]:{w2}} │ {r[3]}" for r in rows_comp)
+        tbl_comp += f"\n{sep_comp}"
+        parts.append(f":chart_with_upwards_trend: *Comparativo — Dia Anterior*\n```\n{tbl_comp}\n```")
+
+    # Campanhas
+    if campanhas:
+        rows_c = []
+        alertas_camp = []
+        for c in campanhas:
+            rv = c.get("roas", 0) or 0
+            em = roas_emoji(rv)
+            nome = (c.get("campanha") or "—")[:34]
+            rows_c.append((
+                nome,
+                brl(c.get("investimento")),
+                brl(c.get("receita")),
+                f"{em} {roas_str(rv)}",
+                num(c.get("conversoes")),
+            ))
+            # Alerta: sem conversão com investimento significativo
+            if (c.get("conversoes") or 0) == 0 and (c.get("investimento") or 0) > 20:
+                alertas_camp.append((nome, brl(c.get("investimento")), "Sem conversão"))
+
+        w0 = max(len(r[0]) for r in rows_c)
+        w1 = max(len(r[1]) for r in rows_c)
+        w2 = max(len(r[2]) for r in rows_c)
+        w3 = max(len(r[3]) for r in rows_c)
+        sep_c = "─" * (w0+w1+w2+w3+22)
+        tbl_c  = f"{sep_c}\n{'Campanha':{w0}} │ {'Invest.':{w1}} │ {'Receita':{w2}} │ {'ROAS':{w3}} │ Conv.\n{sep_c}\n"
+        tbl_c += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]:{w2}} │ {r[3]:{w3}} │ {r[4]}" for r in rows_c)
+        tbl_c += f"\n{sep_c}"
+        parts.append(f":trophy: *Desempenho por Campanha*\n```\n{tbl_c}\n```")
+
+        # Alertas de campanhas
+        if alertas_camp:
+            w0 = max(len(r[0]) for r in alertas_camp)
+            w1 = max(len(r[1]) for r in alertas_camp)
+            sep_a = "─" * (w0+w1+len(alertas_camp[0][2])+8)
+            tbl_a  = f"{sep_a}\n{'Campanha':{w0}} │ {'Invest.':{w1}} │ Motivo\n{sep_a}\n"
+            tbl_a += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]}" for r in alertas_camp)
+            tbl_a += f"\n{sep_a}"
+            parts.append(f":warning: *Alertas — Campanhas para Revisar*\n```\n{tbl_a}\n```")
+
+    # Shopify embutido (source_of google_ads/meta_ads inclui shopify no resultado)
+    sh = resultado.get("shopify") or r.get("shopify")
+    if sh and sh.get("receita") and plataforma != "shopify":
+        sep_sh = "─" * 33
+        rows_sh = [
+            ("📦 Pedidos",         num(sh.get("pedidos"))),
+            ("💰 Receita",         brl(sh.get("receita"))),
+            ("🆕 Novos Clientes",  num(sh.get("novos_clientes"))),
+            ("🔁 Recompradores",   num(sh.get("recompradores"))),
+            ("🏷️ Ticket Médio",   brl(sh.get("ticket_medio"))),
+            ("🎟️ Total Desconto", brl(sh.get("total_desconto"))),
+            ("🏅 Pedidos >R$300",  num(sh.get("pedidos_acima_300"))),
+        ]
+        w = max(len(k) for k,_ in rows_sh)
+        tbl_sh  = f"{sep_sh}\nMétrica{' '*(w-7)} │ Valor\n{sep_sh}\n"
+        tbl_sh += "\n".join(f"{k}{' '*(w-len(k))} │ {v}" for k,v in rows_sh)
+        tbl_sh += f"\n{sep_sh}"
+        parts.append(f":shopping_trolley: *Shopify — Dados da Loja*\n```\n{tbl_sh}\n```")
+
+    # Rodapé com data e link
+    data_fmt = f"{data_str[8:10]}/{data_str[5:7]}/{data_str[:4]}" if len(data_str) == 10 else data_str
+    footer_parts = []
+    if data_fmt and data_fmt != "//":
+        footer_parts.append(data_fmt)
+    cliente_key = resultado.get("cliente_key", "")
+    cliente_labels = {"source_of": "Source OF", "pod_kombucha": "POD Kombucha"}
+    if cliente_key:
+        footer_parts.append(cliente_labels.get(cliente_key, cliente_key))
+    if plat_nome:
+        footer_parts.append(plat_nome)
+    if campanhas:
+        footer_parts.append(f"{len(campanhas)} campanhas ativas")
+
+    if footer_parts:
+        parts.append(f"_{'  ·  '.join(footer_parts)}_")
+
+    if url:
+        parts.append(f"📎 <{url}|Abrir no Notion>")
+
+    return "\n".join(parts)
+
 
 
 # ── MELHORIA 7: Sugestões pro-ativas por intent ─────────────────────────────
