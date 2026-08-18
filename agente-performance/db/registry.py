@@ -12,6 +12,7 @@ Uso:
     from db.registry import listar_clientes, get_cliente, get_clientes_ativos
 """
 
+import inspect
 import json
 import logging
 from importlib import import_module
@@ -144,6 +145,21 @@ def get_loader(cliente_key: str) -> Callable:
             modulo = import_module(m)
             fn = getattr(modulo, f)
             kwargs = _resolve_loader_params(plat_key, plat_cfg)
+            # Filtra kwargs para apenas os que a função aceita (evita TypeError)
+            sig = inspect.signature(fn)
+            accepts_var_keyword = any(
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in sig.parameters.values()
+            )
+            if not accepts_var_keyword:
+                accepted = set(sig.parameters)
+                ignored = set(kwargs) - accepted
+                if ignored:
+                    logger.debug(
+                        "[Registry] Loader '%s.%s' ignora params não aceitos: %s",
+                        m, f, ignored,
+                    )
+                kwargs = {k: v for k, v in kwargs.items() if k in accepted}
             loaders.append((fn, kwargs))
             logger.debug("[Registry] Loader '%s.%s' registrado com params: %s", m, f, list(kwargs))
         except Exception as e:
@@ -153,8 +169,30 @@ def get_loader(cliente_key: str) -> Callable:
         raise ValueError(f"Loader não configurado para '{cliente_key}'")
 
     def _loader_composto():
-        """Chama todos os loaders ativos do cliente em sequência com seus parâmetros."""
+        """
+        Chama todos os loaders ativos do cliente em sequência com seus parâmetros.
+        Loaders individuais que falham são registrados como aviso mas não interrompem
+        os demais. Levanta RuntimeError apenas se TODOS os loaders falharem.
+        """
+        falhas: list[str] = []
+        sucesso = 0
         for fn, kwargs in loaders:
-            fn(**kwargs)
+            fn_label = f"{fn.__module__}.{fn.__name__}"
+            try:
+                fn(**kwargs)
+                sucesso += 1
+                logger.debug("[Registry] Loader '%s' OK", fn_label)
+            except Exception as exc:
+                logger.warning("[Registry] Loader '%s' falhou (continuando): %s", fn_label, exc)
+                falhas.append(f"{fn_label}: {exc}")
+        if sucesso == 0:
+            raise RuntimeError(
+                f"Todos os loaders falharam para '{cliente_key}': " + " | ".join(falhas)
+            )
+        if falhas:
+            logger.warning(
+                "[Registry] %d/%d loaders falharam para '%s': %s",
+                len(falhas), len(loaders), cliente_key, " | ".join(falhas),
+            )
 
     return _loader_composto
