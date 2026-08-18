@@ -33,7 +33,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent
-DB_PATH  = BASE_DIR / "data" / "campanhas.db"
+# DB roteado para data/logs/outbox.db via db.connections
+from db.connections import get_outbox_conn as _get_db_conn
 
 _CREATE = """
 CREATE TABLE IF NOT EXISTS slack_disparos_log (
@@ -57,10 +58,7 @@ CREATE INDEX IF NOT EXISTS idx_slack_log_channel  ON slack_disparos_log(channel)
 
 
 def _conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH), timeout=10)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn = _get_db_conn()
     conn.executescript(_CREATE)
     return conn
 

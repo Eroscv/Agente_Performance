@@ -24,7 +24,8 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path(__file__).parent.parent / "data" / "campanhas.db"
+# DB roteado para data/logs/inbox.db via db.connections
+from db.connections import get_inbox_conn as _get_db_conn
 
 _DDL = """
 CREATE TABLE IF NOT EXISTS consultas_usuarios (
@@ -55,11 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_cu_criado    ON consultas_usuarios(criado_em);
 
 
 def _conn() -> sqlite3.Connection:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.row_factory = sqlite3.Row
-    return conn
+    return _get_db_conn()
 
 
 def _init():
@@ -67,7 +64,6 @@ def _init():
         conn = _conn()
         conn.executescript(_DDL)
         conn.commit()
-        conn.close()
     except Exception as e:
         logger.warning("[ConsultasLog] Erro ao criar tabela: %s", e)
 

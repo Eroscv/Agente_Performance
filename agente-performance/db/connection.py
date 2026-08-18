@@ -1,71 +1,41 @@
 """
 db/connection.py
 
-Gerencia a conexão SQLite com row_factory e helpers de consulta.
+Gerencia a conexão SQLite principal com row_factory e helpers de consulta.
+A partir da Etapa 3, delega para db/connections.py (multi-DB federado).
+
 Exporta:
-  - get_conn()       → conexão singleton (thread-safe via check_same_thread=False)
+  - get_conn()         → conexão federada (v_performance, campanhas_unificada, shopify)
   - query(sql, params) → list[dict]
   - query_one(sql, params) → dict | None
-  - DB_PATH
+  - DB_PATH            → mantido para compatibilidade (aponta para campanhas.db legado)
 """
 
 import logging
-import sqlite3
 from pathlib import Path
 from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent
-DB_PATH  = BASE_DIR / "data" / "campanhas.db"
-
-_conn: Optional[sqlite3.Connection] = None
+DB_PATH  = BASE_DIR / "data" / "campanhas.db"  # legado — mantído para compat
 
 
-def _ensure_indexes(conn: sqlite3.Connection) -> None:
-    """
-    Garante que todos os índices definidos no schema existem.
-    Inclui o índice parcial idx_campanhas_ativo (investimento > 0).
-    Executado uma única vez por conexão, idempotente via IF NOT EXISTS.
-    """
-    from db.schema import CREATE_TABLE_SQL
-    # Extrai apenas as linhas CREATE INDEX do DDL
-    for stmt in CREATE_TABLE_SQL.split(";"):
-        stmt = stmt.strip()
-        if stmt.upper().startswith("CREATE INDEX"):
-            try:
-                conn.execute(stmt)
-            except sqlite3.OperationalError as exc:
-                logger.debug("[connection] índice já existe ou erro ignorável: %s", exc)
-    conn.commit()
-
-
-def get_conn() -> sqlite3.Connection:
-    global _conn
-    if _conn is None:
-        if not DB_PATH.exists():
-            raise FileNotFoundError(
-                f"Banco não encontrado: {DB_PATH}\n"
-                "Execute primeiro: python -m db.loader"
-            )
-        _conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
-        _conn.row_factory = sqlite3.Row
-        _conn.execute("PRAGMA journal_mode=WAL")
-        _conn.execute("PRAGMA foreign_keys=ON")
-        _ensure_indexes(_conn)
-        logger.info("Conexão SQLite aberta: %s", DB_PATH)
-    return _conn
+def get_conn():
+    """Retorna conexão federada via db.connections.get_federated_conn()."""
+    from db.connections import get_federated_conn
+    return get_federated_conn()
 
 
 def query(sql: str, params: tuple = ()) -> list[dict]:
     """Executa SELECT e retorna lista de dicts."""
     conn = get_conn()
     cur  = conn.execute(sql, params)
-    rows = cur.fetchall()
-    return [dict(r) for r in rows]
+    return [dict(r) for r in cur.fetchall()]
 
 
 def query_one(sql: str, params: tuple = ()) -> Optional[dict]:
     """Executa SELECT e retorna primeiro resultado ou None."""
     results = query(sql, params)
     return results[0] if results else None
+

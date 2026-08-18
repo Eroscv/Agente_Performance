@@ -17,7 +17,8 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent
-DB_PATH  = BASE_DIR / "data" / "campanhas.db"
+# DB roteado para data/logs/outbox.db via db.connections
+from db.connections import get_outbox_conn as _get_db_conn
 
 CREATE_TABLE = """
 CREATE TABLE IF NOT EXISTS relatorios_log (
@@ -53,11 +54,8 @@ CREATE INDEX IF NOT EXISTS idx_rellog_channel     ON relatorios_log(slack_channe
 
 
 def _conn() -> sqlite3.Connection:
-    """Abre conexão dedicada (com WAL) e garante que a tabela existe."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    """Abre conexão via db.connections (outbox.db) e garante que a tabela existe."""
+    conn = _get_db_conn()
     conn.executescript(CREATE_TABLE)
     # Migração automática: adiciona slack_channel se não existir (bancos legados)
     _cols = [r[1] for r in conn.execute("PRAGMA table_info(relatorios_log)").fetchall()]
