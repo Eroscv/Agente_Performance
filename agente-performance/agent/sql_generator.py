@@ -3,11 +3,14 @@ agent/sql_generator.py — Geração dinâmica de SQL via LLM (Text-to-SQL).
 
 Usado como fallback quando nenhum intent cobre a pergunta do usuário.
 
-Fluxo:
-  1. Recebe pergunta + contexto (cliente_key, data_inicio, data_fim)
-  2. LLM gera SELECT com base no schema injetado + regras de negócio
-  3. Validação: apenas SELECT, LIMIT obrigatório, WHERE cliente_key obrigatório
-  4. Executa via consultar_sql() e retorna list[dict]
+Fluxo simples (perguntas diretas):
+  pergunta → [LLM: Generator] → SELECT validado → executa
+
+Fluxo com Query Planner (perguntas complexas):
+  pergunta → [LLM: Planner] → QueryPlan (JSON) → [LLM: Generator] → SELECT validado → executa
+
+O Planner é ativado automaticamente por heurística quando a pergunta contém
+palavras-chave de comparação, multi-filtro ou múltiplas dimensões.
 
 Guardrails:
   - Apenas SELECT (bloqueia DDL/DML)
@@ -17,6 +20,7 @@ Guardrails:
   - Colunas inexistentes → SQLite lança exceção → capturada com mensagem amigável
 """
 
+import json
 import logging
 import re
 import sqlite3
@@ -54,7 +58,6 @@ def _call_llm(system: str, user: str, max_tokens: int = 512) -> str:
     )
     return resp.content[0].text.strip()
 
-logger = logging.getLogger(__name__)
 
 # ── Schema injetado no prompt (apenas campanhas_unificada — fonte canônica) ──
 _SCHEMA_CONTEXT = """
@@ -102,7 +105,7 @@ REGRAS OBRIGATÓRIAS:
   7. Apenas SELECT — nenhum INSERT/UPDATE/DELETE/DROP
 """
 
-# ── Prompt de geração de SQL ──────────────────────────────────────────────────
+# ── Prompt de geração de SQL (modo direto) ────────────────────────────────────
 _SQL_GEN_SYSTEM = (
     "Você é um especialista em SQL para análise de campanhas de mídia paga.\n"
     "Gere APENAS o SQL — sem explicações, sem markdown, sem bloco de código.\n"
@@ -110,48 +113,201 @@ _SQL_GEN_SYSTEM = (
     + _SCHEMA_CONTEXT
 )
 
+# ── Prompt do Query Planner ───────────────────────────────────────────────────
+_PLANNER_SYSTEM = """\
+Você é um analista de dados especializado em mídia paga.
+Sua tarefa é interpretar uma pergunta em português e produzir um plano de consulta estruturado em JSON.
+
+Responda APENAS com JSON válido — sem explicações, sem markdown, sem bloco de código.
+
+Schema do JSON de saída:
+{
+  "tipo": string,           // "ranking" | "comparativo_temporal" | "filtrado" | "tendencia" | "funil" | "geral"
+  "metricas": [string],     // ex: ["roas", "investimento", "compras"] — use nomes das colunas
+  "granularidade": string,  // "campanha" | "plataforma" | "dia" | "semana" | "mes" | null
+  "periodo_a": {            // período principal (ou único)
+    "inicio": string | null,  // ISO: "2026-08-11"
+    "fim": string | null
+  },
+  "periodo_b": {            // período de comparação (só para comparativo_temporal)
+    "inicio": string | null,
+    "fim": string | null
+  } | null,
+  "filtros": [              // filtros adicionais (ex: ROAS > 2, plataforma = meta_ads)
+    {
+      "coluna": string,
+      "op": string,         // ">" | "<" | ">=" | "<=" | "=" | "!=" | "IN"
+      "valor": string | number | [string]
+    }
+  ],
+  "ordenacao": string | null,  // ex: "roas DESC" | "investimento ASC"
+  "limite": number,            // padrão 20, máximo 50
+  "usar_having": boolean       // true se os filtros se aplicam a agregações
+}
+
+Regras:
+- Para ROAS use coluna "roas" (será calculado como SUM(valor_compras)/SUM(investimento))
+- Para CPA use coluna "cpa" (será calculado como SUM(investimento)/SUM(compras))
+- Nunca invente colunas fora do schema
+- Se período não mencionado, deixe inicio/fim null
+- Se não há comparação, deixe periodo_b null
+"""
+
+# ── Prompt do Generator (modo planner) ───────────────────────────────────────
+_SQL_FROM_PLAN_SYSTEM = (
+    "Você é um especialista em SQL para análise de campanhas de mídia paga.\n"
+    "Receberá um plano de consulta em JSON e deve gerar APENAS o SQL correspondente.\n"
+    "Sem explicações, sem markdown, sem bloco de código — apenas o SELECT.\n\n"
+    + _SCHEMA_CONTEXT
+    + """
+INSTRUÇÕES PARA COMPARATIVO TEMPORAL:
+  - Use dois CTEs (periodo_a, periodo_b) com os respectivos filtros de data
+  - Faça JOIN pelos campos de granularidade
+  - Calcule delta absoluto e percentual para cada métrica
+  - Exemplo:
+    WITH periodo_a AS (
+      SELECT campanha, SUM(investimento) AS inv_a, SUM(valor_compras) AS rec_a
+      FROM campanhas_unificada
+      WHERE cliente_key = 'source_of' AND data_inicio >= '2026-08-11' AND data_fim <= '2026-08-17'
+      GROUP BY campanha
+    ), periodo_b AS (
+      SELECT campanha, SUM(investimento) AS inv_b, SUM(valor_compras) AS rec_b
+      FROM campanhas_unificada
+      WHERE cliente_key = 'source_of' AND data_inicio >= '2026-08-04' AND data_fim <= '2026-08-10'
+      GROUP BY campanha
+    )
+    SELECT a.campanha,
+           ROUND(a.rec_a/NULLIF(a.inv_a,0),2) AS roas_atual,
+           ROUND(b.rec_b/NULLIF(b.inv_b,0),2) AS roas_anterior,
+           ROUND((a.rec_a/NULLIF(a.inv_a,0) - b.rec_b/NULLIF(b.inv_b,0)),2) AS delta_roas
+    FROM periodo_a a LEFT JOIN periodo_b b ON a.campanha = b.campanha
+    ORDER BY roas_atual DESC
+    LIMIT 20
+"""
+)
+
+# ── Heurística de complexidade ────────────────────────────────────────────────
+_COMPLEX_TRIGGERS = re.compile(
+    r"\b("
+    r"compar[ae]|vs\.?|versus|contra"
+    r"|semana\s+passada|m[eê]s\s+passado|per[ií]odo\s+anterior"
+    r"|em\s+rela[cç][aã]o\s+a|em\s+compara[cç][aã]o"
+    r"|excluindo|apenas\s+(?:campanhas?|plataforma)"
+    r"|por\s+plataforma\s+e\s+campanha|por\s+campanha\s+e\s+plataforma"
+    r"|acima\s+de\s+\d+.*e\s+(?:abaixo|menor)"
+    r"|tanto.*quanto|tanto.*como"
+    r"|semana\s+(?:a\s+semana|over\s+semana|vs)"
+    r"|m[eê]s\s+(?:a\s+m[eê]s|over\s+m[eê]s)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_complex_query(pergunta: str) -> bool:
+    """Retorna True se a pergunta tem padrões de complexidade que se beneficiam do Planner."""
+    return bool(_COMPLEX_TRIGGERS.search(pergunta))
+
+
+# ── Query Planner ─────────────────────────────────────────────────────────────
+
+def _run_planner(
+    pergunta: str,
+    cliente_key: str,
+    data_inicio: Optional[str],
+    data_fim: Optional[str],
+) -> dict:
+    """
+    Chama o LLM Planner e retorna o QueryPlan como dict.
+    Lança ValueError se o JSON for inválido.
+    """
+    periodo_ctx = ""
+    if data_inicio or data_fim:
+        periodo_ctx = f"\nPeríodo de referência: {data_inicio or '?'} até {data_fim or 'hoje'}"
+
+    user_msg = (
+        f"Cliente: {cliente_key}{periodo_ctx}\n"
+        f"Pergunta: {pergunta}\n\n"
+        "Produza o QueryPlan JSON conforme o schema."
+    )
+
+    logger.info("[QueryPlanner] Planejando: %r", pergunta[:80])
+    raw = _call_llm(system=_PLANNER_SYSTEM, user=user_msg, max_tokens=512)
+
+    # Extrai JSON mesmo se vier com texto ao redor
+    json_match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not json_match:
+        raise ValueError(f"Planner não retornou JSON válido: {raw[:200]}")
+
+    try:
+        plan = json.loads(json_match.group(0))
+    except json.JSONDecodeError as e:
+        raise ValueError(f"JSON do Planner inválido: {e} | raw={raw[:200]}")
+
+    logger.info("[QueryPlanner] Plano: %s", json.dumps(plan, ensure_ascii=False))
+    return plan
+
+
+def _sql_from_plan(
+    plan: dict,
+    pergunta_original: str,
+    cliente_key: str,
+) -> str:
+    """
+    Chama o LLM Generator com o QueryPlan serializado para gerar o SQL final.
+    """
+    user_msg = (
+        f"Cliente: {cliente_key}\n"
+        f"Pergunta original: {pergunta_original}\n\n"
+        f"QueryPlan:\n{json.dumps(plan, ensure_ascii=False, indent=2)}\n\n"
+        "Gere o SQL correspondente. Apenas o SELECT, nada mais."
+    )
+
+    logger.info("[QueryPlanner] Gerando SQL a partir do plano")
+    return _call_llm(system=_SQL_FROM_PLAN_SYSTEM, user=user_msg, max_tokens=700)
+
+
 # ── Validação ─────────────────────────────────────────────────────────────────
 _MAX_ROWS = 50
-_SELECT_RE   = re.compile(r"^\s*SELECT\b", re.IGNORECASE)
+_SELECT_RE    = re.compile(r"^\s*SELECT\b", re.IGNORECASE)
 _FORBIDDEN_RE = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|ATTACH|PRAGMA|VACUUM)\b",
     re.IGNORECASE,
 )
-_LIMIT_RE    = re.compile(r"\bLIMIT\s+\d+", re.IGNORECASE)
-_CLKEY_RE    = re.compile(r"cliente_key\s*=", re.IGNORECASE)
+_LIMIT_RE  = re.compile(r"\bLIMIT\s+\d+", re.IGNORECASE)
+_CLKEY_RE  = re.compile(r"cliente_key\s*=", re.IGNORECASE)
 
 
 def _validate_sql(sql: str, cliente_key: str) -> tuple[str, str | None]:
     """
     Valida e normaliza o SQL gerado pelo LLM.
-
     Retorna (sql_limpo, erro_ou_None).
     """
     sql = sql.strip().rstrip(";")
 
-    # Extrai apenas o SELECT (descarta qualquer texto antes)
-    match = re.search(r"(SELECT\b.*)", sql, re.IGNORECASE | re.DOTALL)
+    # Remove backticks finais ou iniciais (markdown leak)
+    sql = re.sub(r"^```\w*\s*", "", sql)
+    sql = re.sub(r"```\s*$", "", sql).strip()
+
+    # SQLite não suporta FULL OUTER JOIN — converte para LEFT JOIN
+    sql = re.sub(r"\bFULL\s+OUTER\s+JOIN\b", "LEFT JOIN", sql, flags=re.IGNORECASE)
+
+    match = re.search(r"((?:WITH\b|SELECT\b).*)", sql, re.IGNORECASE | re.DOTALL)
     if not match:
         return sql, "SQL gerado não contém SELECT."
     sql = match.group(1).strip()
 
-    # Bloqueia DDL/DML
     if _FORBIDDEN_RE.search(sql):
         return sql, "SQL gerado contém operação não permitida (DDL/DML)."
 
-    # Garante LIMIT
     if not _LIMIT_RE.search(sql):
         sql = sql + f"\nLIMIT {_MAX_ROWS}"
         logger.debug("[SQLGenerator] LIMIT ausente — adicionado automaticamente")
 
-    # Garante cliente_key (isolamento)
     if not _CLKEY_RE.search(sql):
-        # Tenta injetar no WHERE existente ou criar novo WHERE antes de GROUP BY / ORDER BY / LIMIT
         inject = f"cliente_key = '{cliente_key}'"
         if re.search(r"\bWHERE\b", sql, re.IGNORECASE):
             sql = re.sub(r"(\bWHERE\b)", rf"\1 {inject} AND ", sql, count=1, flags=re.IGNORECASE)
         else:
-            # Insere WHERE antes de GROUP BY, ORDER BY ou LIMIT
             sql = re.sub(
                 r"(\b(GROUP\s+BY|ORDER\s+BY|LIMIT)\b)",
                 f"WHERE {inject}\n\\1",
@@ -159,7 +315,6 @@ def _validate_sql(sql: str, cliente_key: str) -> tuple[str, str | None]:
                 count=1,
                 flags=re.IGNORECASE,
             )
-            # Se não encontrou nenhum desses, adiciona no final antes do LIMIT
             if not _CLKEY_RE.search(sql):
                 sql = sql + f"\nWHERE {inject}"
         logger.warning(
@@ -169,6 +324,8 @@ def _validate_sql(sql: str, cliente_key: str) -> tuple[str, str | None]:
     return sql, None
 
 
+# ── Ponto de entrada principal ────────────────────────────────────────────────
+
 def gerar_sql(
     pergunta: str,
     cliente_key: str = "source_of",
@@ -176,51 +333,54 @@ def gerar_sql(
     data_fim: Optional[str] = None,
 ) -> str:
     """
-    Chama o LLM para gerar um SELECT correspondente à pergunta.
+    Gera um SELECT para a pergunta informada.
+
+    Usa Query Planner para perguntas complexas (comparativos, multi-filtro),
+    e modo direto para perguntas simples.
 
     Returns:
         SQL validado e pronto para execução.
 
     Raises:
         ValueError: se o SQL gerado não passar na validação.
-        RuntimeError: se o LLM falhar após retries.
+        RuntimeError: se o LLM falhar.
     """
-    # Contexto de datas para ajudar o LLM
-    periodo_ctx = ""
-    if data_inicio or data_fim:
-        periodo_ctx = f"\nPeríodo solicitado: {data_inicio or '?'} até {data_fim or 'hoje'}"
-
-    user_msg = (
-        f"Cliente: {cliente_key}{periodo_ctx}\n"
-        f"Pergunta: {pergunta}\n\n"
-        "Gere o SQL para responder essa pergunta. Apenas o SELECT, nada mais."
+    complexa = _is_complex_query(pergunta)
+    logger.info(
+        "[SQLGenerator] Modo=%s para: %r",
+        "planner" if complexa else "direto",
+        pergunta[:60],
     )
 
-    logger.info("[SQLGenerator] Gerando SQL para: %r (cliente=%s)", pergunta[:60], cliente_key)
+    if complexa:
+        # Caminho com Planner: 2 chamadas LLM
+        try:
+            plan = _run_planner(pergunta, cliente_key, data_inicio, data_fim)
+            sql_raw = _sql_from_plan(plan, pergunta, cliente_key)
+        except ValueError as e:
+            logger.warning("[QueryPlanner] Falhou, caindo no modo direto: %s", e)
+            complexa = False  # fallback para modo direto abaixo
 
-    sql_raw = _call_llm(
-        system=_SQL_GEN_SYSTEM,
-        user=user_msg,
-        max_tokens=512,
-    )
+    if not complexa:
+        # Caminho direto: 1 chamada LLM
+        periodo_ctx = ""
+        if data_inicio or data_fim:
+            periodo_ctx = f"\nPeríodo solicitado: {data_inicio or '?'} até {data_fim or 'hoje'}"
 
-    # Validação em 4 camadas via sql_validator
-    from agent.sql_validator import validate, ValidationResult
-    result: ValidationResult = validate(sql_raw, cliente_key=cliente_key)
-
-    if result.has_errors():
-        erros = " | ".join(result.error_messages())
-        logger.error("[SQLGenerator] Validação bloqueou: %s | sql=%r", erros, sql_raw[:200])
-        raise ValueError(f"SQL inválido: {erros}")
-
-    if result.issues:
-        logger.info(
-            "[SQLGenerator] Issues: %s",
-            " | ".join(str(i) for i in result.issues),
+        user_msg = (
+            f"Cliente: {cliente_key}{periodo_ctx}\n"
+            f"Pergunta: {pergunta}\n\n"
+            "Gere o SQL para responder essa pergunta. Apenas o SELECT, nada mais."
         )
+        sql_raw = _call_llm(system=_SQL_GEN_SYSTEM, user=user_msg, max_tokens=512)
 
-    sql_clean = result.fixed_sql
-    logger.info("[SQLGenerator] SQL gerado e validado:\n%s", sql_clean)
+    # Validação compartilhada para ambos os modos
+    sql_clean, err = _validate_sql(sql_raw, cliente_key)
+    if err:
+        logger.error("[SQLGenerator] Validação bloqueou: %s | sql=%r", err, sql_raw[:200])
+        raise ValueError(f"SQL inválido: {err}")
+
+    logger.info("[SQLGenerator] SQL final (%s):\n%s", "planner" if complexa else "direto", sql_clean)
     return sql_clean
 
 
@@ -235,13 +395,15 @@ def executar_sql_dinamico(
 
     Returns:
         {
-            "dados":   list[dict],      # linhas retornadas
-            "sql":     str,             # SQL executado (para debug/log)
-            "erro":    str | None,      # mensagem de erro se falhou
+            "dados":      list[dict],
+            "sql":        str,
+            "erro":       str | None,
             "latencia_ms": int,
+            "modo":       "planner" | "direto",
         }
     """
     t0 = time.time()
+    modo = "planner" if _is_complex_query(pergunta) else "direto"
 
     try:
         sql = gerar_sql(pergunta, cliente_key, data_inicio, data_fim)
@@ -251,26 +413,29 @@ def executar_sql_dinamico(
             "sql": "",
             "erro": f"Não consegui gerar uma consulta para essa pergunta: {e}",
             "latencia_ms": int((time.time() - t0) * 1000),
+            "modo": modo,
         }
 
-    # Execução com timeout via threading
     try:
         conn = sqlite3.connect(DB_PATH, timeout=8)
         conn.row_factory = sqlite3.Row
         cursor = conn.execute(sql)
         rows = [dict(r) for r in cursor.fetchall()]
         conn.close()
-        logger.info("[SQLGenerator] Executado OK — %d linhas em %dms", len(rows), int((time.time()-t0)*1000))
+        logger.info(
+            "[SQLGenerator] OK — %d linhas em %dms (modo=%s)",
+            len(rows), int((time.time() - t0) * 1000), modo,
+        )
         return {
             "dados": rows,
             "sql": sql,
             "erro": None,
             "latencia_ms": int((time.time() - t0) * 1000),
+            "modo": modo,
         }
     except sqlite3.OperationalError as e:
         err_msg = str(e)
         logger.error("[SQLGenerator] Erro SQLite: %s | sql=%r", err_msg, sql[:200])
-        # Mensagem amigável para coluna inexistente
         if "no such column" in err_msg:
             col = re.search(r"no such column: (\S+)", err_msg)
             col_name = col.group(1) if col else err_msg
@@ -279,12 +444,14 @@ def executar_sql_dinamico(
                 "sql": sql,
                 "erro": f"Coluna `{col_name}` não existe. Tente reformular a pergunta.",
                 "latencia_ms": int((time.time() - t0) * 1000),
+                "modo": modo,
             }
         return {
             "dados": [],
             "sql": sql,
             "erro": f"Erro ao executar consulta: {err_msg}",
             "latencia_ms": int((time.time() - t0) * 1000),
+            "modo": modo,
         }
     except Exception as e:
         logger.error("[SQLGenerator] Erro inesperado: %s", e, exc_info=True)
@@ -293,4 +460,5 @@ def executar_sql_dinamico(
             "sql": "",
             "erro": f"Erro inesperado: {e}",
             "latencia_ms": int((time.time() - t0) * 1000),
+            "modo": modo,
         }
