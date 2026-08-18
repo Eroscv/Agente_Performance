@@ -543,7 +543,7 @@ def _verificar_sync_falhou(cliente_key, plataforma) -> Optional[str]:
         hoje = _date.today()
         d3   = hoje - _td(days=3)
 
-        ck   = cliente_key or "source_of"
+        ck   = cliente_key  # None = sem filtro de cliente (retorna todos)
         runs = listar_runs(cliente_key=ck, limit=5)
         falhou = any(
             r["status"] != "sucesso" and r.get("criado_em", "") >= d3.isoformat()

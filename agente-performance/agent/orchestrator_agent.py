@@ -153,9 +153,9 @@ class OrchestratorAgent:
             cliente_key = canal_cliente
             logger.debug("[Orchestrator] cliente_key via canal '%s': %s", channel, cliente_key)
 
-        if not cliente_key and not plataforma:
-            cliente_key = "source_of"
-            logger.debug("[Orchestrator] cliente_key default: source_of")
+        # Sem cliente detectado: NÃO assume source_of.
+        # O engine resolve via modo_segmentado ou canal.
+        # (cliente_key permanece None)
 
         # 4. Valida campanha — erro de campanha não encontrada retorna imediatamente
         if campanha is None and campanha_raw and "performance" in " ".join(intents):
@@ -236,7 +236,7 @@ class OrchestratorAgent:
 
         if dados_vazios:
             sql_result = self._analysis.try_sql_fallback(
-                pergunta, intents[0], cliente_key or "source_of",
+                pergunta, intents[0], cliente_key,
                 data_inicio, data_fim,
             )
             if sql_result:
@@ -256,8 +256,8 @@ class OrchestratorAgent:
         try:
             from agent.queries import verificar_gap_dados
             _gap = verificar_gap_dados(
-                cliente_key=cliente_key or "source_of",
-                plataforma=plataforma or "meta_ads",
+                cliente_key=cliente_key,
+                plataforma=plataforma,
             )
             if _gap.get("tem_gap") and _gap.get("aviso"):
                 aviso_gap = _gap["aviso"]

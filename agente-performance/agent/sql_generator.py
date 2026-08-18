@@ -328,7 +328,7 @@ def _validate_sql(sql: str, cliente_key: str) -> tuple[str, str | None]:
 
 def gerar_sql(
     pergunta: str,
-    cliente_key: str = "source_of",
+    cliente_key: Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
 ) -> str:
@@ -386,7 +386,7 @@ def gerar_sql(
 
 def executar_sql_dinamico(
     pergunta: str,
-    cliente_key: str = "source_of",
+    cliente_key: Optional[str] = None,
     data_inicio: Optional[str] = None,
     data_fim: Optional[str] = None,
 ) -> dict:

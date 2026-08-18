@@ -598,14 +598,10 @@ def consultar(
         cliente_key = canal_cliente
         logger.debug("[consultar] cliente_key inferido pelo canal '%s': %s", channel, cliente_key)
 
-    # Default para source_of quando não há contexto de cliente
-    # Evita misturar dados de clientes diferentes em perguntas genéricas
-    if not cliente_key and not plataforma:
-        cliente_key = "source_of"
-        logger.debug("[consultar] cliente_key não detectado — default: source_of")
-
-    # Flag: precisa de execução segmentada?
-    modo_segmentado = False  # desativado — default source_of garante isolamento
+    # Se cliente_key não foi detectado pelo NLP nem pelo canal,
+    # NÃO assume source_of — ativa modo segmentado para retornar
+    # seções distintas por cliente (sem misturar dados).
+    modo_segmentado = not cliente_key and not plataforma
 
     # 3. Valida campanha
     if campanha is None and campanha_raw and "performance" in " ".join(intents):
@@ -782,7 +778,7 @@ def consultar(
                 from agent.sql_generator import executar_sql_dinamico
                 sql_result = executar_sql_dinamico(
                     pergunta=pergunta,
-                    cliente_key=cliente_key or "source_of",
+                    cliente_key=cliente_key,
                     data_inicio=data_inicio,
                     data_fim=data_fim,
                 )
@@ -808,8 +804,8 @@ def consultar(
     try:
         from agent.queries import verificar_gap_dados
         _gap = verificar_gap_dados(
-            cliente_key=cliente_key or "source_of",
-            plataforma=plataforma or "meta_ads"
+            cliente_key=cliente_key,
+            plataforma=plataforma
         )
         if _gap.get("tem_gap") and _gap.get("aviso"):
             aviso_gap = _gap["aviso"]

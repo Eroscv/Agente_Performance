@@ -203,7 +203,7 @@ class AnalysisAgent(BaseAnalysisAgent):
             from agent.sql_generator import executar_sql_dinamico
             result = executar_sql_dinamico(
                 pergunta=pergunta,
-                cliente_key=cliente_key or "source_of",
+                cliente_key=cliente_key,
                 data_inicio=data_inicio,
                 data_fim=data_fim,
             )

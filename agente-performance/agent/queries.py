@@ -1394,7 +1394,7 @@ def status_shopify_sync() -> dict:
 
 # ── Novas funções v4 — Melhorias de dados e consultas ────────────────────────
 
-def verificar_gap_dados(cliente_key: str = "source_of", plataforma: str = "meta_ads") -> dict:
+def verificar_gap_dados(cliente_key: Optional[str] = None, plataforma: Optional[str] = None) -> dict:
     """
     Verifica se existe gap de dados recentes (último dia disponível vs hoje).
     Retorna dict com: ultimo_dia, dias_atrasado, tem_gap, aviso.
