@@ -280,6 +280,25 @@ class OrchestratorAgent:
         if not dados_vazios:
             dados, shopify = self._analysis.enrich_shopify(dados, data_inicio, data_fim)
 
+        # 7b. Confidence / Evidence
+        from agent.confidence import calcular_confianca as _cc
+        _vr_erros  = [e for e in (_vr.erros  if '_vr' in dir() else [])]
+        _vr_avisos = [a for a in (_vr.avisos if '_vr' in dir() else [])]
+        _cr = _cc(
+            dados=dados,
+            intent=intents[0],
+            meta=meta,
+            delta=delta,
+            shopify=shopify,
+            validacao_erros=_vr_erros,
+            validacao_avisos=_vr_avisos,
+        )
+        meta["confidence"] = _cr.to_dict()
+        logger.debug(
+            "[Orchestrator] confidence=%s score=%.2f",
+            _cr.level, _cr.score,
+        )
+
         resultado = {
             "intent":      intents[0],
             "intents":     intents,

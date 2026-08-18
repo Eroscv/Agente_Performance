@@ -407,6 +407,20 @@ def gerar_resposta(
 
     # ── Grounding rules (Camada 1) ───────────────────────────────────────────────
     # Injetadas sempre — eliminam alucinação numérica sem custo extra de tokens
+    # Confidence / Evidence
+    _confidence_str = ""
+    _cr = meta.get("confidence")
+    if _cr:
+        from agent.confidence import ConfidenceResult as _CRT
+        _conf_obj = _CRT(
+            level=_cr["level"],
+            score=_cr["score"],
+            reason=_cr.get("reason"),
+            evidence=_cr.get("evidence", []),
+            warnings=_cr.get("warnings", []),
+        )
+        _confidence_str = f"\n\n{_conf_obj.para_prompt()}"
+
     # Resultados de validação de sanidade (ValidationAgent)
     _validacao_str = ""
     _validacao = meta.get("validacao") or ""
@@ -436,7 +450,7 @@ Intenção detectada: {intent}
 {periodo_str}
 
 Dados retornados do banco:
-{dados_str}{extras_str}{delta_str}{shopify_str}{_validacao_str}{ancora_str}{_grounding_rules}
+{dados_str}{extras_str}{delta_str}{shopify_str}{_validacao_str}{_confidence_str}{ancora_str}{_grounding_rules}
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.{periodo_nota_str}"""
     if shopify_str:
