@@ -370,8 +370,21 @@ def executar_cliente(
     # ── Item 10: Alertas proativos ────────────────────────────────────────
     alertas = verificar_alertas(cliente_key, data_inicio, data_fim)
     for alerta in alertas:
+        # ── Deduplicação: não reenvia alerta já postado hoje ──────────────
+        from db.relatorio_log import alerta_ja_enviado_hoje, registrar_alerta
+        _data_ref = str(data_fim)
+        if alerta_ja_enviado_hoje(cliente_key, _data_ref):
+            logger.info("[%s] Alerta ROAS já enviado hoje (%s) — ignorando duplicata", cliente_key, _data_ref)
+            continue
         ok = postar_alerta_ancorado(alerta)  # âncora + thread detalhada
         logger.info("[%s] Alerta postado (ancorado): %s", cliente_key, "OK" if ok else "FALHOU")
+        if ok:
+            registrar_alerta(
+                cliente_key=cliente_key,
+                data_ref=_data_ref,
+                campanhas_n=len(alerta.get("campanhas", [])),
+                slack_ok=True,
+            )
 
     if apenas_alertas:
         if not alertas:
@@ -634,8 +647,21 @@ def executar_cliente_multi_plataforma(
     # Alertas proativos
     alertas = verificar_alertas(cliente_key, data_inicio, data_fim)
     for alerta in alertas:
+        # Deduplicação: não reenvia alerta já postado hoje
+        from db.relatorio_log import alerta_ja_enviado_hoje, registrar_alerta
+        _data_ref = str(data_fim)
+        if alerta_ja_enviado_hoje(cliente_key, _data_ref):
+            logger.info("[%s] Alerta ROAS já enviado hoje (%s) — ignorando duplicata", cliente_key, _data_ref)
+            continue
         ok = postar_alerta_ancorado(alerta)
         logger.info("[%s] Alerta postado: %s", cliente_key, "OK" if ok else "FALHOU")
+        if ok:
+            registrar_alerta(
+                cliente_key=cliente_key,
+                data_ref=_data_ref,
+                campanhas_n=len(alerta.get("campanhas", [])),
+                slack_ok=True,
+            )
 
     if apenas_alertas:
         if not alertas:

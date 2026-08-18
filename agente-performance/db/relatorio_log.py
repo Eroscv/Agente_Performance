@@ -206,6 +206,66 @@ def listar_relatorios(
         conn.close()
 
 
+def alerta_ja_enviado_hoje(
+    cliente_key: str,
+    data_ref: str,
+) -> bool:
+    """
+    Verifica se um alerta de ROAS já foi enviado hoje para o cliente/data.
+    Usa a tabela relatorios_log com periodicidade='alerta_roas'.
+
+    Args:
+        cliente_key: Chave do cliente ('source_of', 'pod_kombucha', ...)
+        data_ref:    Data de referência do alerta (YYYY-MM-DD)
+
+    Returns:
+        True se já existe registro de alerta para esse cliente/data hoje.
+    """
+    conn = _conn()
+    try:
+        row = conn.execute("""
+            SELECT id FROM relatorios_log
+            WHERE cliente_key  = ?
+              AND periodicidade = 'alerta_roas'
+              AND data_inicio   = ?
+              AND status        = 'ok'
+              AND gerado_em    >= date('now', '-1 day')
+            LIMIT 1
+        """, (cliente_key, str(data_ref))).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def registrar_alerta(
+    cliente_key: str,
+    data_ref: str,
+    campanhas_n: int = 0,
+    slack_ok: bool = False,
+    slack_ts: str = None,
+    slack_channel: str = None,
+) -> int:
+    """
+    Registra envio de alerta de ROAS no log — usado para dedup.
+
+    Returns:
+        ID do registro inserido.
+    """
+    return registrar_relatorio(
+        cliente_key=cliente_key,
+        plataforma="meta_ads",
+        periodicidade="alerta_roas",
+        data_inicio=str(data_ref),
+        data_fim=str(data_ref),
+        titulo=f"Alerta ROAS — {cliente_key} — {data_ref}",
+        slack_ok=slack_ok,
+        slack_ts=slack_ts,
+        slack_channel=slack_channel,
+        blocos_n=campanhas_n,
+        status="ok",
+    )
+
+
 def ultimo_relatorio(
     cliente_key: str,
     periodicidade: str,
