@@ -204,11 +204,22 @@ def gerar_sql(
         max_tokens=512,
     )
 
-    sql_clean, erro = _validate_sql(sql_raw, cliente_key)
-    if erro:
-        logger.error("[SQLGenerator] Validação falhou: %s | sql=%r", erro, sql_raw[:200])
-        raise ValueError(f"SQL inválido: {erro}")
+    # Validação em 4 camadas via sql_validator
+    from agent.sql_validator import validate, ValidationResult
+    result: ValidationResult = validate(sql_raw, cliente_key=cliente_key)
 
+    if result.has_errors():
+        erros = " | ".join(result.error_messages())
+        logger.error("[SQLGenerator] Validação bloqueou: %s | sql=%r", erros, sql_raw[:200])
+        raise ValueError(f"SQL inválido: {erros}")
+
+    if result.issues:
+        logger.info(
+            "[SQLGenerator] Issues: %s",
+            " | ".join(str(i) for i in result.issues),
+        )
+
+    sql_clean = result.fixed_sql
     logger.info("[SQLGenerator] SQL gerado e validado:\n%s", sql_clean)
     return sql_clean
 
