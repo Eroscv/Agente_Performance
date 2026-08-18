@@ -1,0 +1,49 @@
+{
+  "source_of": {
+    "nome": "Source OF",
+    "ativo": true,
+    "plataformas": {
+      "google_ads": {
+        "ativo": true,
+        "gads_customer_id": "4311260590",
+        "loader": "google_ads.loader",
+        "loader_fn": "carregar_gads",
+        "loader_params": {
+          "dias": 8
+        },
+        "tabela_db": "source_of_gads_diario"
+      },
+      "meta_ads": {
+        "ativo": true,
+        "meta_account_id": "act_1059884611898142",
+        "loader": "meta_ads.loader",
+        "loader_fn": "carregar_meta",
+        "loader_params": {
+          "dias": 8
+        },
+        "tabela_db": "source_of_meta_ads_diario"
+      },
+      "shopify": {
+        "ativo": true,
+        "loader": "db.shopify_sync",
+        "loader_fn": "carregar_shopify",
+        "loader_params": {
+          "dias": 8
+        },
+        "tabela_db": "source_of_shopify_diario"
+      }
+    },
+    "builder": "relatorio.builder_diario",
+    "builder_semanal": "gerar_relatorio_semanal",
+    "builder_mensal": "gerar_relatorio_mensal",
+    "builder_diario": "gerar_relatorio_diario",
+    "notion_key": "source_of",
+    "slack_emoji": "🔵",
+    "slack_label": "Source OF",
+    "schedules": {
+      "semanal": "0 8 * * 1",
+      "mensal": "0 8 1 * *"
+    },
+    "multi_plataforma": true
+  }
+}
