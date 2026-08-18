@@ -1,31 +1,14 @@
 """
 clientes/source_of/relatorio/diario.py
 
-Relatório diário da Source OF.
-Wrapper que delega para relatorio/builder_diario.py com cliente_key fixo.
+⚠️  ALIAS — mantido para compatibilidade.
+A implementação está em agent/clients/relatorio/source_of.py (SourceOFRelatorioAgent).
+
+Uso preferencial:
+    from agent.clients.relatorio import get_relatorio_agent
+    get_relatorio_agent("source_of").gerar_diario(data="2026-08-18")
 """
-from relatorio.builder_diario import gerar_relatorio_diario as _gerar
+from agent.clients.relatorio.source_of import SourceOFRelatorioAgent as _A
 
-
-def gerar(
-    data: str = None,
-    plataforma: str = "meta_ads",
-    publicar: bool = True,
-) -> dict:
-    """
-    Gera e publica o relatório diário da Source OF.
-
-    Args:
-        data:       Data no formato YYYY-MM-DD (default: ontem)
-        plataforma: 'meta_ads' | 'google_ads'
-        publicar:   Se True, publica no Notion e registra no log
-
-    Returns:
-        dict com chaves: titulo, resumo, blocos, campanhas, data, notion_url
-    """
-    return _gerar(
-        cliente_key="source_of",
-        plataforma=plataforma,
-        data=data,
-        publicar=publicar,
-    )
+def gerar(data: str = None, plataforma: str = None, publicar: bool = True) -> dict:
+    return _A().gerar_diario(data=data, plataforma=plataforma, publicar=publicar)
