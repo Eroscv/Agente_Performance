@@ -1,21 +1,32 @@
 # 🧪 Relatório de Testes — Agente de Performance Guará
 
 **Data:** 2026-08-18  
-**Commit:** `6a99490`  
+**Commits:** `6a99490` → `d64da2c`  
 **Ambiente:** Ubuntu · Python 3.12.3 · pytest 9.1.1  
-**Resultado final:** ✅ **154/154 testes passando**
+**Resultado final:** ✅ **154/154 testes passando — 0 falhas**
 
 ---
 
-## Contexto
+## Contexto da Sessão
 
-Esta sessão de testes foi realizada após um ciclo de refatoração estrutural significativo do projeto:
+Ciclo completo de refatoração estrutural + implementação de arquitetura multiagente:
 
-- Criação de `agent/queries/` (pacote com 8 submódulos, antes monolítico de 1.743 linhas)
-- Separação de `slack/handlers.py` em `helpers.py`, `responder.py`, `formatter.py`, `poster.py`
-- Criação de `agent/clients/` — arquitetura multiagente de 2 camadas
-- Reorganização de `relatorio/` em `relatorio/shared/` (5 submódulos)
-- Estrutura de pastas por cliente (`clientes/pod/` e `clientes/source_of/`)
+| Entrega | Descrição |
+|---|---|
+| Estrutura por cliente | `clientes/pod/` e `clientes/source_of/` com config, prompts e relatórios isolados |
+| `agent/queries/` | Monolítico de 1.743 linhas dividido em 8 submódulos |
+| `slack/handlers.py` | Separado em `helpers.py`, `responder.py`, `formatter.py`, `poster.py` |
+| `agent/clients/` | Arquitetura multiagente 2 camadas: `SourceOFAgent`, `PODAgent`, `GeneralAgent` |
+| `relatorio/shared/` | `builder_shared.py` (2.330 linhas) dividido em 5 submódulos |
+
+---
+
+## ⚠️ Regra Permanente — Plataformas por Cliente
+
+| Cliente | Meta Ads | Google Ads | Shopify |
+|---|---|---|---|
+| **Source OF** | ✅ | ✅ | ✅ único com Shopify |
+| **POD Kombucha** | ✅ | ✅ (inativo) | ❌ nunca |
 
 ---
 
@@ -34,145 +45,144 @@ Esta sessão de testes foi realizada após um ciclo de refatoração estrutural 
 
 ## Bugs Encontrados e Corrigidos
 
-### 1. `NameError: _ROAS_EXPR` — todos os submódulos de `agent/queries/`
-**Causa:** Ao fazer o split do monolítico `queries.py`, a constante `_ROAS_EXPR` (expressão SQL do ROAS) foi usada em todos os submódulos mas nunca definida em nenhum deles.  
-**Correção:** Adicionada ao `agent/queries/base.py` como constante centralizada e importada nos 4 submódulos que a usavam.  
+### 1. `NameError: _ROAS_EXPR` — submódulos de `agent/queries/`
+**Causa:** Constante SQL do ROAS usada em todos os submódulos mas nunca definida após o split do monolítico.  
+**Correção:** Centralizada em `agent/queries/base.py`, importada nos 4 módulos afetados.  
 **Afetados:** `resumo.py`, `ranking.py`, `alertas.py`, `evolucao.py`
 
 ### 2. `NameError: _FREQ_EXPR` — `resumo.py` e `ranking.py`
-**Causa:** Mesma origem — expressão SQL de frequência média não foi extraída para `base.py`.  
-**Correção:** Definida em `base.py` como `_FREQ_EXPR` e importada nos módulos que a usam.
+**Causa:** Expressão SQL de frequência média não extraída para `base.py`.  
+**Correção:** Definida em `base.py` como `_FREQ_EXPR`, importada onde necessário.
 
 ### 3. `NameError: AWARENESS_PATTERNS` — `ranking.py`
-**Causa:** Lista de padrões de campanha awareness estava definida localmente em `resumo.py` mas `ranking.py` a usava sem importar.  
-**Correção:** Movida para `base.py`, importada em ambos os módulos.
+**Causa:** Lista de padrões awareness estava apenas em `resumo.py`; `ranking.py` a usava sem importar.  
+**Correção:** Movida para `base.py`, importada em ambos.
 
 ### 4. `NameError: data_range_disponivel` — `alertas.py` e `resumo.py`
-**Causa:** Função de diagnóstico estava em `base.py` mas não foi incluída nos imports dos submódulos.  
+**Causa:** Função existia em `base.py` mas não foi incluída nos imports dos submódulos.  
 **Correção:** Adicionada ao import explícito dos módulos afetados.
 
 ### 5. `comparar_mesmo_periodo_ano_anterior()` retornando `None`
-**Causa:** O corpo da função foi truncado ao extrair do monolítico — o arquivo terminava no meio da definição de variáveis, sem nenhum `return`.  
-**Correção:** Corpo completo reimplementado com:
-- Query dupla (período atual + mesmo período ano anterior)
-- Cálculo de variações percentuais por métrica
+**Causa:** Corpo da função truncado ao extrair do monolítico — arquivo terminava no meio da declaração de variáveis, sem nenhum `return`.  
+**Correção:** Corpo completo reimplementado:
+- Query dupla: período atual + mesmo período ano anterior
+- Variações percentuais por métrica (investimento, receita, compras, ROAS)
 - Dict com `periodo_atual`, `periodo_ano_anterior`, `variacao`, `tem_dados_ano_anterior`
-- Aviso quando não há dados do ano anterior
+- Aviso quando não há dados do ano anterior disponíveis
 
 ### 6. Teste `test_canal_generico_retorna_source_of` — expectativa desatualizada
-**Causa:** Antes da refatoração, canal genérico defaultava para `source_of`. Após a nova arquitetura, canal sem mapeamento retorna `cliente_key=None` (ativa modo segmentado — comportamento correto).  
-**Correção:** Teste atualizado para aceitar `None` ou `source_of` (ambos válidos dependendo do NLP).
+**Causa:** Antes, canal genérico defaultava para `source_of`. Com a nova arquitetura, retorna `None` (ativa modo segmentado).  
+**Correção:** Teste atualizado para aceitar `None` ou `source_of`.
+
+### 7. `PODAgent.PLATAFORMA_PADRAO = "google_ads"` — errado
+**Causa:** Google Ads da POD está com `ativo: false` no `clientes.json`. Meta Ads é a plataforma ativa.  
+**Correção:** `PLATAFORMA_PADRAO` corrigido para `"meta_ads"`. Regra documentada no código e na memória.
 
 ---
 
-## Cobertura por Categoria
+## Cobertura Detalhada
 
-### Queries SQL (`test_consultas.py`)
-| Classe de Teste | Testes | Status |
+### Queries SQL (`test_consultas.py` — 83 testes)
+
+| Classe | Testes | O que valida |
 |---|---|---|
-| `TestListarCampanhas` | 5 | ✅ |
-| `TestResumoPorCampanha` | 5 | ✅ |
-| `TestPerformanceCampanha` | 6 | ✅ |
-| `TestTopCampanhasROAS` | 5 | ✅ |
-| `TestTopCampanhasCompras` | 5 | ✅ |
-| `TestEvolucaoDiaria` | 6 | ✅ |
-| `TestResumoPeriodo` | 7 | ✅ |
-| `TestAlertasROASBaixo` | 6 | ✅ |
-| `TestCompararCampanhas` | 5 | ✅ |
-| `TestMetricasFunil` | 5 | ✅ |
-| `TestCompararPeriodos` | 4 | ✅ |
-| `TestCompararCampanhasDetalhado` | 3 | ✅ |
-| `TestCompararSemanaASemana` | 5 | ✅ |
-| `TestCompararMesAMes` | 4 | ✅ |
-| `TestCompararAntesDepois` | 5 | ✅ |
-| `TestRankingComparativo` | 5 | ✅ |
-| `TestDataRangeDisponivel` | 6 | ✅ |
+| `TestListarCampanhas` | 5 | Lista, campos, ordenação, mínimo de 32 campanhas |
+| `TestResumoPorCampanha` | 5 | Dados, métricas essenciais, investimento positivo, ROAS |
+| `TestPerformanceCampanha` | 6 | Match exato/like, série temporal, período, campanha inexistente |
+| `TestTopCampanhasROAS` | 5 | Lista, ordenação decrescente, filtro awareness, campos |
+| `TestTopCampanhasCompras` | 5 | Lista, ordenação, limit, CPA ajustado |
+| `TestEvolucaoDiaria` | 6 | Série geral e por campanha, ordenação, campos, investimento |
+| `TestResumoPeriodo` | 7 | Dict, métricas completas, valores positivos, ROAS junho, funil, sem dados |
+| `TestAlertasROASBaixo` | 6 | Lista, threshold, sem conversão, investimento mínimo, campos |
+| `TestCompararCampanhas` | 5 | Duas campanhas, única, lista vazia, campos, ordenação |
+| `TestMetricasFunil` | 5 | Funil geral e por campanha, campos, hierarquia, impressões |
+| `TestCompararPeriodos` | 4 | Estrutura, métricas, variação calculada |
+| `TestCompararCampanhasDetalhado` | 3 | Dict, campanhas solicitadas, sem filtro de data |
+| `TestCompararSemanaASemana` | 5 | Lista, n semanas, campos WoW, por campanha, ordenação |
+| `TestCompararMesAMes` | 4 | Lista, n meses, campos MoM, por campanha |
+| `TestCompararAntesDepois` | 5 | Estrutura, data virada, métricas antes, por campanha, variação |
+| `TestRankingComparativo` | 5 | Ranking ROAS, ordenação, sem data, todas campanhas, campos |
+| `TestDataRangeDisponivel` | 6 | Dict, campos, datas, 28k+ linhas, 32 campanhas, formato ISO |
 
-### Dados reais (`test_dados_consultas.py`)
-| Classe de Teste | Testes | Status |
+### Dados Reais no Banco (`test_dados_consultas.py` — 15 testes)
+
+| Classe | Testes | O que valida |
 |---|---|---|
-| `TestVerificarGapDados` | 3 | ✅ |
-| `TestTopCriativos` | 3 | ✅ |
-| `TestCriativosFadiga` | 2 | ✅ |
-| `TestProjecaoMes` | 3 | ✅ |
-| `TestSazonalidade` | 4 | ✅ |
+| `TestVerificarGapDados` | 3 | Dict, campos sem gap, campos com gap |
+| `TestTopCriativos` | 3 | Lista, campos, filtro campanha |
+| `TestCriativosFadiga` | 2 | Lista, frequência mínima |
+| `TestProjecaoMes` | 3 | Dict, campos, ROAS projeção positivo |
+| `TestSazonalidade` | 4 | Dict válido, `periodo_atual` presente, sem dados ano anterior, variação calculada |
 
-### Engine e Isolamento (`test_engine_validacao.py`)
-| Classe de Teste | Testes | Status | Nota |
-|---|---|---|---|
-| `TestDefaultClienteKey` | 5 | ✅ | Canal genérico → `None` (modo segmentado) |
-| `TestIsolamentoDados` | 3 | ✅ | POD e Source OF nunca vazam dados |
-| `TestFluxoPODPrincipal` | 3 | ✅ | POD usa tabela correta |
-| `TestImportsBuilders` | 6 | ✅ | Todos os builders importam OK |
-| `TestNLPDeteccaoCliente` | 3 | ✅ | NLP detecta POD e plataforma |
-| `TestBackupScript` | 2 | ✅ | Script de backup existe e executa |
-| `TestComparativoAutomatico` | 1 | ✅ | Delta automático no resumo |
+### Engine e Isolamento (`test_engine_validacao.py` — 30 testes)
 
-### Métricas (`test_metricas.py`)
-| Classe de Teste | Testes | Status |
+| Classe | Testes | O que valida |
 |---|---|---|
-| `TestROAS` | 3 | ✅ |
-| `TestCPC` | 2 | ✅ |
-| `TestCPM` | 2 | ✅ |
-| `TestCTR` | 2 | ✅ |
-| `TestFrequencia` | 2 | ✅ |
-| `TestCPA` | 3 | ✅ |
-| `TestConsistenciaBanco` | 6 | ✅ |
+| `TestDefaultClienteKey` | 5 | Canal genérico→None, alias cliente, canal POD, canal Source OF, canal None |
+| `TestIsolamentoDados` | 3 | POD não mistura com Source OF, queries isoladas por cliente |
+| `TestFluxoPODPrincipal` | 3 | POD não chama legacy, retorna cliente correto, tem dados |
+| `TestImportsBuilders` | 6 | Todos os builders importam, handlers OK, cron OK |
+| `TestNLPDeteccaoCliente` | 3 | NLP detecta POD, Google Ads, sem cliente |
+| `TestBackupScript` | 2 | Script existe, gera arquivos |
+| `TestComparativoAutomatico` | 1 | Delta automático no resumo geral |
 
-### Usabilidade (`test_usabilidade.py`)
-| Classe de Teste | Testes | Status |
+### Métricas (`test_metricas.py` — 17 testes)
+
+| Classe | Testes | O que valida |
 |---|---|---|
-| `TestFallbackInteligente` | 4 | ✅ |
-| `TestUserPrefs` | 4 | ✅ |
+| `TestROAS` | 3 | Fórmula, não zero, acima de 1 |
+| `TestCPC` | 2 | Fórmula, positivo |
+| `TestCPM` | 2 | Fórmula, positivo |
+| `TestCTR` | 2 | Fórmula, entre 0 e 100 |
+| `TestFrequencia` | 2 | Fórmula, avg vs sum |
+| `TestCPA` | 3 | Fórmula, fator imposto 1.1215, positivo |
+| `TestConsistenciaBanco` | 3 | Dados junho/2026, range disponível, consistência compras/cliques/alcance/receita |
+
+### Usabilidade (`test_usabilidade.py` — 9 testes)
+
+| Classe | Testes | O que valida |
+|---|---|---|
+| `TestFallbackInteligente` | 4 | Sugestões para ROAS, sem conversão, vazio, Google Ads |
+| `TestUserPrefs` | 4 | Novo usuário, atualizar/recuperar, aplicar prefs, não sobrescrever período explícito |
 
 ---
 
-## Novos Módulos Testados Indiretamente
+## Novos Módulos Validados
 
-Os testes cobriram, além dos módulos de queries, os seguintes módulos criados na sessão:
-
-| Módulo | Testado via | Resultado |
-|---|---|---|
-| `agent/clients/__init__.py` | import explícito + teste de factory | ✅ |
-| `agent/clients/base.py` | instanciação + execute() | ✅ |
-| `agent/clients/source_of.py` | factory `get_client_agent("source_of")` | ✅ |
-| `agent/clients/pod.py` | factory `get_client_agent("pod_kombucha")` | ✅ |
-| `agent/clients/general.py` | factory `get_client_agent(None)` | ✅ |
-| `agent/orchestrator/agent.py` | `TestFluxoPODPrincipal` | ✅ |
-| `slack/helpers.py` | `TestImportsBuilders.test_handlers_importa_ok` | ✅ |
-| `clientes/source_of/dados_historicos.py` | import chain via builders | ✅ |
+| Módulo | Como foi testado |
+|---|---|
+| `agent/clients/__init__.py` | Factory `get_client_agent()` para todos os casos |
+| `agent/clients/source_of.py` | `CLIENTE_KEY`, `PLATAFORMA_PADRAO`, `_get_system_prompt()`, `_enriquecer()` |
+| `agent/clients/pod.py` | `CLIENTE_KEY="pod_kombucha"`, `PLATAFORMA_PADRAO="meta_ads"` |
+| `agent/clients/general.py` | `get_client_agent(None)` → `GeneralAgent` |
+| `agent/orchestrator/agent.py` | `TestFluxoPODPrincipal` — roteamento por cliente_key |
+| `agent/queries/base.py` | Constantes `_ROAS_EXPR`, `_FREQ_EXPR`, `AWARENESS_PATTERNS` usadas em 20+ testes |
+| `clientes/source_of/dados_historicos.py` | Import chain via builders de relatório |
+| `slack/helpers.py` | `test_handlers_importa_ok` — AJUDA_TEXTO, _CLIENTES_NOTION presentes |
 
 ---
 
 ## Arquitetura Validada
 
-### Fluxo multiagente (MULTI_AGENT=0 — produção atual)
+### Produção (MULTI_AGENT=0 — default)
 ```
-Slack → _processar_e_responder() → engine.consultar()
+Slack → engine.consultar()
   └─ NLP → cliente_key + intent
   └─ queries/* → dados SQL
   └─ claude_client.gerar_resposta() → texto Slack
 ```
 
-### Fluxo multiagente (MULTI_AGENT=1 — pronto para ativar)
+### Multiagente (MULTI_AGENT=1 — pronto para ativar)
 ```
-Slack → _processar_e_responder() → OrchestratorAgent.consultar()
-  └─ NLP → cliente_key
+Slack → OrchestratorAgent.consultar()
+  └─ NLP detecta cliente_key
   └─ get_client_agent(cliente_key)
-       ├─ SourceOFAgent → queries + Shopify + prompt Source OF
-       ├─ PODAgent      → queries + prompt POD
-       └─ GeneralAgent  → todos segmentos em paralelo
+       ├─ "source_of"    → SourceOFAgent  (Meta Ads + Google Ads + Shopify)
+       ├─ "pod_kombucha" → PODAgent       (Meta Ads ativo + Google Ads inativo)
+       └─ None           → GeneralAgent   (todos segmentos em paralelo)
 ```
 
----
-
-## Serviço
-
-```
-● agente-guara.service — active (running)
-```
-
-Para ativar a arquitetura multiagente:
+Para ativar:
 ```bash
 # .env
 MULTI_AGENT=1
@@ -180,4 +190,13 @@ MULTI_AGENT=1
 
 ---
 
-*Gerado automaticamente em 2026-08-18 por Cesar (Agente de Performance Guará)*
+## Status do Serviço
+
+```
+● agente-guara.service — active (running)
+```
+
+---
+
+*Gerado automaticamente em 2026-08-18 por Cesar (Agente de Performance Guará)*  
+*Commits desta sessão: `6663b5b` → `d64da2c`*
