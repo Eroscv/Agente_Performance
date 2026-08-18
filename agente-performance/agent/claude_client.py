@@ -14,6 +14,8 @@ from typing import Any
 import anthropic
 from dotenv import load_dotenv
 
+from relatorio.regras import FATOR_IMPOSTO
+
 load_dotenv()
 
 logger = logging.getLogger(__name__)
@@ -405,6 +407,20 @@ def gerar_resposta(
 
     # ── Grounding rules (Camada 1) ───────────────────────────────────────────────
     # Injetadas sempre — eliminam alucinação numérica sem custo extra de tokens
+    # Resultados de validação de sanidade (ValidationAgent)
+    _validacao_str = ""
+    _validacao = meta.get("validacao") or ""
+    _validacao_extra = meta.get("validacao_extra") or {}
+    if _validacao:
+        _validacao_str = f"\n\n{_validacao}"
+    if _validacao_extra.get("roas_ajustado_imposto"):
+        _validacao_str += (
+            f"\n\n[ROAS Recalculado com Imposto Meta ({FATOR_IMPOSTO}x)]\n"
+            f"  Investimento ajustado: R$ {_validacao_extra['investimento_ajustado']:,.2f}\n"
+            f"  ROAS real estimado: {_validacao_extra['roas_ajustado_imposto']:.2f}x\n"
+            f"  (Use este valor quando ROAS Shopify não estiver disponível)"
+        )
+
     _grounding_rules = (
         "\n\n[REGRAS DE GROUNDING — OBRIGATÓRIAS]\n"
         "1. Cite APENAS valores que aparecem literalmente nos dados acima.\n"
@@ -420,7 +436,7 @@ Intenção detectada: {intent}
 {periodo_str}
 
 Dados retornados do banco:
-{dados_str}{extras_str}{delta_str}{shopify_str}{ancora_str}{_grounding_rules}
+{dados_str}{extras_str}{delta_str}{shopify_str}{_validacao_str}{ancora_str}{_grounding_rules}
 
 Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.{periodo_nota_str}"""
     if shopify_str:

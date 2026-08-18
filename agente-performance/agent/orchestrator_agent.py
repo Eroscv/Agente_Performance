@@ -198,6 +198,19 @@ class OrchestratorAgent:
             cliente_key=cliente_key, plataforma=plataforma,
         )
 
+        # 5b. Validação de sanidade dos dados (zero LLM)
+        from agent.validation_agent import ValidationAgent as _VA
+        _vr = _VA().validate(dados, intents[0], meta, plataforma)
+        if _vr.erros:
+            logger.warning(
+                "[Orchestrator] Erros de validação: %s",
+                " | ".join(_vr.erros),
+            )
+        if _vr.tem_avisos() or _vr.erros:
+            meta["validacao"] = _vr.para_prompt()
+        if _vr.meta_extra:
+            meta["validacao_extra"] = _vr.meta_extra
+
         # Breakdown diário (Source OF / semana parcial) — best-effort
         if pedir_breakdown and isinstance(dados, (list, dict)):
             pass  # breakdown inline não extraído ainda — sem impacto na resposta
