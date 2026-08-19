@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from db.connections import query_fed as query, query_fed_one as query_one
+from db.duck import query_duck
 from notion.historico import criar_relatorio_no_historico
 from utils.formatters import fmt_brl, fmt_x, fmt_pct, fmt_n, roas_emoji
 from notion.blocks import h2, h3, paragrafo, divider, callout, bullet, tabela, toggle
@@ -99,6 +100,64 @@ def _buscar_dia_anterior(data: str, cliente_key: str, plataforma: str) -> dict |
     return _buscar_resumo_dia(d.isoformat(), cliente_key, plataforma)
 
 
+def _buscar_tendencia_7d(data: str, cliente_key: str, plataforma: str) -> dict:
+    """
+    Retorna média dos últimos 7 dias (excluindo o dia atual) para contexto de tendência.
+    Usa DuckDB window functions para calcular em uma única query.
+    """
+    d_fim = (date.fromisoformat(data) - timedelta(days=1)).isoformat()
+    d_ini = (date.fromisoformat(data) - timedelta(days=7)).isoformat()
+
+    rows = query_duck("""
+        SELECT
+            ROUND(AVG(invest_dia), 2)        AS invest_medio_7d,
+            ROUND(AVG(receita_dia), 2)       AS receita_media_7d,
+            ROUND(
+                SUM(receita_dia) / NULLIF(SUM(invest_dia), 0), 4
+            )                                AS roas_medio_7d,
+            ROUND(AVG(conversoes_dia), 1)    AS conversoes_media_7d,
+            COUNT(*)                         AS dias_com_dados
+        FROM (
+            SELECT
+                data,
+                SUM(investimento)  AS invest_dia,
+                SUM(receita)       AS receita_dia,
+                SUM(conversoes)    AS conversoes_dia
+            FROM v_performance
+            WHERE data BETWEEN ? AND ?
+              AND cliente_key = ?
+              AND plataforma  = ?
+            GROUP BY data
+        ) daily
+    """, (d_ini, d_fim, cliente_key, plataforma))
+    return rows[0] if rows else {}
+
+
+def _buscar_top_campanhas_ranking(data: str, cliente_key: str, plataforma: str) -> list[dict]:
+    """
+    Top 5 campanhas do dia com ranking relativo por ROAS.
+    Usa RANK() OVER para indicar posição entre todas as campanhas do dia.
+    """
+    rows = query_duck("""
+        SELECT
+            campanha,
+            ROUND(investimento, 2)                          AS investimento,
+            ROUND(receita, 2)                               AS receita,
+            ROUND(roas, 2)                                  AS roas,
+            ROUND(conversoes, 0)                            AS conversoes,
+            RANK() OVER (ORDER BY roas DESC NULLS LAST)     AS rank_roas,
+            COUNT(*) OVER ()                                AS total_campanhas
+        FROM v_performance
+        WHERE data = ?
+          AND cliente_key = ?
+          AND plataforma  = ?
+          AND investimento > 0
+        QUALIFY rank_roas <= 5
+        ORDER BY rank_roas
+    """, (data, cliente_key, plataforma))
+    return rows
+
+
 # ── Gerador de blocos ─────────────────────────────────────────────────────────
 
 def _blocos_visao_geral(resumo: dict, plataforma: str, data_fmt: str) -> list[dict]:
@@ -147,6 +206,39 @@ def _blocos_metricas_avancadas(resumo: dict) -> list[dict]:
     return [
         h2("📐 Métricas Avançadas"),
         tabela(["Métrica", "Valor"], linhas),
+        divider(),
+    ]
+
+
+def _blocos_tendencia_7d(resumo_dia: dict, tend: dict) -> list[dict]:
+    """Bloco de contexto: compara o dia vs média dos últimos 7 dias."""
+    if not tend or not tend.get("dias_com_dados"):
+        return []
+
+    def _delta_emoji(atual, media):
+        if not atual or not media:
+            return "—", ""
+        pct = (atual - media) / media * 100
+        if pct >= 10:
+            return f"▲ +{pct:.1f}%", "🟢"
+        elif pct <= -10:
+            return f"▼ {pct:.1f}%", "🔴"
+        else:
+            return f"→ {pct:+.1f}%", "🟡"
+
+    roas_d, e_roas = _delta_emoji(resumo_dia.get("roas"), tend.get("roas_medio_7d"))
+    inv_d,  e_inv  = _delta_emoji(resumo_dia.get("investimento"), tend.get("invest_medio_7d"))
+    conv_d, e_conv = _delta_emoji(resumo_dia.get("conversoes"), tend.get("conversoes_media_7d"))
+
+    dias = tend.get("dias_com_dados", 0)
+    linhas = [
+        ["📈 ROAS",        fmt_x(resumo_dia.get("roas")),        fmt_x(tend.get("roas_medio_7d")),   f"{e_roas} {roas_d}"],
+        ["💰 Investimento", fmt_brl(resumo_dia.get("investimento")), fmt_brl(tend.get("invest_medio_7d")), f"{e_inv} {inv_d}"],
+        ["🛒 Conversões",  fmt_n(resumo_dia.get("conversoes")),   fmt_n(tend.get("conversoes_media_7d")), f"{e_conv} {conv_d}"],
+    ]
+    return [
+        h2(f"📅 Hoje vs Média {dias}d"),
+        tabela(["Métrica", "Hoje", f"Média {dias}d", "Variação"], linhas),
         divider(),
     ]
 
@@ -314,6 +406,7 @@ def gerar_relatorio_diario(
 
     campanhas = _buscar_campanhas_dia(data, cliente_key, plataforma)
     anterior  = _buscar_dia_anterior(data, cliente_key, plataforma)
+    tendencia = _buscar_tendencia_7d(data, cliente_key, plataforma)
 
     shopify = None
     # Shopify só aparece no relatório Meta Ads (plataforma principal de receita)
@@ -345,6 +438,7 @@ def gerar_relatorio_diario(
     blocos += _blocos_visao_geral(resumo, plataforma, data_fmt)
     blocos += _blocos_funil(resumo)
     blocos += _blocos_metricas_avancadas(resumo)
+    blocos += _blocos_tendencia_7d(resumo, tendencia)
 
     if anterior:
         blocos += _blocos_comparativo(resumo, anterior)
@@ -495,6 +589,7 @@ def gerar_relatorio_consolidado(
 
         campanhas = _buscar_campanhas_dia(data, cliente_key, plataforma)
         anterior  = _buscar_dia_anterior(data, cliente_key, plataforma)
+        tendencia = _buscar_tendencia_7d(data, cliente_key, plataforma)
         nome_p    = plat_labels.get(plataforma, plataforma)
 
         # Cabeçalho da seção
@@ -502,6 +597,7 @@ def gerar_relatorio_consolidado(
         blocos += _blocos_visao_geral(resumo, plataforma, data_fmt)
         blocos += _blocos_funil(resumo)
         blocos += _blocos_metricas_avancadas(resumo)
+        blocos += _blocos_tendencia_7d(resumo, tendencia)
         if anterior:
             blocos += _blocos_comparativo(resumo, anterior)
         blocos += _blocos_campanhas(campanhas)
