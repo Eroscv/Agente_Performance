@@ -19,7 +19,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Optional
 
-from db.connection import query, query_one
+from db.connections import query_fed as query, query_fed_one as query_one
 from notion.historico import criar_relatorio_no_historico
 from utils.formatters import fmt_brl, fmt_x, fmt_pct, fmt_n, roas_emoji
 from notion.blocks import h2, h3, paragrafo, divider, callout, bullet, tabela, toggle
@@ -298,7 +298,7 @@ def gerar_relatorio_diario(
 
     # Detecta plataforma automaticamente se não informada
     if plataforma is None:
-        from db.connection import query_one as _q
+        from db.connections import query_fed_one as _q
         for _plat in ("meta_ads", "google_ads"):
             _r = _buscar_resumo_dia(data, cliente_key, _plat)
             if _r and _r.get("investimento"):

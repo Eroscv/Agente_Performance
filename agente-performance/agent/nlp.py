@@ -475,7 +475,7 @@ def _verificar_cobertura_dados(
         else:
             tabela = "campanhas_unificada"
 
-        from db.connection import get_conn
+        from db.connections import get_federated_conn as get_conn
         try:
             conn = get_conn()
         except Exception:

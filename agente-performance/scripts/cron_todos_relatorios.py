@@ -689,7 +689,7 @@ def executar_cliente_multi_plataforma(
         reset_federated_conn()
     except Exception:
         pass
-    from db.connection import query_one as _q
+    from db.connections import query_fed_one as _q
     data_ref = str(data_fim)
     plataformas_disponiveis = []
 

@@ -367,7 +367,7 @@ async def handle_pod(ack, respond, command, client):
     if arg.strip().lower() in ("status", "hoje", "agora"):
         try:
             import sqlite3 as _sq
-            from db.connection import get_conn as _gcc
+            from db.connections import get_federated_conn as _gcc
             _c = _gcc()
             _c.row_factory = _sq.Row
             _last = _c.execute(
@@ -614,7 +614,7 @@ async def handle_status(ack, respond):
     await ack()
     import sqlite3
     from agent.cache import _cache  # type: ignore
-    from db.connection import DB_PATH
+    from db.connections import LEGACY_DB_PATH as DB_PATH
 
     # Banco
     try:

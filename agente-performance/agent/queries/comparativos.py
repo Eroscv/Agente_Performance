@@ -17,7 +17,7 @@ import logging
 from datetime import date, timedelta
 from typing import Optional
 
-from db.connection import query, query_one
+from db.connections import query_fed as query, query_fed_one as query_one
 
 logger = logging.getLogger(__name__)
 

@@ -77,8 +77,7 @@ class SqlRequest(BaseModel):
 
 @app.get("/health")
 def health():
-    from db.connection import DB_PATH
-    return {
+    from db.connections import LEGACY_DB_PATH as DB_PATH
         "status": "ok",
         "db_exists": DB_PATH.exists(),
         "db_size_kb": round(DB_PATH.stat().st_size / 1024, 1) if DB_PATH.exists() else 0,

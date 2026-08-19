@@ -30,7 +30,7 @@ from agent.comparatives import (
     comparar_antes_depois,
     ranking_comparativo,
 )
-from db.connection import query as raw_query, get_conn
+from db.connections import query_fed as raw_query, get_federated_conn as get_conn
 
 logger = logging.getLogger(__name__)
 
@@ -731,7 +731,7 @@ def consultar(
     if pedir_breakdown_sof and isinstance(dados, (list, dict)):
         try:
             import sqlite3 as _sql3
-            from db.connection import DB_PATH as _DB_PATH
+            from db.connections import LEGACY_DB_PATH as _DB_PATH
             _conn = get_conn()
             _conn.row_factory = _sql3.Row
             _DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]

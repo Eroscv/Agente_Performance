@@ -28,7 +28,7 @@ sys.path.insert(0, str(BASE_DIR))
 from dotenv import load_dotenv
 load_dotenv(BASE_DIR / ".env")
 
-from db.connection import query, query_one
+from db.connections import query_fed as query, query_fed_one as query_one
 from relatorio.builder_diario import gerar_relatorio_diario
 from utils.formatters import fmt_brl, fmt_x, fmt_pct, fmt_n, roas_emoji, delta_str
 import requests

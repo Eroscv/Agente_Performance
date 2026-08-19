@@ -24,7 +24,7 @@ import pytest
 PROJECT_DIR = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_DIR))
 
-from db.connection import DB_PATH
+from db.connections import LEGACY_DB_PATH as DB_PATH
 from agent.queries import resumo_periodo, data_range_disponivel
 from relatorio.regras import FATOR_IMPOSTO
 

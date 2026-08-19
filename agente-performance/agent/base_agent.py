@@ -103,7 +103,7 @@ class BaseAnalysisAgent:
         Busca o intervalo mais recente com dados no banco.
         """
         try:
-            from db.connection import query as raw_query
+            from db.connections import query_fed as raw_query
             sem_filtro = raw_query(
                 "SELECT MIN(data_inicio) AS ini, MAX(data_fim) AS fim, COUNT(*) AS n "
                 "FROM campanhas_unificada"

@@ -33,7 +33,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from db.connection import DB_PATH
+from db.connections import LEGACY_DB_PATH as DB_PATH
 
 logger = logging.getLogger(__name__)
 

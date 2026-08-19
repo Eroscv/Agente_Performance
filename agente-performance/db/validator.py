@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from db.connection import query, query_one, DB_PATH
+from db.connections import query_fed as query, query_fed_one as query_one, LEGACY_DB_PATH as DB_PATH
 
 logger = logging.getLogger(__name__)
 

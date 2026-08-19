@@ -4,21 +4,27 @@ db/connections.py
 Gerenciador de conexões multi-DB do Agente de Performance Guará.
 
 Arquitetura de bancos:
-  data/performance/<cliente>/<fonte>.db  ← dados de performance por cliente/fonte
+  data/performance/<cliente>/<fonte>.db  ← dados de performance por cliente/fonte (SQLite, escrita)
   data/logs/inbox.db                     ← recebido: consultas, contexto de thread
   data/logs/outbox.db                    ← disparado: relatórios, Slack, cron
   data/logs/agent.db                     ← estado interno: cache NLP/KB, preferências
   data/campanhas.db                      ← legado (mantido em produção até cutover)
 
-API pública:
-  get_performance_conn(cliente_key, plataforma) → conexão direta ao DB de performance
-  get_inbox_conn()                              → logs de entrada
-  get_outbox_conn()                             → logs de saída
-  get_agent_conn()                              → estado interno do agente
-  get_federated_conn()                          → DB federado com v_performance + campanhas_unificada
-                                                   (substitui get_conn() de connection.py)
-  query_fed(sql, params)                        → query no DB federado
-  query_db(db_key, sql, params)                 → query em DB específico
+Camada de leitura analítica:
+  DuckDB (db/duck.py) substitui o SQLite :memory: federado como motor de queries analíticas.
+  SQLite permanece como camada de ESCRITA (sync, logs, cache).
+  reset_federated_conn() vira no-op — DuckDB lê os .db sempre frescos, sem singleton.
+
+API pública (inalterada — drop-in):
+  get_performance_conn(cliente_key, plataforma) → conexão direta ao DB de performance (SQLite)
+  get_inbox_conn()                              → logs de entrada (SQLite)
+  get_outbox_conn()                             → logs de saída (SQLite)
+  get_agent_conn()                              → estado interno do agente (SQLite)
+  get_federated_conn()                          → conexão DuckDB federada (substitui :memory: SQLite)
+  query_fed(sql, params)                        → query analítica via DuckDB
+  query_fed_one(sql, params)                    → query analítica via DuckDB — primeiro resultado
+  reset_federated_conn()                        → no-op (DuckDB não precisa de reset)
+  query_db(db_key, sql, params)                 → query em DB SQLite específico
 """
 
 from __future__ import annotations
@@ -50,6 +56,7 @@ AGENT_DB  = DATA_DIR / "logs/agent.db"
 
 # DB legado (mantido para compatibilidade durante cutover)
 LEGACY_DB = DATA_DIR / "campanhas.db"
+LEGACY_DB_PATH = LEGACY_DB  # alias para compatibilidade com db/connection.py
 
 # ── Cache de conexões (singleton por arquivo) ─────────────────────────────────
 
@@ -200,112 +207,46 @@ SELECT * FROM shopify_src.shopify_receita_diaria
 """
 
 
-# DB federado: usa :memory: com TEMP VIEWs (SQLite suporta cross-schema
-# em TEMP namespace mesmo sem arquivo em disco)
-FEDERATED_DB = DATA_DIR / "federated.db"  # mantido para eventuais extensões
+# ── Camada federada — DuckDB (Etapa 2) ──────────────────────────────────────
+# SQLite :memory: + ATTACH substituído por DuckDB como motor analítico.
+# API pública inalterada — drop-in para todo o codebase.
+
+FEDERATED_DB = DATA_DIR / "federated.db"  # mantido para compatibilidade de import
 
 
-def _build_federated_conn() -> sqlite3.Connection:
-    """Constrói uma nova conexão federada em :memory: com ATTACHes e TEMP VIEWs."""
-    conn = sqlite3.connect(":memory:", check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
-
-    attaches = [
-        ("sof_meta",    PERFORMANCE_DBS[("source_of",    "meta_ads")]),
-        ("sof_gads",    PERFORMANCE_DBS[("source_of",    "google_ads")]),
-        ("pod_meta",    PERFORMANCE_DBS[("pod_kombucha", "meta_ads")]),
-        ("pod_gads",    PERFORMANCE_DBS[("pod_kombucha", "google_ads")]),
-        ("shopify_src", DATA_DIR / "performance/source_of/shopify_receita.db"),
-    ]
-
-    missing = []
-    for alias, path in attaches:
-        if not path.exists():
-            missing.append(str(path))
-            continue
-        conn.execute(f"ATTACH DATABASE '{path}' AS {alias}")
-        logger.debug("[fed] ATTACH %s → %s", alias, path.name)
-
-    if missing:
-        logger.warning("[fed] DBs ausentes (views parciais): %s", missing)
-
-    conn.execute(_V_PERFORMANCE_DDL)
-    conn.execute(_CAMPANHAS_UNIFICADA_DDL)
-    conn.execute(_SHOPIFY_DDL)
-    conn.commit()
-
-    logger.info("[fed] Conexão federada inicializada (%d DBs attached)", len(attaches) - len(missing))
-    return conn
-
-
-def get_federated_conn() -> sqlite3.Connection:
+def get_federated_conn():
     """
-    Retorna conexão SQLite federada com todos os DBs de performance via ATTACH.
-
-    Expõe v_performance, campanhas_unificada e shopify_receita_diaria como
-    TEMP VIEWs — todo agent/queries/ funciona sem alterar uma linha de SQL.
-
-    Aliases de ATTACH:
-      sof_meta    → source_of/meta_ads.db
-      sof_gads    → source_of/google_ads.db
-      pod_meta    → pod_kombucha/meta_ads.db
-      pod_gads    → pod_kombucha/google_ads.db
-      shopify_src → source_of/shopify_receita.db
-
-    Auto-reconecta se a conexão em memória tiver sido invalidada.
+    Retorna conexão DuckDB federada (substitui SQLite :memory: + ATTACH).
+    Expõe as mesmas views: v_performance, campanhas_unificada, shopify_receita_diaria.
+    DuckDB lê os arquivos SQLite sempre frescos — sem singleton problemático.
     """
-    global _fed_conn
-    if _fed_conn is not None:
-        # Verifica se a conexão ainda está viva (ping leve)
-        try:
-            _fed_conn.execute("SELECT 1").fetchone()
-            return _fed_conn
-        except Exception:
-            logger.warning("[fed] Conexão federada morta — recriando")
-            _fed_conn = None
-
-    _fed_conn = _build_federated_conn()
-    return _fed_conn
+    from db.duck import get_duck_conn
+    return get_duck_conn()
 
 
 def reset_federated_conn() -> None:
-    """Força recriação da conexão federada (usar após ATTACH de novos DBs)."""
-    global _fed_conn
-    if _fed_conn is not None:
-        try:
-            _fed_conn.close()
-        except Exception:
-            pass
-        _fed_conn = None
+    """
+    No-op: DuckDB lê os .db SQLite diretamente, sempre frescos.
+    Mantido para compatibilidade — chamadas existentes não precisam ser removidas.
+    """
+    logger.debug("[fed] reset_federated_conn: no-op (DuckDB ativo)")
 
 
 # ── Helpers de query ──────────────────────────────────────────────────────────
 
 def query_fed(sql: str, params: tuple = ()) -> list[dict]:
     """
-    Query no DB federado (v_performance, campanhas_unificada, shopify_receita_diaria).
-    Reconecta automaticamente se a conexão em memória tiver sido invalidada.
+    Query analítica via DuckDB (v_performance, campanhas_unificada, shopify_receita_diaria).
+    Mesma assinatura de antes — drop-in para todo agent/queries/, relatorio/, scripts/.
     """
-    try:
-        conn = get_federated_conn()
-        cur  = conn.execute(sql, params)
-        return [dict(r) for r in cur.fetchall()]
-    except sqlite3.OperationalError as e:
-        # Reconecta uma vez se a view/conn foi perdida
-        if "no such table" in str(e) or "no such view" in str(e):
-            logger.warning("[query_fed] View não encontrada (%s) — reconectando", e)
-            reset_federated_conn()
-            conn = get_federated_conn()
-            cur  = conn.execute(sql, params)
-            return [dict(r) for r in cur.fetchall()]
-        raise
+    from db.duck import query_duck
+    return query_duck(sql, params)
 
 
 def query_fed_one(sql: str, params: tuple = ()) -> Optional[dict]:
-    """Query no DB federado — retorna primeiro resultado ou None."""
-    results = query_fed(sql, params)
-    return results[0] if results else None
+    """Query analítica via DuckDB — retorna primeiro resultado ou None."""
+    from db.duck import query_duck_one
+    return query_duck_one(sql, params)
 
 
 def query_db(

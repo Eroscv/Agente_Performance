@@ -6,7 +6,7 @@ Evolução diária, variação de ROAS e comparativos de período.
 import logging
 from typing import Optional
 
-from db.connection import query, query_one, DB_PATH
+from db.connections import query_fed as query, query_fed_one as query_one, LEGACY_DB_PATH as DB_PATH
 from utils.formatters import fmt_brl
 
 logger = logging.getLogger(__name__)

@@ -30,7 +30,7 @@ from typing import Optional
 import sqlglot
 import sqlglot.expressions as exp
 
-from db.connection import DB_PATH
+from db.connections import LEGACY_DB_PATH as DB_PATH
 
 logger = logging.getLogger(__name__)
 

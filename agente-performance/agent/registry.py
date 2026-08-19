@@ -16,6 +16,7 @@ from __future__ import annotations
 import json as _json
 import logging
 import os as _os
+from pathlib import Path
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -82,13 +83,32 @@ def get_contexto_cliente(canal_id: str) -> Optional[str]:
     """
     Infere cliente_key a partir do nome/id do canal Slack.
 
-    Regras (case-insensitive):
+    Prioridade:
+      1. Lookup exato por ID em slack_channel_ids (clientes.json)
+      2. Heurística de nome do canal (fallback)
+
+    Heurística (case-insensitive):
       - canal contém 'pod' ou 'kombucha' → 'pod_kombucha'
       - canal contém 'source' ou 'sof'   → 'source_of'
       - senão                            → None (canal genérico)
+
+    Para configurar canais dedicados: adicionar IDs em slack_channel_ids
+    dentro de cada cliente em clientes.json.
     """
     if not canal_id:
         return None
+
+    # 1. Lookup exato por ID configurado
+    try:
+        dados = _json.loads(Path(_CLIENTES_JSON).read_text(encoding="utf-8"))
+        for ck, cfg in dados.get("clientes", {}).items():
+            ids = cfg.get("slack_channel_ids", [])
+            if canal_id in ids:
+                return ck
+    except Exception:
+        pass
+
+    # 2. Heurística de nome
     c = canal_id.lower()
     if "pod" in c or "kombucha" in c:
         return "pod_kombucha"
@@ -108,7 +128,7 @@ def get_available_campaigns(
         cliente_key: filtra por cliente (ex: 'source_of')
         plataforma:  filtra por plataforma (ex: 'meta_ads')
     """
-    from db.connection import query as raw_query
+    from db.connections import query_fed as raw_query
 
     where_parts = ["campanha IS NOT NULL", "campanha != ''"]
     params: list = []

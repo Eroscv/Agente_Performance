@@ -25,7 +25,7 @@ from agent.comparatives import (
     comparar_antes_depois,
     ranking_comparativo,
 )
-from db.connection import get_conn
+from db.connections import get_federated_conn as get_conn
 
 logger = logging.getLogger(__name__)
 

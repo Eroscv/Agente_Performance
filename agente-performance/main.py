@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
     logger.info("⚙️  Agente de Performance Guará iniciando...")
 
     # Verifica banco legado (fallback)
-    from db.connection import DB_PATH
+    from db.connections import LEGACY_DB_PATH as DB_PATH
     if not DB_PATH.exists():
         logger.warning("Banco legado não encontrado: %s", DB_PATH)
     else:
