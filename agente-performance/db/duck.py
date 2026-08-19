@@ -158,7 +158,16 @@ FROM v_performance
 
 _SHOPIFY_DDL = """
 CREATE OR REPLACE VIEW shopify_receita_diaria AS
-SELECT * FROM shopify_src.shopify_receita_diaria
+SELECT
+    CAST(data AS VARCHAR)          AS data,
+    receita,
+    pedidos,
+    novos_clientes,
+    recompradores,
+    ticket_medio,
+    total_desconto,
+    pedidos_acima_300
+FROM shopify_src.shopify_receita_diaria
 """
 
 # ── Singleton DuckDB ──────────────────────────────────────────────────────────
