@@ -117,6 +117,7 @@ INTENTS_DISPONIVEIS = [
     "comparar_wow",
     "comparar_mom",
     "comparar_antes_depois",
+    "comparar_plataformas",
     "eficiencia_criativo",
     "distribuicao_investimento",
     "sem_conversao",
@@ -171,6 +172,7 @@ Sua tarefa: analisar a pergunta do usuário e retornar SOMENTE um JSON estrutura
 - comparar_wow: evolução semana a semana com variação % (week over week)
 - comparar_mom: evolução mês a mês com variação % (month over month)
 - comparar_antes_depois: comparar antes e depois de uma data específica
+- comparar_plataformas: comparar Meta Ads vs Google Ads lado a lado (investimento, ROAS, conversões, CPC) para o mesmo período e cliente
 
 ## Detecção de cliente
 Analise a pergunta e detecte qual cliente está sendo mencionado:
@@ -226,6 +228,12 @@ Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-07-01"
 
 Pergunta: "top ROAS do POD no Meta essa semana"
 Resposta: {"intents":["top_roas"],"campanha":null,"data_inicio":"2026-08-11","data_fim":"2026-08-17","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"meta_ads"}
+
+Pergunta: "compare Meta Ads vs Google Ads da Source OF essa semana"
+Resposta: {"intents":["comparar_plataformas"],"campanha":null,"data_inicio":"2026-08-11","data_fim":"2026-08-17","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"source_of","plataforma":null}
+
+Pergunta: "qual plataforma teve melhor ROAS em julho?"
+Resposta: {"intents":["comparar_plataformas"],"campanha":null,"data_inicio":"2026-07-01","data_fim":"2026-07-31","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "resumo geral de todos os clientes"
 Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}

@@ -462,3 +462,100 @@ def ranking_comparativo(
         row["metrica_chave"]   = metrica
 
     return rows
+
+
+# ── Comparativo entre plataformas ─────────────────────────────────────────────
+
+def comparar_plataformas(
+    data_inicio: Optional[str] = None,
+    data_fim:    Optional[str] = None,
+    cliente_key: Optional[str] = None,
+) -> dict:
+    """
+    Compara Meta Ads vs Google Ads lado a lado para o mesmo período e cliente.
+
+    Retorna dict com:
+      meta_ads:    dict de totais Meta Ads
+      google_ads:  dict de totais Google Ads
+      comparativo: dict de variações (roas_delta, invest_delta, cpc_delta...)
+      periodo:     {inicio, fim}
+      cliente_key: str
+    """
+    from agent.queries.base import _build_where
+
+    plataformas = ["meta_ads", "google_ads"]
+    resultados: dict[str, dict] = {}
+
+    for plat in plataformas:
+        where, params = _build_where(
+            None,
+            data_inicio=data_inicio,
+            data_fim=data_fim,
+            cliente_key=cliente_key,
+            plataforma=plat,
+        )
+        row = query_one(f"""
+            SELECT
+                ROUND(SUM(investimento), 2)                        AS investimento,
+                ROUND(SUM(COALESCE(valor_compras, 0)), 2)          AS receita,
+                ROUND(SUM(COALESCE(compras, 0)), 0)                AS conversoes,
+                ROUND(SUM(COALESCE(impressoes, 0)), 0)             AS impressoes,
+                ROUND(SUM(COALESCE(cliques_link, 0)), 0)           AS cliques,
+                ROUND(SUM(COALESCE(valor_compras, 0))
+                      / NULLIF(SUM(investimento), 0), 4)           AS roas,
+                ROUND(SUM(investimento)
+                      / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
+                ROUND(SUM(investimento)
+                      / NULLIF(SUM(COALESCE(compras, 0)), 0), 2)   AS custo_por_conversao,
+                ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT)
+                      / NULLIF(SUM(COALESCE(impressoes, 0)), 0) * 100, 4) AS ctr,
+                COUNT(DISTINCT campanha)                           AS campanhas_ativas,
+                MIN(data_inicio)                                   AS data_ini_real,
+                MAX(data_fim)                                      AS data_fim_real
+            FROM campanhas_unificada
+            {where}
+        """, tuple(params)) or {}
+        resultados[plat] = row
+
+    meta  = resultados.get("meta_ads",   {})
+    gads  = resultados.get("google_ads", {})
+
+    def _pct(a, b):
+        if not a or not b or b == 0:
+            return None
+        return round((a - b) / b * 100, 1)
+
+    comparativo = {
+        "roas_meta":          meta.get("roas"),
+        "roas_gads":          gads.get("roas"),
+        "roas_delta_pct":     _pct(meta.get("roas"), gads.get("roas")),
+        "invest_meta":        meta.get("investimento"),
+        "invest_gads":        gads.get("investimento"),
+        "invest_share_meta":  round(
+            (meta.get("investimento") or 0) /
+            max((meta.get("investimento") or 0) + (gads.get("investimento") or 0), 0.01) * 100, 1
+        ),
+        "invest_share_gads":  round(
+            (gads.get("investimento") or 0) /
+            max((meta.get("investimento") or 0) + (gads.get("investimento") or 0), 0.01) * 100, 1
+        ),
+        "cpc_meta":           meta.get("cpc"),
+        "cpc_gads":           gads.get("cpc"),
+        "ctr_meta":           meta.get("ctr"),
+        "ctr_gads":           gads.get("ctr"),
+        "cpc_delta_pct":      _pct(meta.get("cpc"), gads.get("cpc")),
+        "conversoes_meta":    meta.get("conversoes"),
+        "conversoes_gads":    gads.get("conversoes"),
+        "cpa_meta":           meta.get("custo_por_conversao"),
+        "cpa_gads":           gads.get("custo_por_conversao"),
+        "sem_dados_meta":     not bool(meta.get("investimento")),
+        "sem_dados_gads":     not bool(gads.get("investimento")),
+    }
+
+    return {
+        "meta_ads":   meta,
+        "google_ads": gads,
+        "comparativo": comparativo,
+        "periodo":    {"inicio": data_inicio, "fim": data_fim},
+        "cliente_key": cliente_key,
+    }

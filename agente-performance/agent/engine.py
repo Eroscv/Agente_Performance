@@ -450,6 +450,10 @@ def _executar_intent(
         metrica = nlp_raw.get("metrica") or "roas"
         return ranking_comparativo(metrica, data_inicio, data_fim)
 
+    elif intent == "comparar_plataformas":
+        from agent.queries.comparativos import comparar_plataformas as _cmp_plat
+        return _cmp_plat(data_inicio, data_fim, cliente_key=cliente_key)
+
     return queries.resumo_por_campanha(data_inicio, data_fim, **_fk)
 
 

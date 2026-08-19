@@ -383,6 +383,7 @@ _SUGESTOES_POR_INTENT: dict = {
     "funil_detalhado":         "💡 *Também pode:* `/top roas` · `/alertas`",
     "comparar":                "💡 *Também pode:* comparar períodos · `/top roas`",
     "comparar_periodos":       "💡 *Também pode:* `/top roas` · `/resumo_geral`",
+    "comparar_plataformas":    "💡 *Meta vs Google:* tente também `/top roas` em cada plataforma",
     "comparar_wow":            "💡 *Também pode:* comparar mês a mês · `/top roas`",
     "comparar_mom":            "💡 *Também pode:* histórico mensal · `/top roas`",
     "historico_mensal":        "💡 *Também pode:* comparar mom · `/resumo_geral`",
