@@ -797,99 +797,82 @@ def executar_cliente_multi_plataforma(
                       status="erro", erro="Âncora Slack falhou", run_id=run_id)
         return {"ok": False, "erro": "Âncora Slack falhou"}
 
-    # 4. Gera e posta cada plataforma na thread
-    # Shopify não gera thread própria — seus dados são integrados no relatório
-    # Meta Ads pelo builder_diario (que chama _buscar_shopify_dia internamente)
-    # e aparecem na âncora apenas como fonte informativa.
-    from relatorio.builder_diario import gerar_relatorio_diario
-    resultados_plats = {}
-    erros_plats = {}
+    # 4+5. Gera relatório consolidado (página Notion única) e posta thread no Slack
+    from relatorio.builder_diario import (
+        gerar_relatorio_consolidado,
+        _buscar_resumo_dia, _buscar_campanhas_dia, _buscar_dia_anterior, _buscar_shopify_dia,
+    )
+    from slack.helpers import formatar_resumo_relatorio
+    from slack.poster import _post_api, _channel
 
-    for plataforma in [p for p in plataformas_disponiveis if p != "shopify"]:
-        logger.info("[%s] Gerando relatório %s...", cliente_key, plataforma)
-        try:
-            resultado_ads = gerar_relatorio_diario(
-                cliente_key=cliente_key, plataforma=plataforma,
-                data=data_ref, publicar=publicar,
-            )
-            if resultado_ads.get("erro"):
-                err = resultado_ads['erro']
-                if err == "sem_dados":
-                    raise ValueError(f"sem_dados (API ainda não sincronizou {data_ref})")
-                raise ValueError(f"Builder: {err}")
+    logger.info("[%s] Gerando relatório consolidado: %s...", cliente_key, plataformas_disponiveis)
+    try:
+        resultado_consolidado = gerar_relatorio_consolidado(
+            cliente_key=cliente_key,
+            plataformas=plataformas_disponiveis,
+            data=data_ref,
+            publicar=publicar,
+        )
+        if resultado_consolidado.get("erro"):
+            err = resultado_consolidado["erro"]
+            if err == "sem_dados":
+                msg       = f"Dados de {data_ref} ainda não sincronizados pela API (delay normal)"
+                slack_msg = f"⏳ *{label} · Aguardando sincronização*\n_Dados de {data_ref} ainda não chegaram — APIs de anúncios têm delay de ~24h._"
+            else:
+                msg       = f"Builder consolidado falhou: {err}"
+                slack_msg = f"❌ *{label} · Relatório FALHOU*\n_{msg}_"
+            registrar_run(cliente_key=cliente_key, periodo=periodo,
+                          data_inicio=str(data_inicio), data_fim=str(data_fim),
+                          status="sem_dados" if err == "sem_dados" else "erro",
+                          erro=msg, run_id=run_id)
+            postar_slack_fallback(slack_msg)
+            return {"ok": False, "erro": msg}
 
-            _r = resultado_ads.get("resumo") or {}
-            _falhas = []
-            if not _r: _falhas.append("resumo ausente")
-            if not _r.get("investimento"): _falhas.append("investimento zerado/ausente")
-            if not resultado_ads.get("titulo"): _falhas.append("título ausente")
-            if not resultado_ads.get("blocos"): _falhas.append("blocos vazios")
-            if publicar and not resultado_ads.get("url"): _falhas.append("URL Notion ausente")
-            if _falhas:
-                raise ValueError(f"Validação falhou: {'; '.join(_falhas)}")
+        _r = resultado_consolidado.get("resumo") or {}
+        _falhas = []
+        if not _r: _falhas.append("resumo ausente")
+        if not _r.get("investimento"): _falhas.append("investimento zerado/ausente")
+        if not resultado_consolidado.get("titulo"): _falhas.append("título ausente")
+        if not resultado_consolidado.get("blocos"): _falhas.append("blocos vazios")
+        if publicar and not resultado_consolidado.get("url"): _falhas.append("URL Notion ausente")
+        if _falhas:
+            raise ValueError(f"Validação falhou: {'; '.join(_falhas)}")
 
-            resultados_plats[plataforma] = resultado_ads
-            logger.info("[%s] ✅ %s: OK", cliente_key, plataforma)
+        logger.info("[%s] ✅ Consolidado OK | Notion: %s", cliente_key, resultado_consolidado.get("url", "—"))
 
-        except Exception as exc:
-            logger.error("[%s] ❌ %s: %s", cliente_key, plataforma, exc)
-            erros_plats[plataforma] = str(exc)
-
-    if not resultados_plats:
-        # Distingue delay de sync de erros reais
-        todos_sem_dados = all("sem_dados" in str(e) for e in erros_plats.values())
-        if todos_sem_dados:
-            msg = f"Dados de {data_ref} ainda n\u00e3o sincronizados pela API (delay normal)"
-            status_run = "sem_dados"
-            slack_msg  = f"\u23f3 *{label} \u00b7 Aguardando sincroniza\u00e7\u00e3o*\n_Dados de {data_ref} ainda n\u00e3o chegaram \u2014 APIs de an\u00fancios t\u00eam delay de ~24h. O relat\u00f3rio ser\u00e1 gerado automaticamente quando os dados chegarem._"
-        else:
-            msg = f"Todos os relat\u00f3rios falharam: {erros_plats}"
-            status_run = "erro"
-            slack_msg  = f"\u274c *{label} \u00b7 Todos os relat\u00f3rios falharam*\n_{msg}_"
+    except Exception as exc:
+        logger.error("[%s] ❌ Relatório consolidado: %s", cliente_key, exc)
         registrar_run(cliente_key=cliente_key, periodo=periodo,
                       data_inicio=str(data_inicio), data_fim=str(data_fim),
-                      status=status_run, erro=msg, run_id=run_id)
-        postar_slack_fallback(slack_msg)
-        return {"ok": False, "erro": msg}
+                      status="erro", erro=str(exc), run_id=run_id)
+        postar_slack_fallback(f"❌ *{label} · Relatório FALHOU*\n_{exc}_")
+        return {"ok": False, "erro": str(exc)}
 
-    # 5. Posta relatório consolidado (todas as plataformas em uma única thread)
-    from slack.poster import _post_api, _channel
-    from slack.helpers import formatar_resumo_relatorio
+    # Monta corpo da thread: seção por plataforma + link Notion único no final
     _ch = _channel().lstrip("#")
-
-    plat_labels_slack = {"meta_ads": "Meta Ads", "google_ads": "Google Ads", "shopify": "Shopify"}
-
-    # Monta blocos consolidados: seção por plataforma + link Notion único no final
+    plat_labels_slack = {"meta_ads": "Meta Ads", "google_ads": "Google Ads"}
     secoes = []
-    notion_urls = {}  # plataforma → url
-    for plataforma, resultado in resultados_plats.items():
+    for plataforma in [p for p in plataformas_disponiveis if p != "shopify"]:
+        _resumo_plat = _buscar_resumo_dia(data_ref, cliente_key, plataforma)
+        if not _resumo_plat:
+            continue
+        _resultado_plat = {
+            "plataforma":  plataforma,
+            "cliente_key": cliente_key,
+            "data":        data_ref,
+            "resumo":      _resumo_plat,
+            "campanhas":   _buscar_campanhas_dia(data_ref, cliente_key, plataforma),
+            "anterior":    _buscar_dia_anterior(data_ref, cliente_key, plataforma),
+            "shopify":     _buscar_shopify_dia(data_ref) if plataforma == "meta_ads" and cliente_key == "source_of" else None,
+            "url":         None,  # link único adicionado no final
+        }
         titulo_plat = plat_labels_slack.get(plataforma, plataforma.title())
-        resumo_fmt  = formatar_resumo_relatorio({**resultado, "url": None})  # sem link individual
-        secoes.append(f"*{titulo_plat}*\n{resumo_fmt}")
-        if resultado.get("url"):
-            notion_urls[plataforma] = resultado["url"]
+        secoes.append(f"*{titulo_plat}*\n{formatar_resumo_relatorio(_resultado_plat)}")
 
-    # Link(s) Notion: se todas as plataformas tiverem a mesma página usa um só;
-    # caso contrário lista por plataforma
-    urls_unicas = list(dict.fromkeys(notion_urls.values()))  # preserva ordem, remove dups
-    if len(urls_unicas) == 1:
-        links_str = f"\n\n📎 <{urls_unicas[0]}|Abrir relatório completo no Notion>"
-    elif urls_unicas:
-        links_str = "\n\n" + "\n".join(
-            f"📎 <{notion_urls[p]}|Abrir no Notion — {plat_labels_slack.get(p, p)}>"
-            for p in notion_urls
-        )
-    else:
-        links_str = ""
-
-    separador = "\n" + "─" * 42 + "\n"
-    corpo = separador.join(secoes) + links_str
-
-    # Adiciona aviso de fontes com erro (se houver)
-    if erros_plats:
-        logger.warning("[%s] ⚠️ Fontes com erro: %s", cliente_key, list(erros_plats))
-        _erros_str = ", ".join(f"{p}: {e[:60]}" for p, e in erros_plats.items())
-        corpo += f"\n\n⚠️ _Fontes com falha: {_erros_str}_"
+    url = resultado_consolidado.get("url") or ""
+    link_notion = f"\n\n📎 <{url}|Abrir relatório completo no Notion>" if url else ""
+    separador   = "\n" + "─" * 42 + "\n"
+    corpo       = separador.join(secoes) + link_notion
 
     resp_thread = _post_api("chat.postMessage", {
         "channel":   _ch,
@@ -898,22 +881,22 @@ def executar_cliente_multi_plataforma(
         "mrkdwn":    True,
     })
     slack_ok = resp_thread.get("ok", False)
-    logger.info("[%s] Thread consolidada: %s", cliente_key, "OK" if slack_ok else f"FALHOU: {resp_thread.get('error')}")
+    logger.info("[%s] Thread Slack: %s", cliente_key, "OK" if slack_ok else f"FALHOU: {resp_thread.get('error')}")
 
     registrar_run(
         cliente_key=cliente_key, periodo=periodo,
         data_inicio=str(data_inicio), data_fim=str(data_fim),
         status="sucesso" if slack_ok else "erro",
-        notion_url=next((r.get("url") for r in resultados_plats.values() if r.get("url")), None),
+        notion_url=resultado_consolidado.get("url"),
         slack_ok=slack_ok, run_id=run_id,
     )
 
     logger.info(
-        "[%s] ✅ Multi-plataforma: %d/%d OK | Slack: %s",
-        cliente_key, len(resultados_plats), len(plataformas_disponiveis),
+        "[%s] ✅ Multi-plataforma: %d plataformas | Notion: 1 página | Slack: %s",
+        cliente_key, len([p for p in plataformas_disponiveis if p != "shopify"]),
         "OK" if slack_ok else "FALHOU",
     )
-    return {"ok": slack_ok, "resultados": resultados_plats, "erros": erros_plats}
+    return {"ok": slack_ok, "resultado": resultado_consolidado}
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────

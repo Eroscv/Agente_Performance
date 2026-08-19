@@ -438,3 +438,156 @@ def gerar_relatorio_diario(
         "cliente_key": cliente_key,
         "plataforma":  plataforma,
     }
+
+
+def gerar_relatorio_consolidado(
+    cliente_key: str,
+    plataformas: list[str],
+    data: str,
+    publicar: bool = True,
+) -> dict:
+    """
+    Gera um relatório diário consolidado (todas as plataformas numa só página Notion).
+
+    Args:
+        cliente_key:  'source_of' | 'pod_kombucha'
+        plataformas:  lista de plataformas com dados, ex: ['google_ads', 'meta_ads']
+        data:         'YYYY-MM-DD'
+        publicar:     se False, retorna blocos sem publicar no Notion
+
+    Returns:
+        dict com url, page_id, resumo (resumo da plataforma principal), blocos
+    """
+    try:
+        from db.connections import reset_federated_conn
+        reset_federated_conn()
+    except Exception:
+        pass
+
+    from datetime import date as _date
+    data_obj  = _date.fromisoformat(data)
+    data_fmt  = f"{data[8:10]}/{data[5:7]}/{data[:4]}"
+    nome_c    = LABELS.get(cliente_key, cliente_key)
+    emoji_c   = EMOJIS_CLIENTE.get(cliente_key, "📊")
+
+    plat_labels = {"meta_ads": "Meta Ads", "google_ads": "Google Ads"}
+    plats_str   = " + ".join(plat_labels.get(p, p) for p in plataformas if p != "shopify")
+    titulo      = f"{emoji_c} {nome_c} · {plats_str} · Relatório Diário · {data_fmt}"
+
+    blocos = [
+        callout(
+            f"{nome_c} · {plats_str} · {data_fmt}",
+            emoji=emoji_c,
+        ),
+        divider(),
+    ]
+
+    resumo_principal = None  # resumo da primeira plataforma de anúncios
+
+    for plataforma in [p for p in plataformas if p != "shopify"]:
+        resumo = _buscar_resumo_dia(data, cliente_key, plataforma)
+        if not resumo or not resumo.get("investimento"):
+            logger.warning("[Consolidado] Sem dados para %s·%s em %s", cliente_key, plataforma, data)
+            continue
+
+        if resumo_principal is None:
+            resumo_principal = resumo
+
+        campanhas = _buscar_campanhas_dia(data, cliente_key, plataforma)
+        anterior  = _buscar_dia_anterior(data, cliente_key, plataforma)
+        nome_p    = plat_labels.get(plataforma, plataforma)
+
+        # Cabeçalho da seção
+        blocos.append(h2(f"📊 {nome_p}"))
+        blocos += _blocos_visao_geral(resumo, plataforma, data_fmt)
+        blocos += _blocos_funil(resumo)
+        blocos += _blocos_metricas_avancadas(resumo)
+        if anterior:
+            blocos += _blocos_comparativo(resumo, anterior)
+        blocos += _blocos_campanhas(campanhas)
+        blocos += _blocos_alertas(campanhas)
+        blocos.append(divider())
+
+    # Shopify (se disponível) — seção única após todas as plataformas de anúncios
+    if "shopify" in plataformas or cliente_key == "source_of":
+        shopify = _buscar_shopify_dia(data)
+        if shopify:
+            blocos += _blocos_shopify(shopify)
+
+    # Insights consolidados via Claude
+    try:
+        from relatorio.insights import gerar_insights
+        plat_principal = next((p for p in plataformas if p != "shopify"), "meta_ads")
+        blocos += gerar_insights(
+            resumo=resumo_principal or {},
+            campanhas=[],
+            periodo="diario",
+            cliente_key=cliente_key,
+            plataforma=plat_principal,
+            periodo_str=data_fmt,
+            dados_extras=None,
+        )
+    except Exception as e:
+        logger.warning("[Consolidado] Insights falhou: %s", e)
+
+    blocos.append(paragrafo(
+        f"Gerado em {time.strftime('%d/%m/%Y %H:%M')} · Dados via API: {plats_str}",
+        bold=False
+    ))
+
+    if not resumo_principal:
+        return {"erro": "sem_dados", "data": data, "cliente_key": cliente_key}
+
+    if not publicar:
+        return {
+            "titulo":      titulo,
+            "resumo":      resumo_principal,
+            "blocos":      blocos,
+            "data":        data,
+            "cliente_key": cliente_key,
+            "plataforma":  "consolidado",
+        }
+
+    # Publica no Notion (página única, sem sufixo de plataforma)
+    resultado = criar_relatorio_no_historico(
+        titulo=titulo,
+        blocos=blocos,
+        periodo_str=data_fmt,
+        tipo="diario",
+        data_ref=data_obj,
+        data_inicio=data_obj,
+        data_fim=data_obj,
+        cliente_key=cliente_key,
+        plataforma="consolidado",  # chave única por cliente+data (não por plataforma)
+    )
+
+    logger.info("[Consolidado] %s %s → Notion: %s", cliente_key, data, resultado.get("url"))
+
+    try:
+        from db.relatorio_log import registrar_relatorio
+        registrar_relatorio(
+            cliente_key=cliente_key,
+            plataforma="consolidado",
+            periodicidade="diario",
+            data_inicio=data,
+            data_fim=data,
+            titulo=titulo,
+            notion_url=resultado.get("url"),
+            notion_page_id=resultado.get("page_id"),
+            blocos_n=len(blocos),
+            resumo=resumo_principal,
+            status="ok",
+        )
+    except Exception as _log_err:
+        logger.warning("[Consolidado] Falha ao registrar log: %s", _log_err)
+
+    return {
+        "titulo":      titulo,
+        "page_id":     resultado.get("page_id"),
+        "url":         resultado.get("url"),
+        "resumo":      resumo_principal,
+        "blocos":      blocos,
+        "data":        data,
+        "cliente_key": cliente_key,
+        "plataforma":  "consolidado",
+    }
