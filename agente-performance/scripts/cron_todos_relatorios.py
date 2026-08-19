@@ -864,24 +864,36 @@ def executar_cliente_multi_plataforma(
             "campanhas":   _buscar_campanhas_dia(data_ref, cliente_key, plataforma),
             "anterior":    _buscar_dia_anterior(data_ref, cliente_key, plataforma),
             "shopify":     _buscar_shopify_dia(data_ref) if plataforma == "meta_ads" and cliente_key == "source_of" else None,
-            "url":         None,  # link único adicionado no final
+            "url":         None,
         }
         titulo_plat = plat_labels_slack.get(plataforma, plataforma.title())
-        secoes.append(f"*{titulo_plat}*\n{formatar_resumo_relatorio(_resultado_plat)}")
+        secoes.append((titulo_plat, formatar_resumo_relatorio(_resultado_plat)))
 
     url = resultado_consolidado.get("url") or ""
-    link_notion = f"\n\n📎 <{url}|Abrir relatório completo no Notion>" if url else ""
-    separador   = "\n" + "─" * 42 + "\n"
-    corpo       = separador.join(secoes) + link_notion
 
-    resp_thread = _post_api("chat.postMessage", {
-        "channel":   _ch,
-        "thread_ts": thread_ts,
-        "text":      corpo,
-        "mrkdwn":    True,
-    })
-    slack_ok = resp_thread.get("ok", False)
-    logger.info("[%s] Thread Slack: %s", cliente_key, "OK" if slack_ok else f"FALHOU: {resp_thread.get('error')}")
+    # Cada plataforma vira uma mensagem separada na thread (formatação limpa)
+    slack_ok = False
+    for titulo_plat, resumo_fmt in secoes:
+        resp = _post_api("chat.postMessage", {
+            "channel":   _ch,
+            "thread_ts": thread_ts,
+            "text":      f"*{titulo_plat}*\n{resumo_fmt}",
+            "mrkdwn":    True,
+        })
+        if resp.get("ok"):
+            slack_ok = True
+        else:
+            logger.error("[%s] Thread %s falhou: %s", cliente_key, titulo_plat, resp.get("error"))
+
+    # Link Notion como mensagem final separada na thread
+    if url:
+        _post_api("chat.postMessage", {
+            "channel":   _ch,
+            "thread_ts": thread_ts,
+            "text":      f"📎 <{url}|Abrir relatório completo no Notion>",
+            "mrkdwn":    True,
+        })
+        logger.info("[%s] Link Notion postado na thread", cliente_key)
 
     registrar_run(
         cliente_key=cliente_key, periodo=periodo,
