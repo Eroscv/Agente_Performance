@@ -207,19 +207,90 @@ def _build_duck_conn() -> duckdb.DuckDBPyConnection:
     return conn
 
 
-def get_duck_conn() -> duckdb.DuckDBPyConnection:
-    """Retorna conexão DuckDB singleton. Recria se morta."""
+# ── Adapter: compatibilidade com código que chama .execute().fetchall() e acessa por chave ────
+
+class _DuckResult:
+    """Wrapper sobre resultado DuckDB: rows acessíveis por índice ou nome de coluna."""
+    __slots__ = ("_rows", "_cols")
+
+    def __init__(self, cols, raw_rows):
+        self._cols = cols
+        self._rows = [_DuckRow(cols, r) for r in raw_rows]
+
+    @property
+    def description(self):
+        """Compatibilidade sqlite3: list of (col_name, None, None, None, None, None, None)"""
+        return [(c, None, None, None, None, None, None) for c in self._cols]
+
+    def fetchall(self):
+        return self._rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class _DuckRow:
+    """Row DuckDB com acesso por índice inteiro e por nome de coluna (como sqlite3.Row)."""
+    __slots__ = ("_cols", "_vals")
+
+    def __init__(self, cols, vals):
+        self._cols = cols
+        self._vals = vals
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self._vals[key]
+        return self._vals[self._cols.index(key)]
+
+    def keys(self):
+        return list(self._cols)
+
+    def __iter__(self):
+        return iter(self._vals)
+
+    def __repr__(self):
+        return repr(dict(zip(self._cols, self._vals)))
+
+
+class _DuckConnAdapter:
+    """
+    Wrapper sobre DuckDBPyConnection que faz .execute() retornar _DuckResult.
+    Garante compatibilidade com código que usa conn.execute().fetchall()
+    e acessa rows por nome de coluna (como sqlite3.Row).
+    """
+    def __init__(self, conn: duckdb.DuckDBPyConnection):
+        self._conn = conn
+
+    def execute(self, sql: str, params=None):
+        sql, params_list = _compat_sql(sql, tuple(params) if params else ())
+        if params_list:
+            cur = self._conn.execute(sql, params_list)
+        else:
+            cur = self._conn.execute(sql)
+        cols = [d[0] for d in cur.description]
+        return _DuckResult(cols, cur.fetchall())
+
+    # Delega outros atributos ao conn real
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+def get_duck_conn() -> "_DuckConnAdapter":
+    """Retorna conexão DuckDB singleton via adapter compatível com sqlite3.Row."""
     global _duck_conn
     if _duck_conn is not None:
         try:
             _duck_conn.execute("SELECT 1").fetchone()
-            return _duck_conn
+            return _DuckConnAdapter(_duck_conn)
         except Exception:
             logger.warning("[duck] Conexão morta — recriando")
             _duck_conn = None
 
     _duck_conn = _build_duck_conn()
-    return _duck_conn
+    return _DuckConnAdapter(_duck_conn)
 
 
 def reset_duck_conn() -> None:
@@ -235,18 +306,61 @@ def reset_duck_conn() -> None:
 
 # ── Helpers de query (mesma assinatura de query_fed) ─────────────────────────
 
+_INTERVAL_RE = None
+
+
+def _compat_sql(sql: str, params: tuple) -> tuple:
+    """
+    Adapta SQL escrito para SQLite para funcionar no DuckDB.
+
+    Conversões:
+      DATE(?, ?)  com intervalo SQLite (ex: '-30 days')
+        → (?::DATE - INTERVAL '30' DAY)
+    """
+    import re
+    global _INTERVAL_RE
+    if _INTERVAL_RE is None:
+        _INTERVAL_RE = re.compile(r"DATE\(\s*\?\s*,\s*\?\s*\)", re.IGNORECASE)
+
+    params_list = list(params)
+    matches = list(_INTERVAL_RE.finditer(sql))
+    if not matches:
+        return sql, params_list
+
+    # Processa do fim para o início para não deslocar índices
+    for match in reversed(matches):
+        q_before        = sum(1 for c in sql[:match.start()] if c == "?")
+        inter_param_idx = q_before + 1   # segundo ? do DATE(?,?)
+
+        if inter_param_idx < len(params_list):
+            inter_str = str(params_list[inter_param_idx])   # ex: '-30 days'
+            m2 = re.match(
+                r"([+-]?\d+)\s*(day|days|month|months|year|years)",
+                inter_str.strip(), re.IGNORECASE,
+            )
+            if m2:
+                n        = int(m2.group(1))
+                unit     = m2.group(2).rstrip("s").upper()   # DAY, MONTH, YEAR
+                op       = "+" if n >= 0 else "-"
+                abs_n    = abs(n)
+                repl     = f"CAST(CAST(? AS DATE) {op} INTERVAL '{abs_n}' {unit} AS VARCHAR)"
+                sql      = sql[:match.start()] + repl + sql[match.end():]
+                params_list.pop(inter_param_idx)
+
+    return sql, params_list
+
+
 def query_duck(sql: str, params: tuple = ()) -> list[dict]:
     """
     Executa query analítica no DuckDB e retorna lista de dicts.
     Mesma assinatura de query_fed() — substituição drop-in.
+    Aplica conversões de compatibilidade SQLite → DuckDB automaticamente.
     """
+    sql, params_list = _compat_sql(sql, params)
     conn = get_duck_conn()
-    if params:
-        result = conn.execute(sql, list(params))
-    else:
-        result = conn.execute(sql)
-    columns = [desc[0] for desc in result.description]
-    return [dict(zip(columns, row)) for row in result.fetchall()]
+    result = conn.execute(sql, params_list) if params_list else conn.execute(sql)
+    # _DuckResult.fetchall() retorna _DuckRow — converte para dict
+    return [dict(zip(r.keys(), r)) for r in result.fetchall()]
 
 
 def query_duck_one(sql: str, params: tuple = ()) -> Optional[dict]:

@@ -97,10 +97,10 @@ def performance_campanha(
         logger.debug("[queries] performance_campanha: match exato '%s' → %d dias", campanha, len(resultado))
         return resultado
 
-    # Fallback: LIKE
-    like_pattern = f"%{campanha}%"
+    # Fallback: LIKE case-insensitive (LOWER funciona em SQLite e DuckDB)
+    like_pattern = f"%{campanha.lower()}%"
     where_like, params_like = _build_where(
-        "campanha LIKE ?",
+        "LOWER(campanha) LIKE ?",
         extra_params=[like_pattern],
         data_inicio=data_inicio,
         data_fim=data_fim,

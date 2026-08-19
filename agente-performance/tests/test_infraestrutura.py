@@ -122,10 +122,13 @@ class TestConnectionsFederado:
         assert rows[0]["n"] >= 32193  # cresce com syncs diários
 
     def test_legacy_get_conn_redireciona(self):
-        """db.connection.get_conn() deve retornar a conexão federada."""
+        """db.connection.get_conn() deve retornar uma conexão federada DuckDB."""
         from db.connection import get_conn
-        from db.connections import get_federated_conn
-        assert get_conn() is get_federated_conn()
+        from db.duck import _DuckConnAdapter
+        conn = get_conn()
+        assert isinstance(conn, _DuckConnAdapter), (
+            f"get_conn() deve retornar _DuckConnAdapter (DuckDB), obteve {type(conn)}"
+        )
 
 
 # ── agent/registry.py ─────────────────────────────────────────────────────────

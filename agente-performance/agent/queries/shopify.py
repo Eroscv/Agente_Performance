@@ -84,13 +84,10 @@ def metricas_shopify_diario(
     Returns:
         [{"data": "YYYY-MM-DD", "receita": float, "pedidos": int, ...}]
     """
-    from db.connection import get_conn
-    import sqlite3
+    from db.connections import query_fed
 
-    conn = get_conn()
-    conn.row_factory = sqlite3.Row
     try:
-        rows = conn.execute(
+        rows = query_fed(
             """
             SELECT
                 data,
@@ -106,8 +103,8 @@ def metricas_shopify_diario(
             ORDER BY data ASC
             """,
             (data_inicio, data_fim),
-        ).fetchall()
-        return [dict(r) for r in rows]
+        )
+        return rows
     except Exception as e:
         logger.warning("[queries] metricas_shopify_diario: %s", e)
         return []
