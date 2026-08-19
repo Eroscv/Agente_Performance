@@ -476,10 +476,13 @@ def executar_cliente(
 
         # ── Slack âncora + thread ─────────────────────────────────────────
         from slack.handlers import formatar_resumo_relatorio
-        _msg_slack = f"{emoji} *{label} · Relatório {tipo_label}*\n_{periodo_str}_\n" + formatar_resumo_relatorio(resultado)
+        # link já incluído dentro de formatar_resumo_relatorio — não duplicar
+        _msg_slack = (
+            f"{emoji} *{label} · Relatório {tipo_label}*\n_{periodo_str}_\n"
+            + formatar_resumo_relatorio(resultado)
+        )
         ok_slack = postar_slack_fallback(_msg_slack)
 
-        url = resultado.get("url", "—")
 
         # Confirma envio Slack
         if not ok_slack:
@@ -488,15 +491,6 @@ def executar_cliente(
             logger.info("[%s] ✅ Slack: mensagem enviada com sucesso", cliente_key)
 
         logger.info("[%s] Slack: %s | Notion: %s", cliente_key, "OK" if ok_slack else "FALHOU", url)
-
-        # Posta link do Notion como mensagem standalone (semanal, mensal e diário)
-        if url and url != "—":
-            tipo_label_notion = {"semana": "Semanal", "mes": "Mensal", "diario": "Diário"}.get(periodo, tipo_label)
-            postar_slack_fallback(
-                f"{emoji} *{label} · Relatório {tipo_label_notion} no Notion*\n"
-                f"_{periodo_str}_\n"
-                f"📎 <{url}|Abrir relatório completo no Notion>"
-            )
 
         # ── Persiste log detalhado do relatório no SQLite ──────────────────────
         try:
@@ -594,11 +588,11 @@ def _postar_relatorio_em_thread(resultado: dict, emoji: str, label: str,
     url = resultado.get("url", "—")
 
     resumo_fmt = formatar_resumo_relatorio(resultado)
-    msg_notion = f"\n📎 <{url}|Abrir no Notion>" if url and url != "—" else ""
+    # link já incluído dentro de formatar_resumo_relatorio — não duplicar
     texto = (
         f"*{emoji} {label} · {titulo_plat} · {tipo_label}*\n"
         f"_{periodo_str}_\n"
-        f"{resumo_fmt}{msg_notion}"
+        f"{resumo_fmt}"
     )
     resp = _post_api("chat.postMessage", {
         "channel":   ch,
@@ -804,75 +798,37 @@ def executar_cliente_multi_plataforma(
         return {"ok": False, "erro": "Âncora Slack falhou"}
 
     # 4. Gera e posta cada plataforma na thread
+    # Shopify não gera thread própria — seus dados são integrados no relatório
+    # Meta Ads pelo builder_diario (que chama _buscar_shopify_dia internamente)
+    # e aparecem na âncora apenas como fonte informativa.
     from relatorio.builder_diario import gerar_relatorio_diario
     resultados_plats = {}
     erros_plats = {}
 
-    for plataforma in plataformas_disponiveis:
+    for plataforma in [p for p in plataformas_disponiveis if p != "shopify"]:
         logger.info("[%s] Gerando relatório %s...", cliente_key, plataforma)
         try:
-            if plataforma == "shopify":
-                from relatorio.builder_diario import _buscar_shopify_dia, _blocos_shopify
-                from notion.historico import criar_relatorio_no_historico
+            resultado_ads = gerar_relatorio_diario(
+                cliente_key=cliente_key, plataforma=plataforma,
+                data=data_ref, publicar=publicar,
+            )
+            if resultado_ads.get("erro"):
+                err = resultado_ads['erro']
+                if err == "sem_dados":
+                    raise ValueError(f"sem_dados (API ainda não sincronizou {data_ref})")
+                raise ValueError(f"Builder: {err}")
 
-                shopify_data = _buscar_shopify_dia(data_ref)
-                if not shopify_data or not shopify_data.get("receita"):
-                    raise ValueError(f"Shopify sem dados para {data_ref}")
+            _r = resultado_ads.get("resumo") or {}
+            _falhas = []
+            if not _r: _falhas.append("resumo ausente")
+            if not _r.get("investimento"): _falhas.append("investimento zerado/ausente")
+            if not resultado_ads.get("titulo"): _falhas.append("título ausente")
+            if not resultado_ads.get("blocos"): _falhas.append("blocos vazios")
+            if publicar and not resultado_ads.get("url"): _falhas.append("URL Notion ausente")
+            if _falhas:
+                raise ValueError(f"Validação falhou: {'; '.join(_falhas)}")
 
-                data_fmt = f"{data_ref[8:10]}/{data_ref[5:7]}/{data_ref[:4]}"
-                titulo_shop = f"{emoji} {nome} · Shopify · Relatório Diário · {data_fmt}"
-                blocos_shop = _blocos_shopify(shopify_data)
-
-                resultado_shop = {
-                    "titulo":      titulo_shop,
-                    "resumo":      {"investimento": None,
-                                    "receita_shopify": shopify_data.get("receita"),
-                                    "pedidos": shopify_data.get("pedidos"),
-                                    "shopify": shopify_data},
-                    "blocos":      blocos_shop,
-                    "data":        data_ref,
-                    "cliente_key": cliente_key,
-                    "plataforma":  "shopify",
-                }
-
-                if publicar:
-                    from datetime import date as _date
-                    data_obj = _date.fromisoformat(data_ref)
-                    r_notion = criar_relatorio_no_historico(
-                        titulo=titulo_shop, blocos=blocos_shop,
-                        periodo_str=data_fmt, tipo="diario",
-                        data_ref=data_obj, data_inicio=data_obj,
-                        data_fim=data_obj, cliente_key=cliente_key,
-                        plataforma="shopify",
-                    )
-                    resultado_shop["url"]     = r_notion.get("url")
-                    resultado_shop["page_id"] = r_notion.get("page_id")
-
-                resultados_plats["shopify"] = resultado_shop
-
-            else:
-                resultado_ads = gerar_relatorio_diario(
-                    cliente_key=cliente_key, plataforma=plataforma,
-                    data=data_ref, publicar=publicar,
-                )
-                if resultado_ads.get("erro"):
-                    err = resultado_ads['erro']
-                    if err == "sem_dados":
-                        raise ValueError(f"sem_dados (API ainda não sincronizou {data_ref})")
-                    raise ValueError(f"Builder: {err}")
-
-                _r = resultado_ads.get("resumo") or {}
-                _falhas = []
-                if not _r: _falhas.append("resumo ausente")
-                if not _r.get("investimento"): _falhas.append("investimento zerado/ausente")
-                if not resultado_ads.get("titulo"): _falhas.append("título ausente")
-                if not resultado_ads.get("blocos"): _falhas.append("blocos vazios")
-                if publicar and not resultado_ads.get("url"): _falhas.append("URL Notion ausente")
-                if _falhas:
-                    raise ValueError(f"Validação falhou: {'; '.join(_falhas)}")
-
-                resultados_plats[plataforma] = resultado_ads
-
+            resultados_plats[plataforma] = resultado_ads
             logger.info("[%s] ✅ %s: OK", cliente_key, plataforma)
 
         except Exception as exc:

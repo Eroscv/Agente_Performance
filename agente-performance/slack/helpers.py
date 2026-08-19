@@ -244,7 +244,7 @@ def formatar_resumo_relatorio(resultado: dict) -> str:
     tbl_vg = f"{sep42}\nMétrica{' '*(w-7)} │ Valor\n{sep42}\n"
     tbl_vg += "\n".join(f"{k}{' '*(w-len(k))} │ {v}" for k,v in rows_vg)
     tbl_vg += f"\n{sep42}"
-    parts.append(f":bar_chart: *Visão Geral*\n```\n{tbl_vg}\n```")
+    parts.append(f"📊 *Visão Geral*\n```\n{tbl_vg}\n```")
 
     # Funil
     if impressoes or cliques or convs:
@@ -264,7 +264,7 @@ def formatar_resumo_relatorio(resultado: dict) -> str:
         tbl_funil  = f"{sep_funil}\n{'Etapa':{w0}} │ {'Volume':{w1}} │ Taxa\n{sep_funil}\n"
         tbl_funil += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]}" for r in rows_funil)
         tbl_funil += f"\n{sep_funil}"
-        parts.append(f":arrow_down_small: *Funil de Conversão*\n```\n{tbl_funil}\n```")
+        parts.append(f"🔽 *Funil de Conversão*\n```\n{tbl_funil}\n```")
 
     # Métricas de custo
     if ctr_v or cpc_v or cpm_v:
@@ -278,7 +278,7 @@ def formatar_resumo_relatorio(resultado: dict) -> str:
         tbl_custo = f"{sep18}\nMétrica{' '*(w-7)} │ Valor\n{sep18}\n"
         tbl_custo += "\n".join(f"{k}{' '*(w-len(k))} │ {v}" for k,v in rows_custo)
         tbl_custo += f"\n{sep18}"
-        parts.append(f":triangular_ruler: *Métricas de Custo*\n```\n{tbl_custo}\n```")
+        parts.append(f"📐 *Métricas de Custo*\n```\n{tbl_custo}\n```")
 
     # Comparativo dia anterior
     if anterior and anterior.get("investimento"):
@@ -307,7 +307,7 @@ def formatar_resumo_relatorio(resultado: dict) -> str:
         tbl_comp  = f"{sep_comp}\n{'Métrica':{w0}} │ {'Ontem':{w1}} │ {'Hoje':{w2}} │ Var.\n{sep_comp}\n"
         tbl_comp += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]:{w2}} │ {r[3]}" for r in rows_comp)
         tbl_comp += f"\n{sep_comp}"
-        parts.append(f":chart_with_upwards_trend: *Comparativo — Dia Anterior*\n```\n{tbl_comp}\n```")
+        parts.append(f"📈 *Comparativo — Dia Anterior*\n```\n{tbl_comp}\n```")
 
     # Tabela de campanhas removida — só alertas de campanhas sem conversão
     if campanhas:
@@ -323,7 +323,7 @@ def formatar_resumo_relatorio(resultado: dict) -> str:
             tbl_a  = f"{sep_a}\nCampanha{' '*(w0-8)} │ {'Invest.':{w1}} │ Motivo\n{sep_a}\n"
             tbl_a += "\n".join(f"{r[0]:{w0}} │ {r[1]:{w1}} │ {r[2]}" for r in alertas_camp)
             tbl_a += f"\n{sep_a}"
-            parts.append(f":warning: *Alertas — Campanhas para Revisar*\n```\n{tbl_a}\n```")
+            parts.append(f"⚠️ *Alertas — Campanhas para Revisar*\n```\n{tbl_a}\n```")
     # Shopify embutido (source_of google_ads/meta_ads inclui shopify no resultado)
     sh = resultado.get("shopify") or r.get("shopify")
     if sh and sh.get("receita") and plataforma != "shopify":
@@ -341,7 +341,7 @@ def formatar_resumo_relatorio(resultado: dict) -> str:
         tbl_sh  = f"{sep_sh}\nMétrica{' '*(w-7)} │ Valor\n{sep_sh}\n"
         tbl_sh += "\n".join(f"{k}{' '*(w-len(k))} │ {v}" for k,v in rows_sh)
         tbl_sh += f"\n{sep_sh}"
-        parts.append(f":shopping_trolley: *Shopify — Dados da Loja*\n```\n{tbl_sh}\n```")
+        parts.append(f"🛒 *Shopify — Dados da Loja*\n```\n{tbl_sh}\n```")
 
     # Rodapé com data e link
     data_fmt = f"{data_str[8:10]}/{data_str[5:7]}/{data_str[:4]}" if len(data_str) == 10 else data_str
