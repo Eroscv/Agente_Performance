@@ -222,6 +222,8 @@ def _calcular_delta(resultado: dict, data_inicio: date, data_fim: date, cliente_
 def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> list[str]:
     """
     Checa se há campanhas abaixo do threshold de ROAS.
+    Usa a data_maxima do banco como data_fim real (dado mais recente disponível),
+    ignorando o data_fim passado caso o banco ainda não tenha dados de hoje.
     Retorna lista de mensagens de alerta (vazia = tudo OK).
     """
     alertas = []
@@ -234,6 +236,18 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
         is_gads   = plats_cfg.get("google_ads", {}).get("ativo", False) and not plats_cfg.get("meta_ads", {}).get("ativo", False)
         threshold = ALERTA_ROAS_MIN_GADS if is_gads else ALERTA_ROAS_MIN
 
+        # Usa data_maxima do banco filtrada por cliente — reflete dado mais recente após sync
+        from db.connections import query_fed_one
+        row_max = query_fed_one(
+            "SELECT MAX(data_fim) AS dm FROM campanhas_unificada WHERE cliente_key = ?",
+            (cliente_key,)
+        )
+        data_max_banco = row_max.get("dm") if row_max else None
+        if data_max_banco:
+            data_fim = date.fromisoformat(str(data_max_banco)[:10])
+        # Alerta sempre referente ao dia mais recente disponível
+        data_inicio = data_fim
+
         from db.connections import query_fed
         rows = query_fed("""
             SELECT campanha,
@@ -243,13 +257,13 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
                         THEN SUM(valor_compras) / SUM(investimento) END AS roas
             FROM campanhas_unificada
             WHERE cliente_key = ?
-              AND data_inicio BETWEEN ? AND ?
+              AND data_inicio = ?
               AND investimento > 0
             GROUP BY campanha
             HAVING roas < ? OR roas IS NULL
             ORDER BY invest DESC
             LIMIT 5
-        """, (cliente_key, str(data_inicio), str(data_fim), threshold))
+        """, (cliente_key, str(data_fim), threshold))
 
         if rows:
             alertas.append({
@@ -257,7 +271,7 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
                 "nome":        nome,
                 "emoji":       emoji,
                 "threshold":   threshold,
-                "periodo":     f"{data_inicio.strftime('%d/%m')} a {data_fim.strftime('%d/%m/%Y')}",
+                "periodo":     data_fim.strftime('%d/%m/%Y'),
                 "campanhas":   [dict(r) for r in rows],
             })
 
