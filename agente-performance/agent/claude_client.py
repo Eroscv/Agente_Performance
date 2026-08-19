@@ -216,7 +216,7 @@ def gerar_resposta(
     # (só para Source OF, KB não tem entradas POD ainda)
     kb_contexto = ""
     cliente_key = meta.get("cliente", "source_of")
-    plataforma_meta = meta.get("plataforma", "google_ads")  # plataforma real do resultado
+    plataforma_meta = meta.get("plataforma")  # None = sem filtro (Meta + Google juntos)
     is_pod = cliente_key == "pod_kombucha"
     is_pod_meta = is_pod and plataforma_meta == "meta_ads"
 
