@@ -705,9 +705,12 @@ def executar_cliente_multi_plataforma(
     # Google Ads
     gads_cfg = plats_cfg.get("google_ads", {})
     if gads_cfg.get("ativo", False):
-        tabela_g = gads_cfg.get("tabela_db") or f"{cliente_key}_gads_diario"
         try:
-            _r = _q(f"SELECT SUM(investimento) FROM {tabela_g} WHERE data=?", (data_ref,))
+            _r = _q(
+                "SELECT SUM(investimento) AS total FROM v_performance "
+                "WHERE data=? AND cliente_key=? AND plataforma='google_ads'",
+                (data_ref, cliente_key),
+            )
             _v = _val(_r)
             if _v:
                 plataformas_disponiveis.append("google_ads")
@@ -715,14 +718,17 @@ def executar_cliente_multi_plataforma(
             else:
                 logger.warning("[%s] Google Ads: sem dados para %s", cliente_key, data_ref)
         except Exception as _e:
-            logger.warning("[%s] Google Ads: erro ao checar tabela %s: %s", cliente_key, tabela_g, _e)
+            logger.warning("[%s] Google Ads: erro ao checar v_performance: %s", cliente_key, _e)
 
     # Meta Ads
     meta_cfg = plats_cfg.get("meta_ads", {})
     if meta_cfg.get("ativo", False):
-        tabela_m = meta_cfg.get("tabela_db") or f"{cliente_key}_meta_ads_diario"
         try:
-            _r = _q(f"SELECT SUM(investimento) FROM {tabela_m} WHERE data=?", (data_ref,))
+            _r = _q(
+                "SELECT SUM(investimento) AS total FROM v_performance "
+                "WHERE data=? AND cliente_key=? AND plataforma='meta_ads'",
+                (data_ref, cliente_key),
+            )
             _v = _val(_r)
             if _v:
                 plataformas_disponiveis.append("meta_ads")
@@ -730,7 +736,7 @@ def executar_cliente_multi_plataforma(
             else:
                 logger.warning("[%s] Meta Ads: sem dados para %s", cliente_key, data_ref)
         except Exception as _e:
-            logger.warning("[%s] Meta Ads: erro ao checar tabela %s: %s", cliente_key, tabela_m, _e)
+            logger.warning("[%s] Meta Ads: erro ao checar v_performance: %s", cliente_key, _e)
 
     # Shopify (apenas source_of por ora)
     if cliente_key == "source_of":
