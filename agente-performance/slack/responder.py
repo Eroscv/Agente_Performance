@@ -217,6 +217,11 @@ async def _processar_e_responder(
             if aviso_delay:
                 resposta_final = aviso_delay + "\n\n" + resposta_final
 
+            # Aviso de janela de atribuição (dados recentes ainda podem mudar)
+            aviso_janela = meta.get("aviso_janela_atribuicao")
+            if aviso_janela:
+                resposta_final = resposta_final + "\n\n" + aviso_janela
+
             # MELHORIA 8: Prefixo de alerta de cobertura de dados
             if aviso_cobertura:
                 resposta_final = aviso_cobertura + "\n\n" + resposta_final

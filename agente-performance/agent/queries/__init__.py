@@ -26,7 +26,7 @@ Submódulos compartilhados (fonte de verdade):
     comparativos.py    — comparativos entre períodos e campanhas
 """
 
-from agent.queries.base import data_range_disponivel, listar_campanhas, verificar_gap_dados
+from agent.queries.base import data_range_disponivel, listar_campanhas, verificar_gap_dados, validar_cobertura_dados, aviso_janela_atribuicao
 from agent.queries.resumo import resumo_por_campanha, performance_campanha, resumo_periodo, resumo_executivo, historico_mensal, metricas_funil, custo_funil_detalhado, distribuicao_investimento, projecao_fechamento_mes
 from agent.queries.ranking import top_campanhas_roas, top_campanhas_compras, top_campanhas_ctr, top_campanhas_cpm, top_campanhas_alcance, top_campanhas_cliques, top_campanhas_receita, eficiencia_criativo
 from agent.queries.alertas import alertas_roas_baixo, campanhas_sem_conversao, campanhas_inativas, saturacao_frequencia

@@ -752,7 +752,36 @@ def executar_cliente_multi_plataforma(
         postar_slack_fallback(f"❌ *{label} · Sem dados para {data_ref}*")
         return {"ok": False, "erro": msg}
 
-    # 3. Posta âncora no Slack
+    # 2b. Guardrails de qualidade de dados (volume mínimo + coerência numérica + janela de atribuição)
+    from agent.queries import validar_cobertura_dados, aviso_janela_atribuicao
+    avisos_qualidade = []
+    plataformas_parciais = []
+
+    for _plat in [p for p in plataformas_disponiveis if p != "shopify"]:
+        _cob = validar_cobertura_dados(data_ref, cliente_key=cliente_key, plataforma=_plat)
+        if not _cob["ok"] and _cob["motivo"] != "sem_dados":
+            logger.warning("[%s] ⚠️ Dado parcial %s: %s", cliente_key, _plat, _cob["motivo"])
+            avisos_qualidade.append(_cob["aviso"])
+            plataformas_parciais.append(_plat)
+
+    _aviso_janela = aviso_janela_atribuicao(
+        data_ref,
+        plataforma=plataformas_disponiveis[0] if len(plataformas_disponiveis) == 1 else None,
+    )
+    if _aviso_janela:
+        avisos_qualidade.append(_aviso_janela)
+
+    # Se dados parciais detectados: aborta e agenda retry na mensagem
+    if plataformas_parciais:
+        _aviso_str = "\n\n".join(avisos_qualidade)
+        registrar_run(cliente_key=cliente_key, periodo=periodo,
+                      data_inicio=str(data_inicio), data_fim=str(data_fim),
+                      status="sem_dados", erro=f"dado_parcial: {plataformas_parciais}", run_id=run_id)
+        postar_slack_fallback(
+            f"⏳ *{label} · Dado incompleto*\n{_aviso_str}"
+        )
+        return {"ok": False, "erro": f"dado_parcial: {plataformas_parciais}"}
+
     plat_labels_map = {"google_ads": "Google Ads", "meta_ads": "Meta Ads", "shopify": "Shopify"}
     plats_str_list = [plat_labels_map.get(p, p) for p in plataformas_disponiveis]
     thread_ts = _postar_ancora_slack(

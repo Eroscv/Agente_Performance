@@ -666,6 +666,16 @@ def consultar(
     if aviso_delay:
         meta["aviso_delay"] = aviso_delay
 
+    # 3c. Aviso de janela de atribuição (dados recentes ainda podem ser revisados pela API)
+    if data_fim:
+        try:
+            from agent.queries import aviso_janela_atribuicao
+            _aviso_janela = aviso_janela_atribuicao(data_fim, plataforma=plataforma)
+            if _aviso_janela:
+                meta["aviso_janela_atribuicao"] = _aviso_janela
+        except Exception:
+            pass
+
     # 4. Executa queries
     _SEMANA_PARCIAL_SOF = re.compile(
         r"(essa\s+semana|esta\s+semana|semana\s+at[eé]\s+agora|semana\s+atual"

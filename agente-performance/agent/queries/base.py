@@ -268,4 +268,172 @@ def verificar_gap_dados(cliente_key: Optional[str] = None, plataforma: Optional[
         return {"tem_gap": False, "aviso": None}
 
 
+# ── Guardrails de qualidade de dados ────────────────────────────────────────
+
+# Volume mínimo esperado de linhas por dia (baseline dos últimos 30 dias).
+# Se o dia tiver menos de VOLUME_MIN_PCT do baseline, dado é considerado parcial.
+_VOLUME_MIN_PCT = 0.40   # menos de 40% do volume médio = parcial
+_VOLUME_DROP_PCT = 0.20  # investimento < 20% do médio dos 7 dias anteriores = dado parcial ou anomalia
+
+# Janela de atribuição por plataforma (dias em que os dados ainda podem ser revisados pela API)
+_JANELA_ATRIBUICAO = {
+    "meta_ads":   3,   # Meta revisa compras em até 7d; dados das últimas 3d costumam ainda mudar
+    "google_ads": 2,   # Google finaliza em geral em 2d
+    "shopify":    0,   # Shopify é transacional, não tem janela
+}
+
+
+def validar_cobertura_dados(
+    data: str,
+    cliente_key: Optional[str] = None,
+    plataforma:  Optional[str] = None,
+) -> dict:
+    """
+    Guardrail 1+2: valida se os dados de `data` estão completos.
+
+    Verifica:
+      - Volume de linhas vs baseline dos últimos 30 dias (dado parcial)
+      - Queda brusca de investimento vs média dos 7 dias anteriores (dado suspeito)
+
+    Retorna:
+        {
+            "ok":      bool,          # False = dado provavelmente parcial
+            "motivo":  str | None,    # descrição do problema detectado
+            "aviso":   str | None,    # mensagem pronta para Slack
+            "linhas":  int,           # linhas encontradas para `data`
+            "invest":  float,         # investimento encontrado para `data`
+        }
+    """
+    from datetime import date as _date, timedelta as _td
+
+    try:
+        dt = _date.fromisoformat(data)
+        d7_ini = (dt - _td(days=8)).isoformat()   # 7 dias antes (exclui o próprio dia)
+        d7_fim = (dt - _td(days=1)).isoformat()
+        d30_ini = (dt - _td(days=31)).isoformat()
+        d30_fim = (dt - _td(days=1)).isoformat()
+
+        # Filtra por cliente/plataforma se fornecido
+        plat_filter = ""
+        params_base: list = []
+        if cliente_key:
+            plat_filter += " AND cliente_key = ?"
+            params_base.append(cliente_key)
+        if plataforma:
+            plat_filter += " AND plataforma = ?"
+            params_base.append(plataforma)
+
+        # Linhas e investimento do dia alvo
+        r_dia = query_one(
+            f"SELECT COUNT(*) linhas, COALESCE(SUM(investimento),0) invest "
+            f"FROM campanhas_unificada "
+            f"WHERE data_inicio = ?{plat_filter}",
+            tuple([data] + params_base),
+        )
+        linhas_dia  = r_dia["linhas"]  if r_dia else 0
+        invest_dia  = r_dia["invest"]  if r_dia else 0.0
+
+        if linhas_dia == 0:
+            return {
+                "ok": False, "motivo": "sem_dados",
+                "aviso": None,  # tratado pelo fluxo sem_dados existente
+                "linhas": 0, "invest": 0.0,
+            }
+
+        # Baseline 30 dias: média de linhas/dia
+        r_30 = query_one(
+            f"SELECT COUNT(*) total_linhas, COUNT(DISTINCT data_inicio) total_dias "
+            f"FROM campanhas_unificada "
+            f"WHERE data_inicio BETWEEN ? AND ?{plat_filter}",
+            tuple([d30_ini, d30_fim] + params_base),
+        )
+        total_linhas_30 = r_30["total_linhas"] if r_30 else 0
+        total_dias_30   = r_30["total_dias"]   if r_30 else 0
+        media_linhas_30 = total_linhas_30 / total_dias_30 if total_dias_30 > 0 else 0
+
+        # Média de investimento nos 7 dias anteriores
+        r_7 = query_one(
+            f"SELECT COALESCE(AVG(invest_dia),0) media_invest "
+            f"FROM ("
+            f"  SELECT data_inicio, SUM(investimento) invest_dia "
+            f"  FROM campanhas_unificada "
+            f"  WHERE data_inicio BETWEEN ? AND ?{plat_filter} "
+            f"  GROUP BY data_inicio"
+            f") sub",
+            tuple([d7_ini, d7_fim] + params_base),
+        )
+        media_invest_7 = r_7["media_invest"] if r_7 else 0.0
+
+        avisos = []
+
+        # Guardrail 1: volume de linhas abaixo do mínimo
+        if media_linhas_30 > 5 and linhas_dia < media_linhas_30 * _VOLUME_MIN_PCT:
+            pct = linhas_dia / media_linhas_30 * 100
+            avisos.append(
+                f"volume de campanhas muito baixo ({linhas_dia} linhas vs média {media_linhas_30:.0f}/dia — {pct:.0f}% do normal)"
+            )
+
+        # Guardrail 2: queda brusca de investimento
+        if media_invest_7 > 100 and invest_dia < media_invest_7 * _VOLUME_DROP_PCT:
+            pct = invest_dia / media_invest_7 * 100
+            avisos.append(
+                f"investimento suspeito: R$ {invest_dia:,.0f} vs média R$ {media_invest_7:,.0f} ({pct:.0f}% do normal)"
+            )
+
+        if not avisos:
+            return {"ok": True, "motivo": None, "aviso": None, "linhas": linhas_dia, "invest": invest_dia}
+
+        plat_label = plataforma or "todas as plataformas"
+        cli_label  = cliente_key or "todos os clientes"
+        motivo     = " | ".join(avisos)
+        aviso_txt  = (
+            f"⚠️ *Dado possivelmente parcial — {cli_label} / {plat_label} / {data}*\n"
+            f"_{motivo}_\n"
+            f"_Os dados podem ainda estar sendo consolidados pela API. "
+            f"O relatório será regenerado automaticamente no próximo ciclo._"
+        )
+        return {"ok": False, "motivo": motivo, "aviso": aviso_txt, "linhas": linhas_dia, "invest": invest_dia}
+
+    except Exception as e:
+        logger.debug("[validar_cobertura_dados] erro: %s", e)
+        return {"ok": True, "motivo": None, "aviso": None, "linhas": -1, "invest": -1.0}  # fail open
+
+
+def aviso_janela_atribuicao(
+    data_fim: str,
+    plataforma: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Guardrail 3: avisa quando o período solicitado está dentro da janela de
+    atribuição da plataforma (dados ainda podem mudar).
+
+    Retorna string de aviso ou None se o período já está consolidado.
+    """
+    from datetime import date as _date
+    try:
+        dt_fim = _date.fromisoformat(data_fim)
+        hoje   = _date.today()
+        dias_atras = (hoje - dt_fim).days
+
+        plats = [plataforma] if plataforma else list(_JANELA_ATRIBUICAO.keys())
+        avisos = []
+        for plat in plats:
+            janela = _JANELA_ATRIBUICAO.get(plat, 0)
+            if janela > 0 and dias_atras < janela:
+                plat_label = {"meta_ads": "Meta Ads", "google_ads": "Google Ads"}.get(plat, plat)
+                avisos.append(
+                    f"{plat_label} (janela de {janela}d — dados até {dt_fim.strftime('%d/%m')} ainda podem ser revisados pela API)"
+                )
+
+        if not avisos:
+            return None
+
+        return (
+            f"⏳ *Atenção: período dentro da janela de atribuição*\n"
+            f"_{'; '.join(avisos)}_\n"
+            f"_Os números de compras/conversões podem aumentar nas próximas {max(_JANELA_ATRIBUICAO[p] for p in plats if p in _JANELA_ATRIBUICAO)} horas._"
+        )
+    except Exception as e:
+        logger.debug("[aviso_janela_atribuicao] erro: %s", e)
+        return None
 
