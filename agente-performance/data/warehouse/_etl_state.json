@@ -1,0 +1,173 @@
+{
+  "ultimo_run": "2026-08-19T22:27:14.546537",
+  "ultimo_run_status": "ok",
+  "ultimo_dia_processado": "2026-08-18",
+  "linhas_por_tabela": {
+    "fato_performance": 4893,
+    "fato_ads": 10887,
+    "fato_shopify": 414,
+    "dim_campanha": 66
+  },
+  "meses_processados": [
+    {
+      "mes": "2024-01",
+      "fato_performance": 16,
+      "fato_ads": 16
+    },
+    {
+      "mes": "2024-02",
+      "fato_performance": 58,
+      "fato_ads": 58
+    },
+    {
+      "mes": "2024-03",
+      "fato_performance": 69,
+      "fato_ads": 69
+    },
+    {
+      "mes": "2024-04",
+      "fato_performance": 62,
+      "fato_ads": 62
+    },
+    {
+      "mes": "2024-05",
+      "fato_performance": 33,
+      "fato_ads": 33
+    },
+    {
+      "mes": "2024-06",
+      "fato_performance": 36,
+      "fato_ads": 36
+    },
+    {
+      "mes": "2024-07",
+      "fato_performance": 51,
+      "fato_ads": 51
+    },
+    {
+      "mes": "2024-08",
+      "fato_performance": 31,
+      "fato_ads": 31
+    },
+    {
+      "mes": "2024-09",
+      "fato_performance": 30,
+      "fato_ads": 30
+    },
+    {
+      "mes": "2024-10",
+      "fato_performance": 64,
+      "fato_ads": 64
+    },
+    {
+      "mes": "2024-11",
+      "fato_performance": 103,
+      "fato_ads": 103
+    },
+    {
+      "mes": "2024-12",
+      "fato_performance": 80,
+      "fato_ads": 80
+    },
+    {
+      "mes": "2025-01",
+      "fato_performance": 93,
+      "fato_ads": 93
+    },
+    {
+      "mes": "2025-02",
+      "fato_performance": 84,
+      "fato_ads": 84
+    },
+    {
+      "mes": "2025-03",
+      "fato_performance": 104,
+      "fato_ads": 104
+    },
+    {
+      "mes": "2025-04",
+      "fato_performance": 86,
+      "fato_ads": 86
+    },
+    {
+      "mes": "2025-05",
+      "fato_performance": 98,
+      "fato_ads": 98
+    },
+    {
+      "mes": "2025-06",
+      "fato_performance": 111,
+      "fato_ads": 111
+    },
+    {
+      "mes": "2025-07",
+      "fato_performance": 141,
+      "fato_ads": 141
+    },
+    {
+      "mes": "2025-08",
+      "fato_performance": 167,
+      "fato_ads": 128
+    },
+    {
+      "mes": "2025-09",
+      "fato_performance": 223,
+      "fato_ads": 133
+    },
+    {
+      "mes": "2025-10",
+      "fato_performance": 214,
+      "fato_ads": 121
+    },
+    {
+      "mes": "2025-11",
+      "fato_performance": 204,
+      "fato_ads": 114
+    },
+    {
+      "mes": "2025-12",
+      "fato_performance": 252,
+      "fato_ads": 160
+    },
+    {
+      "mes": "2026-01",
+      "fato_performance": 189,
+      "fato_ads": 118
+    },
+    {
+      "mes": "2026-02",
+      "fato_performance": 217,
+      "fato_ads": 133
+    },
+    {
+      "mes": "2026-03",
+      "fato_performance": 293,
+      "fato_ads": 200
+    },
+    {
+      "mes": "2026-04",
+      "fato_performance": 242,
+      "fato_ads": 161
+    },
+    {
+      "mes": "2026-05",
+      "fato_performance": 249,
+      "fato_ads": 1060
+    },
+    {
+      "mes": "2026-06",
+      "fato_performance": 454,
+      "fato_ads": 1749
+    },
+    {
+      "mes": "2026-07",
+      "fato_performance": 517,
+      "fato_ads": 2922
+    },
+    {
+      "mes": "2026-08",
+      "fato_performance": 322,
+      "fato_ads": 2538
+    }
+  ]
+}
