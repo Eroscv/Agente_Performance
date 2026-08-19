@@ -237,10 +237,10 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
         from db.connections import query_fed
         rows = query_fed("""
             SELECT campanha,
-                   SUM(investimento) AS invest,
-                   SUM(receita)      AS receita,
+                   SUM(investimento)  AS invest,
+                   SUM(valor_compras) AS receita,
                    CASE WHEN SUM(investimento) > 0
-                        THEN SUM(receita) / SUM(investimento) END AS roas
+                        THEN SUM(valor_compras) / SUM(investimento) END AS roas
             FROM campanhas_unificada
             WHERE cliente_key = ?
               AND data_inicio BETWEEN ? AND ?
