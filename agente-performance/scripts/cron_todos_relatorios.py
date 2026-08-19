@@ -191,7 +191,7 @@ def _calcular_delta(resultado: dict, data_inicio: date, data_fim: date, cliente_
             SELECT
                 SUM(investimento) AS invest,
                 CASE WHEN SUM(investimento) > 0
-                     THEN SUM(receita) / SUM(investimento) END AS roas
+                     THEN SUM(valor_compras) / SUM(investimento) END AS roas
             FROM campanhas_unificada
             WHERE cliente_key = ? AND data_inicio BETWEEN ? AND ?
         """, (cliente_key, str(ant_ini), str(ant_fim)))
@@ -227,9 +227,11 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
     alertas = []
     try:
         from db.registry import get_cliente
-        cfg     = get_cliente(cliente_key)
-        nome    = cfg.get("nome", cliente_key)
-        emoji   = cfg.get("slack_emoji", "📊")
+        cfg       = get_cliente(cliente_key)
+        nome      = cfg.get("nome", cliente_key)
+        emoji     = cfg.get("slack_emoji", "📊")
+        plats_cfg = cfg.get("plataformas", {})
+        is_gads   = plats_cfg.get("google_ads", {}).get("ativo", False) and not plats_cfg.get("meta_ads", {}).get("ativo", False)
         threshold = ALERTA_ROAS_MIN_GADS if is_gads else ALERTA_ROAS_MIN
 
         from db.connections import query_fed
@@ -687,6 +689,12 @@ def executar_cliente_multi_plataforma(
         return {"ok": False, "erro": "Sync falhou após 3 tentativas"}
 
     # 2. Detecta plataformas com dados (dinâmico por cliente via clientes.json)
+    # Reseta conexão federada após o sync para garantir que os dados novos são vistos
+    try:
+        from db.connections import reset_federated_conn
+        reset_federated_conn()
+    except Exception:
+        pass
     from db.connection import query_one as _q
     data_ref = str(data_fim)
     plataformas_disponiveis = []

@@ -21,7 +21,7 @@ class TestConnectionsPerformance:
         from db.connections import get_performance_conn
         conn = get_performance_conn("source_of", "meta_ads")
         n = conn.execute("SELECT COUNT(*) FROM source_of_meta_ads_diario").fetchone()[0]
-        assert n == 32193
+        assert n >= 32193  # cresce com syncs diários
 
     def test_source_of_google_ads(self):
         from db.connections import get_performance_conn
@@ -33,13 +33,13 @@ class TestConnectionsPerformance:
         from db.connections import get_performance_conn
         conn = get_performance_conn("pod_kombucha", "meta_ads")
         n = conn.execute("SELECT COUNT(*) FROM pod_kombucha_meta_ads_diario").fetchone()[0]
-        assert n == 2285
+        assert n >= 2285  # cresce com syncs diários
 
     def test_pod_kombucha_google_ads(self):
         from db.connections import get_performance_conn
         conn = get_performance_conn("pod_kombucha", "google_ads")
         n = conn.execute("SELECT COUNT(*) FROM pod_kombucha_gads_diario").fetchone()[0]
-        assert n == 1226
+        assert n == 1226  # Google Ads POD — cresce lentamente (campanhas limitadas)
 
     def test_chave_invalida_levanta_keyerror(self):
         from db.connections import get_performance_conn
@@ -93,7 +93,7 @@ class TestConnectionsFederado:
     def test_shopify_receita_diaria(self):
         from db.connections import get_federated_conn
         n = get_federated_conn().execute("SELECT COUNT(*) FROM shopify_receita_diaria").fetchone()[0]
-        assert n == 414
+        assert n >= 414  # cresce com syncs diários de Shopify
 
     def test_segmentos_corretos(self):
         from db.connections import get_federated_conn
@@ -102,10 +102,10 @@ class TestConnectionsFederado:
             "GROUP BY cliente_key, plataforma ORDER BY 1,2"
         ).fetchall()
         seg = {(r["cliente_key"], r["plataforma"]): r["n"] for r in rows}
-        assert seg[("source_of",    "meta_ads")]   == 32193
+        assert seg[("source_of",    "meta_ads")]   >= 32193
         assert seg[("source_of",    "google_ads")] >= 372  # backfill 90 dias
-        assert seg[("pod_kombucha", "meta_ads")]   == 2285
-        assert seg[("pod_kombucha", "google_ads")] == 1226
+        assert seg[("pod_kombucha", "meta_ads")]   >= 2285
+        assert seg[("pod_kombucha", "google_ads")] >= 1226
 
     def test_query_fed_helper(self):
         from db.connections import query_fed
@@ -113,13 +113,13 @@ class TestConnectionsFederado:
             "SELECT COUNT(*) n FROM campanhas_unificada WHERE plataforma=?",
             ("meta_ads",)
         )
-        assert rows[0]["n"] == 34478  # 32193 + 2285
+        assert rows[0]["n"] >= 34478  # 32193 + 2285 (cresce com syncs)
 
     def test_query_db_helper(self):
         from db.connections import query_db
         rows = query_db("source_of/meta_ads",
             "SELECT COUNT(*) n FROM source_of_meta_ads_diario")
-        assert rows[0]["n"] == 32193
+        assert rows[0]["n"] >= 32193  # cresce com syncs diários
 
     def test_legacy_get_conn_redireciona(self):
         """db.connection.get_conn() deve retornar a conexão federada."""

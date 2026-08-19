@@ -281,6 +281,14 @@ def gerar_relatorio_diario(
     """
     from datetime import date as _date
 
+    # Reseta conexão federada para garantir que dados recém-sincronizados são vistos
+    # (a conexão :memory: é singleton e não detecta writes nos DBs de performance feitos
+    # após sua inicialização — reinicializar leva ~1.4ms e é seguro)
+    try:
+        from db.connections import reset_federated_conn
+        reset_federated_conn()
+    except Exception:
+        pass
     # Resolve data a partir de data_fim ou data_inicio se passados pelo cron
     if data is None:
         if data_fim is not None:

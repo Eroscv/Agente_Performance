@@ -262,14 +262,16 @@ def buscar_insights(account_id: str, dias: int = 30,
 
 
 def salvar(rows: list[dict], append: bool = False,
-           tabela: str = "source_of_meta_ads_diario") -> int:
+           tabela: str = "source_of_meta_ads_diario",
+           db_path: "Path | None" = None) -> int:
     """Salva dados no SQLite na tabela especificada."""
     if not rows:
         logger.warning("Nenhuma linha para salvar")
         return 0
 
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+    _db = Path(db_path) if db_path else DB_PATH
+    _db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(_db))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(_CREATE_TABLE_TPL.format(tabela=tabela))
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_data ON {tabela}(data)")
@@ -308,8 +310,9 @@ def salvar(rows: list[dict], append: bool = False,
     return len(rows)
 
 
-def resumo_banco(tabela: str = "source_of_meta_ads_diario") -> dict:
-    conn = sqlite3.connect(str(DB_PATH))
+def resumo_banco(tabela: str = "source_of_meta_ads_diario", db_path: "Path | None" = None) -> dict:
+    _db = Path(db_path) if db_path else DB_PATH
+    conn = sqlite3.connect(str(_db))
     conn.row_factory = sqlite3.Row
     try:
         r = conn.execute(f"""
@@ -329,7 +332,8 @@ def resumo_banco(tabela: str = "source_of_meta_ads_diario") -> dict:
 
 def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
                   tabela: str = "source_of_meta_ads_diario",
-                  token_env: str = "META_ACCESS_TOKEN"):
+                  token_env: str = "META_ACCESS_TOKEN",
+                  db_path: "Path | None" = None):
     """
     Wrapper programático — busca via API e salva no SQLite.
 
@@ -339,6 +343,7 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         append: se True, não limpa o período antes de inserir
         tabela: nome da tabela destino
         token_env: variável de ambiente com o token (padrão META_ACCESS_TOKEN)
+        db_path: caminho do arquivo .db destino (padrão: data/campanhas.db legado)
 
     Returns:
         (linhas_inseridas: int, periodo: str)
@@ -347,8 +352,8 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         account_id = f"act_{account_id}"
 
     rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
-    linhas = salvar(rows, append=append, tabela=tabela)
-    info   = resumo_banco(tabela)
+    linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+    info   = resumo_banco(tabela, db_path=db_path)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
     return linhas, periodo
 

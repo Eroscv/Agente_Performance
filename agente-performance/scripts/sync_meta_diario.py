@@ -58,6 +58,11 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool | None:
     tabela    = meta_cfg.get("tabela_db", f"{cliente_key}_meta_ads_diario")
     token_env = meta_cfg.get("meta_token_env", "META_ACCESS_TOKEN")
 
+    # DB de destino: performance/<cliente>/meta_ads.db (não o campanhas.db legado)
+    from db.connections import PERFORMANCE_DBS
+    from pathlib import Path
+    db_path = PERFORMANCE_DBS.get((cliente_key, "meta_ads"))
+
     logger.info("[%s] Iniciando sync Meta Ads (account=%s, tabela=%s, dias=%d)",
                 cliente_key, account_id, tabela, dias)
 
@@ -77,6 +82,7 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool | None:
             append=False,
             tabela=tabela,
             token_env=token_env,
+            db_path=db_path,
         )
         registrar_run(
             cliente_key=cliente_key,
