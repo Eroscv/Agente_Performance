@@ -183,7 +183,7 @@ def shopify_semana(seg, dom):
             ROUND(SUM(receita)/NULLIF(SUM(pedidos),0),2) AS ticket_medio,
             ROUND(SUM(total_desconto),2) AS total_desconto,
             SUM(pedidos_acima_300) AS pedidos_acima_300
-        FROM source_of_shopify_diario
+        FROM shopify_receita_diaria
         WHERE data BETWEEN ? AND ?
     """, (str(seg), str(dom)))
     return rows[0] if rows else {}

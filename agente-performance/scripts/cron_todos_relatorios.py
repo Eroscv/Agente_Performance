@@ -23,7 +23,6 @@ Uso:
 import argparse
 import logging
 import os
-import sqlite3
 import sys
 from datetime import date, timedelta
 from pathlib import Path
@@ -44,27 +43,10 @@ logger = logging.getLogger(__name__)
 ALERTA_ROAS_MIN      = float(os.getenv("ALERTA_ROAS_MIN", "2.0"))      # Source OF
 ALERTA_ROAS_MIN_GADS = float(os.getenv("ALERTA_ROAS_MIN_GADS", "1.5")) # Google Ads
 
-DB_PATH = Path(__file__).parent.parent / "data" / "campanhas.db"
 
 
-# ── Formatadores ──────────────────────────────────────────────────────────────
-
-def _fmt_brl(v) -> str:
-    if v is None: return "—"
-    try: return f"R$ {float(v):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-    except: return "—"
-
-
-def _fmt_x(v) -> str:
-    if v is None: return "—"
-    try: return f"{float(v):.2f}x"
-    except: return "—"
-
-
-def _fmt_n(v, decimais=0) -> str:
-    if v is None: return "—"
-    try: return f"{float(v):,.{decimais}f}".replace(",", ".")
-    except: return "—"
+# ── Formatadores (importados de utils.formatters) ────────────────────────────
+from utils.formatters import fmt_brl as _fmt_brl, fmt_x as _fmt_x, fmt_n as _fmt_n, fmt_pct  # noqa: F401
 
 
 def _delta_str(atual, anterior, maior_melhor=True) -> str:
@@ -198,20 +180,22 @@ def _calcular_delta(resultado: dict, data_inicio: date, data_fim: date, cliente_
         tabela   = cfg.get("tabela_db", "campanhas")
         is_gads  = cfg.get("plataforma") == "google_ads"
 
-        conn = sqlite3.connect(str(DB_PATH))
-        conn.row_factory = sqlite3.Row
+        from db.connections import query_fed
+        plataforma = None
+        for plat, pcfg in cfg.get("plataformas", {}).items():
+            if pcfg.get("ativo", False) and plat != "shopify":
+                plataforma = plat
+                break
 
-        if is_gads:
-            row = conn.execute("""
-                SELECT
-                    SUM(investimento) AS invest,
-                    CASE WHEN SUM(investimento) > 0
-                         THEN SUM(valor_conversao) / SUM(investimento) END AS roas
-                FROM pod_kombucha_gads_diario
-                WHERE data BETWEEN ? AND ?
-            """, (str(ant_ini), str(ant_fim))).fetchone()
-
-        conn.close()
+        rows = query_fed("""
+            SELECT
+                SUM(investimento) AS invest,
+                CASE WHEN SUM(investimento) > 0
+                     THEN SUM(receita) / SUM(investimento) END AS roas
+            FROM campanhas_unificada
+            WHERE cliente_key = ? AND data_inicio BETWEEN ? AND ?
+        """, (cliente_key, str(ant_ini), str(ant_fim)))
+        row = rows[0] if rows else None
         if not row or not row["invest"]:
             return {}
 
@@ -244,46 +228,26 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
     try:
         from db.registry import get_cliente
         cfg     = get_cliente(cliente_key)
-        is_gads = cfg.get("plataforma") == "google_ads"
         nome    = cfg.get("nome", cliente_key)
         emoji   = cfg.get("slack_emoji", "📊")
         threshold = ALERTA_ROAS_MIN_GADS if is_gads else ALERTA_ROAS_MIN
 
-        conn = sqlite3.connect(str(DB_PATH))
-        conn.row_factory = sqlite3.Row
-
-        if is_gads:
-            rows = conn.execute("""
-                SELECT campanha,
-                       SUM(investimento) AS invest,
-                       SUM(valor_conversao) AS receita,
-                       CASE WHEN SUM(investimento) > 0
-                            THEN SUM(valor_conversao) / SUM(investimento) END AS roas
-                FROM pod_kombucha_gads_diario
-                WHERE data BETWEEN ? AND ?
-                  AND investimento > 0
-                GROUP BY campanha
-                HAVING roas < ? OR roas IS NULL
-                ORDER BY invest DESC
-                LIMIT 5
-            """, (str(data_inicio), str(data_fim), threshold)).fetchall()
-        else:
-            rows = conn.execute("""
-                SELECT campanha,
-                       SUM(investimento) AS invest,
-                       SUM(valor_compras) AS receita,
-                       CASE WHEN SUM(investimento) > 0
-                            THEN SUM(valor_compras) / SUM(investimento) END AS roas
-                FROM campanhas_unificada
-                WHERE data_inicio BETWEEN ? AND ?
-                  AND investimento > 0
-                GROUP BY campanha
-                HAVING roas < ? OR roas IS NULL
-                ORDER BY invest DESC
-                LIMIT 5
-            """, (str(data_inicio), str(data_fim), threshold)).fetchall()
-
-        conn.close()
+        from db.connections import query_fed
+        rows = query_fed("""
+            SELECT campanha,
+                   SUM(investimento) AS invest,
+                   SUM(receita)      AS receita,
+                   CASE WHEN SUM(investimento) > 0
+                        THEN SUM(receita) / SUM(investimento) END AS roas
+            FROM campanhas_unificada
+            WHERE cliente_key = ?
+              AND data_inicio BETWEEN ? AND ?
+              AND investimento > 0
+            GROUP BY campanha
+            HAVING roas < ? OR roas IS NULL
+            ORDER BY invest DESC
+            LIMIT 5
+        """, (cliente_key, str(data_inicio), str(data_fim), threshold))
 
         if rows:
             alertas.append({
@@ -769,7 +733,7 @@ def executar_cliente_multi_plataforma(
     # Shopify (apenas source_of por ora)
     if cliente_key == "source_of":
         try:
-            _r = _q("SELECT SUM(receita) FROM source_of_shopify_diario WHERE data=?", (data_ref,))
+            _r = _q("SELECT SUM(receita) FROM shopify_receita_diaria WHERE data=?", (data_ref,))
             _v = _val(_r)
             if _v:
                 plataformas_disponiveis.append("shopify")
@@ -855,7 +819,10 @@ def executar_cliente_multi_plataforma(
                     data=data_ref, publicar=publicar,
                 )
                 if resultado_ads.get("erro"):
-                    raise ValueError(f"Builder: {resultado_ads['erro']}")
+                    err = resultado_ads['erro']
+                    if err == "sem_dados":
+                        raise ValueError(f"sem_dados (API ainda não sincronizou {data_ref})")
+                    raise ValueError(f"Builder: {err}")
 
                 _r = resultado_ads.get("resumo") or {}
                 _falhas = []
@@ -876,11 +843,20 @@ def executar_cliente_multi_plataforma(
             erros_plats[plataforma] = str(exc)
 
     if not resultados_plats:
-        msg = f"Todos os relatórios falharam: {erros_plats}"
+        # Distingue delay de sync de erros reais
+        todos_sem_dados = all("sem_dados" in str(e) for e in erros_plats.values())
+        if todos_sem_dados:
+            msg = f"Dados de {data_ref} ainda n\u00e3o sincronizados pela API (delay normal)"
+            status_run = "sem_dados"
+            slack_msg  = f"\u23f3 *{label} \u00b7 Aguardando sincroniza\u00e7\u00e3o*\n_Dados de {data_ref} ainda n\u00e3o chegaram \u2014 APIs de an\u00fancios t\u00eam delay de ~24h. O relat\u00f3rio ser\u00e1 gerado automaticamente quando os dados chegarem._"
+        else:
+            msg = f"Todos os relat\u00f3rios falharam: {erros_plats}"
+            status_run = "erro"
+            slack_msg  = f"\u274c *{label} \u00b7 Todos os relat\u00f3rios falharam*\n_{msg}_"
         registrar_run(cliente_key=cliente_key, periodo=periodo,
                       data_inicio=str(data_inicio), data_fim=str(data_fim),
-                      status="erro", erro=msg, run_id=run_id)
-        postar_slack_fallback(f"❌ *{label} · Todos os relatórios falharam*\n_{msg}_")
+                      status=status_run, erro=msg, run_id=run_id)
+        postar_slack_fallback(slack_msg)
         return {"ok": False, "erro": msg}
 
     # 5. Posta cada plataforma na thread da âncora

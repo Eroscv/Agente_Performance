@@ -280,7 +280,7 @@ def _blocos_visao_mensal_diaria(
         import sqlite3 as _sq3
         _conn_shp = _sq3.connect(str(db_path))
         _rows_shp = _conn_shp.execute(
-            "SELECT data, receita FROM source_of_shopify_diario WHERE data BETWEEN ? AND ?",
+            "SELECT data, receita FROM shopify_receita_diaria WHERE data BETWEEN ? AND ?",
             (data_inicio.isoformat(), data_fim.isoformat())
         ).fetchall()
         _conn_shp.close()

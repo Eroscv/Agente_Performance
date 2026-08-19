@@ -88,7 +88,7 @@ def _buscar_shopify_dia(data: str) -> dict | None:
     return query_one("""
         SELECT receita, pedidos, novos_clientes, recompradores,
                ticket_medio, total_desconto, pedidos_acima_300
-        FROM source_of_shopify_diario
+        FROM shopify_receita_diaria
         WHERE data = ?
     """, (data,))
 
