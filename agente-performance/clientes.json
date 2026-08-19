@@ -47,7 +47,8 @@
         "semanal": "0 8 * * 1",
         "mensal": "0 8 1 * *"
       },
-      "multi_plataforma": true
+      "multi_plataforma": true,
+      "slack_channel_ids": []
     },
     "pod_kombucha": {
       "nome": "POD Kombucha",
@@ -63,6 +64,15 @@
             "dias": 8
           },
           "tabela_db": "pod_kombucha_gads_diario"
+        },
+        "shopify": {
+          "ativo": true,
+          "loader": "shopify.sync_pod",
+          "loader_fn": "sincronizar",
+          "loader_params": { "dias": 8 },
+          "tabela_db": "shopify_receita_diaria",
+          "store": "d5bead-1b",
+          "token_env": "SHOPIFY_POD_TOKEN"
         },
         "meta_ads": {
           "ativo": true,
@@ -86,7 +96,11 @@
       "schedules": {
         "semanal": "0 8 * * 1",
         "mensal": "0 8 1 * *"
-      }
+      },
+      "slack_channel_ids": [],
+      "multi_plataforma": true
     }
-  }
+  },
+  "_canal_generico_slack": "C05SFND7R1D",
+  "_nota_canais": "Adicionar IDs reais em slack_channel_ids por cliente para roteamento preciso. Enquanto vazio, roteamento usa heurística de nome do canal."
 }
