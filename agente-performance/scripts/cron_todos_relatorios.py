@@ -852,31 +852,53 @@ def executar_cliente_multi_plataforma(
         postar_slack_fallback(slack_msg)
         return {"ok": False, "erro": msg}
 
-    # 5. Posta cada plataforma na thread da âncora
-    slack_ok_count = 0
+    # 5. Posta relatório consolidado (todas as plataformas em uma única thread)
+    from slack.poster import _post_api, _channel
+    from slack.helpers import formatar_resumo_relatorio
+    _ch = _channel().lstrip("#")
+
+    plat_labels_slack = {"meta_ads": "Meta Ads", "google_ads": "Google Ads", "shopify": "Shopify"}
+
+    # Monta blocos consolidados: seção por plataforma + link Notion único no final
+    secoes = []
+    notion_urls = {}  # plataforma → url
     for plataforma, resultado in resultados_plats.items():
-        ok_thread = _postar_relatorio_em_thread(
-            resultado=resultado, emoji=emoji, label=label,
-            tipo_label=tipo_label, periodo_str=periodo_str,
-            thread_ts=thread_ts,
+        titulo_plat = plat_labels_slack.get(plataforma, plataforma.title())
+        resumo_fmt  = formatar_resumo_relatorio({**resultado, "url": None})  # sem link individual
+        secoes.append(f"*{titulo_plat}*\n{resumo_fmt}")
+        if resultado.get("url"):
+            notion_urls[plataforma] = resultado["url"]
+
+    # Link(s) Notion: se todas as plataformas tiverem a mesma página usa um só;
+    # caso contrário lista por plataforma
+    urls_unicas = list(dict.fromkeys(notion_urls.values()))  # preserva ordem, remove dups
+    if len(urls_unicas) == 1:
+        links_str = f"\n\n📎 <{urls_unicas[0]}|Abrir relatório completo no Notion>"
+    elif urls_unicas:
+        links_str = "\n\n" + "\n".join(
+            f"📎 <{notion_urls[p]}|Abrir no Notion — {plat_labels_slack.get(p, p)}>"
+            for p in notion_urls
         )
-        if ok_thread:
-            slack_ok_count += 1
+    else:
+        links_str = ""
 
-    slack_ok = slack_ok_count > 0
+    separador = "\n" + "─" * 42 + "\n"
+    corpo = separador.join(secoes) + links_str
 
-    # Avisa fontes com erro na thread
+    # Adiciona aviso de fontes com erro (se houver)
     if erros_plats:
         logger.warning("[%s] ⚠️ Fontes com erro: %s", cliente_key, list(erros_plats))
-        from slack.poster import _post_api, _channel
-        _ch = _channel().lstrip("#")
         _erros_str = ", ".join(f"{p}: {e[:60]}" for p, e in erros_plats.items())
-        _post_api("chat.postMessage", {
-            "channel":   _ch,
-            "thread_ts": thread_ts,
-            "text":      f"⚠️ Fontes com falha (dados podem estar desatualizados): {_erros_str}",
-            "mrkdwn":    True,
-        })
+        corpo += f"\n\n⚠️ _Fontes com falha: {_erros_str}_"
+
+    resp_thread = _post_api("chat.postMessage", {
+        "channel":   _ch,
+        "thread_ts": thread_ts,
+        "text":      corpo,
+        "mrkdwn":    True,
+    })
+    slack_ok = resp_thread.get("ok", False)
+    logger.info("[%s] Thread consolidada: %s", cliente_key, "OK" if slack_ok else f"FALHOU: {resp_thread.get('error')}")
 
     registrar_run(
         cliente_key=cliente_key, periodo=periodo,
