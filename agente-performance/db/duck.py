@@ -156,6 +156,12 @@ SELECT
 FROM v_performance
 """
 
+# ── Paths do Data Warehouse (Parquet) ───────────────────────────────────────
+
+WH_DIR = BASE_DIR / "data" / "warehouse"
+
+# ── DDL views DW ─────────────────────────────────────────────────────────────
+
 _SHOPIFY_DDL = """
 CREATE OR REPLACE VIEW shopify_receita_diaria AS
 SELECT
@@ -213,7 +219,55 @@ def _build_duck_conn() -> duckdb.DuckDBPyConnection:
         logger.warning("[duck] Erro ao criar view Shopify: %s", e)
 
     logger.info("[duck] Conexão DuckDB inicializada (%d DBs attached)", len(attached))
+
+    # ── Views DW Parquet (se data/warehouse existir) ──────────────────────────
+    _criar_views_dw(conn)
+
     return conn
+
+
+def _criar_views_dw(conn: duckdb.DuckDBPyConnection) -> None:
+    """Cria views DW apontando para Parquet. Silencioso se arquivos não existem."""
+    perf_glob   = str(WH_DIR / "fato_performance" / "*.parquet")
+    ads_glob    = str(WH_DIR / "fato_ads"         / "*.parquet")
+    shopify_glob = str(WH_DIR / "fato_shopify"    / "*.parquet")
+    dim_campanha = str(WH_DIR / "dim_campanha.parquet")
+    dim_cliente  = str(WH_DIR / "dim_cliente.parquet")
+    dim_tempo    = str(WH_DIR / "dim_tempo.parquet")
+
+    # Só cria a view se há pelo menos um arquivo Parquet
+    has_perf    = bool(list((WH_DIR / "fato_performance").glob("*.parquet")))
+    has_ads     = bool(list((WH_DIR / "fato_ads").glob("*.parquet")))
+    has_shopify = bool(list((WH_DIR / "fato_shopify").glob("*.parquet")))
+    has_dims    = (WH_DIR / "dim_campanha.parquet").exists()
+
+    if not (has_perf or has_ads or has_shopify):
+        logger.debug("[duck] DW Parquet não encontrado — views dw_* não criadas")
+        return
+
+    ddls = []
+    if has_perf:
+        ddls.append(f"CREATE OR REPLACE VIEW dw_performance AS SELECT * FROM read_parquet('{perf_glob}', union_by_name=true)")
+    if has_ads:
+        ddls.append(f"CREATE OR REPLACE VIEW dw_ads AS SELECT * FROM read_parquet('{ads_glob}', union_by_name=true)")
+    if has_shopify:
+        ddls.append(f"CREATE OR REPLACE VIEW dw_shopify AS SELECT * FROM read_parquet('{shopify_glob}', union_by_name=true)")
+    if has_dims:
+        ddls.append(f"CREATE OR REPLACE VIEW dw_dim_campanha AS SELECT * FROM read_parquet('{dim_campanha}')")
+        ddls.append(f"CREATE OR REPLACE VIEW dw_dim_cliente  AS SELECT * FROM read_parquet('{dim_cliente}')")
+        ddls.append(f"CREATE OR REPLACE VIEW dw_dim_tempo    AS SELECT * FROM read_parquet('{dim_tempo}')")
+
+    created = []
+    for ddl in ddls:
+        try:
+            conn.execute(ddl)
+            view_name = ddl.split("VIEW ")[1].split(" AS")[0].strip()
+            created.append(view_name)
+        except Exception as e:
+            logger.warning("[duck] Erro ao criar view DW: %s", e)
+
+    if created:
+        logger.info("[duck] Views DW criadas: %s", ", ".join(created))
 
 
 # ── Adapter: compatibilidade com código que chama .execute().fetchall() e acessa por chave ────
