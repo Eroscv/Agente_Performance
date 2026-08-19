@@ -272,6 +272,13 @@ def gerar_resposta(
             plataforma_label = "Meta Ads"
         elif is_pod:
             plataforma_label = "Google Ads"
+        elif plataforma_meta == "google_ads":
+            plataforma_label = "Google Ads"
+        elif plataforma_meta == "meta_ads":
+            plataforma_label = "Meta Ads"
+        elif plataforma_meta is None and not is_pod:
+            # Source OF sem filtro = ambas as plataformas
+            plataforma_label = "Meta Ads + Google Ads"
         else:
             plataforma_label = "Meta Ads"
         if kwargs.get("shopify") and kwargs["shopify"].get("sincronizado"):
@@ -400,6 +407,8 @@ _NUMERIC_COLS = {
     "cpa", "roas_compras", "roas", "video_3s", "thruplays", "reproducoes_video",
     "visualizacoes_landing", "adicoes_carrinho", "checkout_iniciado",
     "compras_app", "compras_site", "conversas_iniciadas",
+    # Google Ads — aliases nativos (antes de mapear para campanhas_unificada)
+    "conversoes", "valor_conversao", "cliques", "ctr", "cpc_medio",
     # aliases de SQL dinâmico
     "roas_atual", "roas_anterior", "delta_roas", "delta_roas_pct",
     "investimento_atual", "investimento_anterior", "delta_investimento",

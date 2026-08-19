@@ -27,7 +27,7 @@ class SourceOFAgent(BaseClientAgent):
     """Agente Source OF — Meta Ads + Google Ads + Shopify."""
 
     CLIENTE_KEY       = "source_of"
-    PLATAFORMA_PADRAO = "meta_ads"
+    PLATAFORMA_PADRAO = None  # sem filtro: retorna Meta Ads + Google Ads combinados quando não especificado
 
     @property
     def relatorio(self):

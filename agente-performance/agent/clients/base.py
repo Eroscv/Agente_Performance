@@ -61,8 +61,9 @@ class BaseClientAgent:
         pergunta    = params.get("pergunta", "")
 
         # Resolve cliente_key e plataforma — usa os do params ou o padrão da classe
+        # PLATAFORMA_PADRAO=None significa sem filtro de plataforma (retorna todas)
         cliente_key = params.get("cliente_key") or self.CLIENTE_KEY or None
-        plataforma  = params.get("plataforma")  or self.PLATAFORMA_PADRAO or None
+        plataforma  = params.get("plataforma") or (self.PLATAFORMA_PADRAO if self.PLATAFORMA_PADRAO else None)
 
         logger.debug(
             "[%s] execute intent=%s cliente=%s plat=%s",
