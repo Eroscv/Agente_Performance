@@ -316,7 +316,9 @@ def gerar_relatorio_diario(
     anterior  = _buscar_dia_anterior(data, cliente_key, plataforma)
 
     shopify = None
-    if cliente_key == "source_of":
+    # Shopify só aparece no relatório Meta Ads (plataforma principal de receita)
+    # Não duplicar na thread do Google Ads
+    if cliente_key == "source_of" and plataforma == "meta_ads":
         shopify = _buscar_shopify_dia(data)
 
     # Formata data
