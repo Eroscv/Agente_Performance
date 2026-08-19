@@ -205,29 +205,12 @@ SELECT * FROM shopify_src.shopify_receita_diaria
 FEDERATED_DB = DATA_DIR / "federated.db"  # mantido para eventuais extensões
 
 
-def get_federated_conn() -> sqlite3.Connection:
-    """
-    Retorna conexão SQLite federada com todos os DBs de performance via ATTACH.
-
-    Expõe v_performance, campanhas_unificada e shopify_receita_diaria como
-    TEMP VIEWs — todo agent/queries/ funciona sem alterar uma linha de SQL.
-
-    Aliases de ATTACH:
-      sof_meta    → source_of/meta_ads.db
-      sof_gads    → source_of/google_ads.db
-      pod_meta    → pod_kombucha/meta_ads.db
-      pod_gads    → pod_kombucha/google_ads.db
-      shopify_src → source_of/shopify_receita.db
-    """
-    global _fed_conn
-    if _fed_conn is not None:
-        return _fed_conn
-
+def _build_federated_conn() -> sqlite3.Connection:
+    """Constrói uma nova conexão federada em :memory: com ATTACHes e TEMP VIEWs."""
     conn = sqlite3.connect(":memory:", check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
 
-    # Attach dos DBs de performance
     attaches = [
         ("sof_meta",    PERFORMANCE_DBS[("source_of",    "meta_ads")]),
         ("sof_gads",    PERFORMANCE_DBS[("source_of",    "google_ads")]),
@@ -247,14 +230,42 @@ def get_federated_conn() -> sqlite3.Connection:
     if missing:
         logger.warning("[fed] DBs ausentes (views parciais): %s", missing)
 
-    # Cria views unificadas sobre os DBs attachados
     conn.execute(_V_PERFORMANCE_DDL)
     conn.execute(_CAMPANHAS_UNIFICADA_DDL)
     conn.execute(_SHOPIFY_DDL)
     conn.commit()
 
-    _fed_conn = conn
     logger.info("[fed] Conexão federada inicializada (%d DBs attached)", len(attaches) - len(missing))
+    return conn
+
+
+def get_federated_conn() -> sqlite3.Connection:
+    """
+    Retorna conexão SQLite federada com todos os DBs de performance via ATTACH.
+
+    Expõe v_performance, campanhas_unificada e shopify_receita_diaria como
+    TEMP VIEWs — todo agent/queries/ funciona sem alterar uma linha de SQL.
+
+    Aliases de ATTACH:
+      sof_meta    → source_of/meta_ads.db
+      sof_gads    → source_of/google_ads.db
+      pod_meta    → pod_kombucha/meta_ads.db
+      pod_gads    → pod_kombucha/google_ads.db
+      shopify_src → source_of/shopify_receita.db
+
+    Auto-reconecta se a conexão em memória tiver sido invalidada.
+    """
+    global _fed_conn
+    if _fed_conn is not None:
+        # Verifica se a conexão ainda está viva (ping leve)
+        try:
+            _fed_conn.execute("SELECT 1").fetchone()
+            return _fed_conn
+        except Exception:
+            logger.warning("[fed] Conexão federada morta — recriando")
+            _fed_conn = None
+
+    _fed_conn = _build_federated_conn()
     return _fed_conn
 
 
@@ -272,10 +283,23 @@ def reset_federated_conn() -> None:
 # ── Helpers de query ──────────────────────────────────────────────────────────
 
 def query_fed(sql: str, params: tuple = ()) -> list[dict]:
-    """Query no DB federado (v_performance, campanhas_unificada, shopify_receita_diaria)."""
-    conn = get_federated_conn()
-    cur  = conn.execute(sql, params)
-    return [dict(r) for r in cur.fetchall()]
+    """
+    Query no DB federado (v_performance, campanhas_unificada, shopify_receita_diaria).
+    Reconecta automaticamente se a conexão em memória tiver sido invalidada.
+    """
+    try:
+        conn = get_federated_conn()
+        cur  = conn.execute(sql, params)
+        return [dict(r) for r in cur.fetchall()]
+    except sqlite3.OperationalError as e:
+        # Reconecta uma vez se a view/conn foi perdida
+        if "no such table" in str(e) or "no such view" in str(e):
+            logger.warning("[query_fed] View não encontrada (%s) — reconectando", e)
+            reset_federated_conn()
+            conn = get_federated_conn()
+            cur  = conn.execute(sql, params)
+            return [dict(r) for r in cur.fetchall()]
+        raise
 
 
 def query_fed_one(sql: str, params: tuple = ()) -> Optional[dict]:
@@ -310,3 +334,48 @@ def query_db(
 
     cur = conn.execute(sql, params)
     return [dict(r) for r in cur.fetchall()]
+
+
+# ── Inspeção das views federadas ─────────────────────────────────────────────
+
+def inspect_federated_views() -> dict:
+    """
+    Retorna metadados das views ativas na conexão federada.
+
+    Útil para debug, healthcheck e validação pós-restart.
+    Não aparece em .schema dos arquivos .db (TEMP VIEW é in-memory);
+    este é o único jeito de inspecionar ao vivo.
+
+    Retorna:
+        {
+            "views": ["v_performance", "campanhas_unificada", "shopify_receita_diaria"],
+            "row_counts": {"v_performance": 36076, ...},
+            "attached_dbs": ["sof_meta", "sof_gads", ...],
+        }
+    """
+    conn = get_federated_conn()
+
+    views = [
+        r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_temp_master WHERE type='view' ORDER BY name"
+        ).fetchall()
+    ]
+
+    row_counts: dict[str, int] = {}
+    for v in views:
+        try:
+            n = conn.execute(f"SELECT COUNT(*) FROM {v}").fetchone()[0]
+            row_counts[v] = n
+        except Exception:
+            row_counts[v] = -1
+
+    attached = [
+        r[1] for r in conn.execute("PRAGMA database_list").fetchall()
+        if r[1] not in ("main", "temp")
+    ]
+
+    return {
+        "views":        views,
+        "row_counts":   row_counts,
+        "attached_dbs": attached,
+    }

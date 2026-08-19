@@ -57,11 +57,16 @@ async def lifespan(app: FastAPI):
         logger.info("Banco legado: %s", DB_PATH)
 
     # Inicializa conexão federada (multi-DB)
-    from db.connections import get_federated_conn, PERFORMANCE_DBS, INBOX_DB, OUTBOX_DB, AGENT_DB
+    from db.connections import get_federated_conn, inspect_federated_views, PERFORMANCE_DBS, INBOX_DB, OUTBOX_DB, AGENT_DB
     try:
         fed = get_federated_conn()
-        n_vp = fed.execute("SELECT COUNT(*) FROM v_performance").fetchone()[0]
-        logger.info("🗄️  DB federado OK — v_performance: %d rows", n_vp)
+        info = inspect_federated_views()
+        logger.info(
+            "🗄️  DB federado OK — views: %s | rows: %s | attached: %s",
+            info["views"],
+            {k: v for k, v in info["row_counts"].items()},
+            info["attached_dbs"],
+        )
         for (ck, plat), path in PERFORMANCE_DBS.items():
             if path.exists():
                 logger.info("  ✅ %s/%s → %s", ck, plat, path.name)
