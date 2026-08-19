@@ -311,7 +311,7 @@ def postar_alerta_ancorado(alerta: dict, channel: str = None) -> bool:
     # ── 2. Detalhes na thread ───────────────────────────────────────────────
     rows_tabela = []
     for c in camps:
-        roas_str = f"{c['roas']:.2f}x" if c.get("roas") else "—"
+        roas_str = f"{c['roas']:.2f}x" if c.get("roas") is not None else "—"
         rows_tabela.append([
             c["campanha"][:35],
             _fmt_brl(c.get("invest")),
