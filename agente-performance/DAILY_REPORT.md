@@ -329,11 +329,44 @@ Estes testes usavam valores de campanhas reais de junho que mudaram com novos da
 
 ---
 
+## 11. Formato Aprovado do Relatório Slack
+
+Estrutura final validada em 19/08/2026:
+
+```
+📌 Âncora (canal)
+   Source OF · Relatório Diário · 18/08/2026
+   Fontes: Google Ads · Meta Ads · Shopify
+
+  └── 💬 Google Ads (mensagem separada na thread)
+        tabelas: resumo, visão geral, funil, custo, comparativo, alertas
+
+  └── 💬 Meta Ads + Shopify (mensagem separada na thread)
+        tabelas: resumo, visão geral, funil, custo, comparativo, alertas
+        + bloco Shopify no final
+
+  └── 💬 📎 Abrir relatório completo no Notion  ← última mensagem, sozinha
+```
+
+**Regras:**
+- Cada plataforma = 1 mensagem independente na thread (evita quebra de formatação entre blocos)
+- Link Notion = última mensagem da thread, sozinha
+- Página Notion = 1 única por cliente/data (Google Ads + Meta Ads + Shopify consolidados)
+- Emojis sempre Unicode direto (nunca `:bar_chart:` etc.)
+- `formatar_resumo_relatorio()` não inclui link quando `url=None`
+
+---
+
 ## 📝 Histórico de Commits Relevantes
 
 | Hash | Mensagem | Impacto |
 |---|---|---|
-| `a22bcd3` | fix: sync Meta Ads grava no DB correto + reset federado pós-sync + is_gads + receita | 🔴 Crítico — causa raiz dos `sem_dados` |
+| `fb408ba` | fix: cada plataforma em mensagem separada na thread + link Notion como última mensagem | ✅ Formato aprovado |
+| `ace0da9` | feat: página Notion consolidada por cliente | 🟢 Feature |
+| `3441d02` | feat: relatório diário multi-plataforma consolidado | 🟢 Feature |
+| `5f27305` | fix: Shopify só na thread Meta Ads | 🟠 Bug |
+| `5362f33` | fix: verificar_alertas — SUM(valor_compras) | 🟠 Bug |
+| `2bcb9d2` | fix: emojis unicode + link duplicado removido | 🟠 Bug |
 | `e257279` | feat: guardrails de qualidade de dados | 🟡 Qualidade |
 | `0db4603` | fix: source_of_shopify_diario → shopify_receita_diaria | 🔴 Crítico |
 | `9824747` | refactor: views federadas — auto-reconexão, inspect_federated_views() | 🟡 Infraestrutura |
