@@ -33,6 +33,7 @@ load_dotenv(BASE_DIR / ".env")
 
 from db.cron_log import registrar_run
 from google_ads.loader import carregar_gads
+from db.connections import PERFORMANCE_DBS
 
 logging.basicConfig(
     level=logging.INFO,
@@ -76,11 +77,16 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool:
     )
 
     try:
+        # Banco federado correto para este cliente/plataforma
+        fed_path = PERFORMANCE_DBS.get((cliente_key, "google_ads"))
+        db_path  = str(fed_path) if fed_path else None
+
         linhas, periodo = carregar_gads(
             customer_id=customer_id,
             dias=dias,
             append=True,
             tabela=tabela,
+            db_path=db_path,
         )
         registrar_run(
             cliente_key=cliente_key,

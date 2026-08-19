@@ -159,10 +159,16 @@ CREATE TABLE IF NOT EXISTS {tabela} (
 
 
 def salvar(rows: list[dict], append: bool = False,
-           tabela: str = "gads_campanhas_diario") -> int:
-    """Salva dados no SQLite na tabela especificada."""
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
+           tabela: str = "gads_campanhas_diario",
+           db_path: str = None) -> int:
+    """Salva dados no SQLite na tabela especificada.
+    
+    Args:
+        db_path: caminho do banco destino. None = usa DB_PATH (legado).
+    """
+    _dest = Path(db_path) if db_path else DB_PATH
+    _dest.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(_dest))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(_CREATE_TABLE_TPL.format(tabela=tabela))
     # Índices na tabela destino
@@ -192,9 +198,10 @@ def salvar(rows: list[dict], append: bool = False,
     return len(rows)
 
 
-def resumo_banco(tabela: str = "gads_campanhas_diario") -> dict:
+def resumo_banco(tabela: str = "gads_campanhas_diario", db_path: str = None) -> dict:
     """Estatísticas do banco para uma tabela."""
-    conn = sqlite3.connect(str(DB_PATH))
+    _dest = Path(db_path) if db_path else DB_PATH
+    conn = sqlite3.connect(str(_dest))
     conn.row_factory = sqlite3.Row
     try:
         r = conn.execute(f"""
@@ -213,7 +220,8 @@ def resumo_banco(tabela: str = "gads_campanhas_diario") -> dict:
 
 
 def carregar_gads(customer_id: str, dias: int = 30, append: bool = False,
-                  tabela: str = "gads_campanhas_diario"):
+                  tabela: str = "gads_campanhas_diario",
+                  db_path: str = None):
     """
     Wrapper programático — busca via API e salva no SQLite.
 
@@ -222,13 +230,14 @@ def carregar_gads(customer_id: str, dias: int = 30, append: bool = False,
         dias: quantos dias puxar (padrão 30)
         append: se True, não limpa antes de inserir
         tabela: nome da tabela destino (padrão: gads_campanhas_diario)
+        db_path: caminho do banco destino. None = usa DB_PATH (legado).
 
     Returns:
         (linhas_inseridas: int, periodo: str)
     """
     rows   = buscar_campanhas(customer_id=customer_id, dias=dias)
-    linhas = salvar(rows, append=append, tabela=tabela)
-    info   = resumo_banco(tabela)
+    linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+    info   = resumo_banco(tabela, db_path=db_path)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
     return linhas, periodo
 
