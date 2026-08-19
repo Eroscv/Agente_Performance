@@ -40,14 +40,11 @@ TOLERANCE   = 1e-4  # tolerância para comparações de float
 @pytest.fixture(scope="module")
 def raw_june():
     """
-    Retorna totais brutos diretamente do SQLite para junho 2026.
-    Usa campanhas_unificada — mesma fonte (view unificada) que queries.resumo_periodo.
-    Isso garante que as fórmulas sejam testadas contra os mesmos dados que o agente usa.
+    Retorna totais brutos via DuckDB (campanhas_unificada) para junho 2026.
+    Mesma fonte que queries.resumo_periodo — garante paridade nas fórmulas.
     """
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("""
+    from db.duck import query_duck
+    rows = query_duck("""
         SELECT
             SUM(investimento)           AS total_invest,
             SUM(valor_compras)          AS total_receita,
@@ -58,9 +55,7 @@ def raw_june():
         FROM campanhas_unificada
         WHERE data_inicio BETWEEN ? AND ?
     """, (DATA_INICIO, DATA_FIM))
-    row = dict(cur.fetchone())
-    conn.close()
-    return row
+    return rows[0]
 
 
 @pytest.fixture(scope="module")
@@ -147,10 +142,9 @@ class TestFrequencia:
     """Frequência = SUM(impressoes) / SUM(alcance)."""
 
     def test_frequencia_formula(self, raw_june):
-        """Testa frequência diretamente do banco via campanhas_unificada."""
-        conn = sqlite3.connect(str(DB_PATH))
-        cur  = conn.cursor()
-        cur.execute("""
+        """Testa frequência diretamente via DuckDB (campanhas_unificada)."""
+        from db.duck import query_duck
+        rows = query_duck("""
             SELECT
                 SUM(impressoes) AS total_imp,
                 SUM(COALESCE(alcance, 0)) AS total_alc
@@ -158,10 +152,10 @@ class TestFrequencia:
             WHERE data_inicio BETWEEN ? AND ?
               AND COALESCE(alcance, 0) > 0
         """, (DATA_INICIO, DATA_FIM))
-        row = cur.fetchone()
-        conn.close()
+        row = rows[0] if rows else {}
 
-        total_imp, total_alc = row
+        total_imp = row.get("total_imp")
+        total_alc = row.get("total_alc")
         freq_real = total_imp / total_alc if total_alc else None
 
         assert freq_real is not None, "Não foi possível calcular frequência real (sem alcance)"
@@ -169,19 +163,15 @@ class TestFrequencia:
 
     def test_frequencia_avg_vs_sum(self, raw_june):
         """Verifica que frequência SUM/SUM pode diferir de AVG (ilustra abordagens)."""
-        conn = sqlite3.connect(str(DB_PATH))
-        cur  = conn.cursor()
-        cur.execute("""
+        from db.duck import query_duck
+        rows = query_duck("""
             SELECT
                 SUM(impressoes) / NULLIF(SUM(COALESCE(alcance, 0)), 0) AS freq_sum_sum
             FROM campanhas_unificada
             WHERE data_inicio BETWEEN ? AND ?
               AND COALESCE(alcance, 0) > 0
         """, (DATA_INICIO, DATA_FIM))
-        row = cur.fetchone()
-        conn.close()
-
-        freq_sum_sum = row[0]
+        freq_sum_sum = rows[0]["freq_sum_sum"] if rows else None
         print(f"\n  Frequência SUM/SUM={freq_sum_sum:.4f}")
         assert freq_sum_sum is not None
 
