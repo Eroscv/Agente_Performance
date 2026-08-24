@@ -150,6 +150,35 @@ def _post(payload: dict, dry_run: bool) -> bool:
     return False
 
 
+def _kpi_mensal(db, table: str, col_invest: str = "investimento",
+               col_receita: str = "valor_compras", col_compras: str = "compras") -> dict:
+    """Calcula KPI do mês corrente completo (1º dia do mês até hoje)."""
+    mes_inicio = datetime.now(timezone.utc).strftime("%Y-%m-01")
+    rows = _query(db, f"""
+        SELECT
+            ROUND(SUM({col_invest}), 2)  AS investimento,
+            ROUND(SUM({col_receita}), 2) AS receita,
+            CAST(SUM({col_compras}) AS INTEGER) AS compras,
+            MIN(data) AS period_start,
+            MAX(data) AS period_end
+        FROM {table}
+        WHERE data >= ?
+    """, (mes_inicio,))
+    r = rows[0] if rows else {}
+    inv   = r.get("investimento") or 0.0
+    rec   = r.get("receita")      or 0.0
+    comp  = r.get("compras")      or 0
+    return {
+        "investimento":  inv,
+        "receita":       rec,
+        "compras":       comp,
+        "roas":          round(rec / inv, 2) if inv > 0 else 0.0,
+        "cpa":           round(inv / comp, 2) if comp > 0 else 0.0,
+        "period_start":  r.get("period_start") or mes_inicio,
+        "period_end":    r.get("period_end")   or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+    }
+
+
 # ============================================================
 # META ADS — Source OF
 # ============================================================
@@ -158,7 +187,7 @@ def build_meta_source_of(desde: str) -> dict | None:
     db = DATA_DIR / "meta_ads.db"
     table = "source_of_meta_ads_diario"
 
-    # Series diárias (agregado por data)
+    # Series diárias (slice incremental — para upsert no Supabase)
     series_rows = _query(db, f"""
         SELECT
             data                                  AS date,
@@ -181,14 +210,17 @@ def build_meta_source_of(desde: str) -> dict | None:
         rec = row["receita"] or 0
         row["roas"] = round(rec / inv, 2) if inv > 0 else 0.0
 
-    # KPI agregado do período
-    total_inv   = sum(r["investimento"] for r in series_rows)
-    total_rec   = sum(r["receita"] for r in series_rows)
-    total_comp  = sum(r["compras"] for r in series_rows)
-    roas_geral  = round(total_rec / total_inv, 2) if total_inv > 0 else 0.0
-    cpa         = round(total_inv / total_comp, 2) if total_comp > 0 else 0.0
+    # KPI do mês corrente completo (independente do slice incremental)
+    kpi_m = _kpi_mensal(db, table, col_receita="valor_compras")
+    total_inv  = kpi_m["investimento"]
+    total_rec  = kpi_m["receita"]
+    total_comp = kpi_m["compras"]
+    roas_geral = kpi_m["roas"]
+    cpa        = kpi_m["cpa"]
+    kpi_period_start = kpi_m["period_start"]
+    kpi_period_end   = kpi_m["period_end"]
 
-    # Variação ROAS (último dia vs penúltimo)
+    # Variação ROAS (último dia vs penúltimo do slice)
     variacao_roas = 0.0
     if len(series_rows) >= 2:
         r_ant = series_rows[-2]["roas"]
@@ -241,6 +273,8 @@ def build_meta_source_of(desde: str) -> dict | None:
             "compras":         total_comp,
             "cpa":             cpa,
             "variacao_roas":   variacao_roas,
+            "period_start":    kpi_period_start,
+            "period_end":      kpi_period_end,
         },
         "campanhas": campanhas,
     }
@@ -275,11 +309,14 @@ def build_google_source_of(desde: str) -> dict | None:
         rec = row["receita"] or 0
         row["roas"] = round(rec / inv, 2) if inv > 0 else 0.0
 
-    total_inv  = sum(r["investimento"] for r in series_rows)
-    total_rec  = sum(r["receita"] for r in series_rows)
-    total_comp = sum(r["compras"] for r in series_rows)
-    roas_geral = round(total_rec / total_inv, 2) if total_inv > 0 else 0.0
-    cpa        = round(total_inv / total_comp, 2) if total_comp > 0 else 0.0
+    kpi_m = _kpi_mensal(db, table, col_receita="valor_conversao", col_compras="conversoes")
+    total_inv  = kpi_m["investimento"]
+    total_rec  = kpi_m["receita"]
+    total_comp = kpi_m["compras"]
+    roas_geral = kpi_m["roas"]
+    cpa        = kpi_m["cpa"]
+    kpi_period_start = kpi_m["period_start"]
+    kpi_period_end   = kpi_m["period_end"]
 
     variacao_roas = 0.0
     if len(series_rows) >= 2:
@@ -332,6 +369,8 @@ def build_google_source_of(desde: str) -> dict | None:
             "compras":       total_comp,
             "cpa":           cpa,
             "variacao_roas": variacao_roas,
+            "period_start":  kpi_period_start,
+            "period_end":    kpi_period_end,
         },
         "campanhas": campanhas,
     }
@@ -392,6 +431,8 @@ def build_shopify_source_of(desde: str) -> dict | None:
             "novos_clientes":    total_novos,
             "ticket_medio":      ticket_medio,
             "variacao_receita":  variacao_receita,
+            "period_start":      rows[0]["date"],
+            "period_end":        rows[-1]["date"],
         },
         "campanhas": [],
     }
@@ -426,11 +467,14 @@ def build_meta_pod(desde: str) -> dict | None:
         rec = row["receita"] or 0
         row["roas"] = round(rec / inv, 2) if inv > 0 else 0.0
 
-    total_inv  = sum(r["investimento"] for r in series_rows)
-    total_rec  = sum(r["receita"] for r in series_rows)
-    total_comp = sum(r["compras"] for r in series_rows)
-    roas_geral = round(total_rec / total_inv, 2) if total_inv > 0 else 0.0
-    cpa        = round(total_inv / total_comp, 2) if total_comp > 0 else 0.0
+    kpi_m = _kpi_mensal(db, table, col_receita="valor_compras")
+    total_inv  = kpi_m["investimento"]
+    total_rec  = kpi_m["receita"]
+    total_comp = kpi_m["compras"]
+    roas_geral = kpi_m["roas"]
+    cpa        = kpi_m["cpa"]
+    kpi_period_start = kpi_m["period_start"]
+    kpi_period_end   = kpi_m["period_end"]
 
     variacao_roas = 0.0
     if len(series_rows) >= 2:
@@ -482,6 +526,8 @@ def build_meta_pod(desde: str) -> dict | None:
             "compras":       total_comp,
             "cpa":           cpa,
             "variacao_roas": variacao_roas,
+            "period_start":  kpi_period_start,
+            "period_end":    kpi_period_end,
         },
         "campanhas": campanhas,
     }
@@ -516,11 +562,14 @@ def build_google_pod(desde: str) -> dict | None:
         rec = row["receita"] or 0
         row["roas"] = round(rec / inv, 2) if inv > 0 else 0.0
 
-    total_inv  = sum(r["investimento"] for r in series_rows)
-    total_rec  = sum(r["receita"] for r in series_rows)
-    total_comp = sum(r["compras"] for r in series_rows)
-    roas_geral = round(total_rec / total_inv, 2) if total_inv > 0 else 0.0
-    cpa        = round(total_inv / total_comp, 2) if total_comp > 0 else 0.0
+    kpi_m = _kpi_mensal(db, table, col_receita="valor_conversao", col_compras="conversoes")
+    total_inv  = kpi_m["investimento"]
+    total_rec  = kpi_m["receita"]
+    total_comp = kpi_m["compras"]
+    roas_geral = kpi_m["roas"]
+    cpa        = kpi_m["cpa"]
+    kpi_period_start = kpi_m["period_start"]
+    kpi_period_end   = kpi_m["period_end"]
 
     variacao_roas = 0.0
     if len(series_rows) >= 2:
@@ -572,6 +621,8 @@ def build_google_pod(desde: str) -> dict | None:
             "compras":       total_comp,
             "cpa":           cpa,
             "variacao_roas": variacao_roas,
+            "period_start":  kpi_period_start,
+            "period_end":    kpi_period_end,
         },
         "campanhas": campanhas,
     }
