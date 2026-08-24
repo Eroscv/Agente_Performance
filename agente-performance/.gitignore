@@ -8,3 +8,4 @@ data/campanhas.db
 *.log
 .DS_Store
 dev-report/
+credentials/
