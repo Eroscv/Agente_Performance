@@ -333,9 +333,10 @@ def resumo_banco(tabela: str = "source_of_meta_ads_diario", db_path: "Path | Non
 def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
                   tabela: str = "source_of_meta_ads_diario",
                   token_env: str = "META_ACCESS_TOKEN",
-                  db_path: "Path | None" = None):
+                  db_path: "Path | None" = None,
+                  cliente_key: str = "source_of"):
     """
-    Wrapper programático — busca via API e salva no SQLite.
+    Wrapper programático — busca via API e salva no SQLite + BigQuery.
 
     Args:
         account_id: ID da conta Meta Ads (com ou sem 'act_')
@@ -344,6 +345,7 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         tabela: nome da tabela destino
         token_env: variável de ambiente com o token (padrão META_ACCESS_TOKEN)
         db_path: caminho do arquivo .db destino (padrão: data/campanhas.db legado)
+        cliente_key: chave do cliente para dual-write no BQ
 
     Returns:
         (linhas_inseridas: int, periodo: str)
@@ -353,6 +355,15 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
 
     rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
     linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+
+    # Dual-write: espelhar no BigQuery (silencioso em caso de falha)
+    try:
+        from db.bq_writer import write_ads, enabled
+        if enabled():
+            write_ads(rows, cliente=cliente_key, plataforma="meta")
+    except Exception as _bq_exc:
+        logger.warning("[BQ dual-write] falha silenciosa: %s", _bq_exc)
+
     info   = resumo_banco(tabela, db_path=db_path)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
     return linhas, periodo

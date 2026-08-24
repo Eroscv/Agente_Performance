@@ -221,9 +221,10 @@ def resumo_banco(tabela: str = "gads_campanhas_diario", db_path: str = None) -> 
 
 def carregar_gads(customer_id: str, dias: int = 30, append: bool = False,
                   tabela: str = "gads_campanhas_diario",
-                  db_path: str = None):
+                  db_path: str = None,
+                  cliente_key: str = "source_of"):
     """
-    Wrapper programático — busca via API e salva no SQLite.
+    Wrapper programático — busca via API e salva no SQLite + BigQuery.
 
     Args:
         customer_id: ID da conta Google Ads (sem hífens)
@@ -231,12 +232,23 @@ def carregar_gads(customer_id: str, dias: int = 30, append: bool = False,
         append: se True, não limpa antes de inserir
         tabela: nome da tabela destino (padrão: gads_campanhas_diario)
         db_path: caminho do banco destino. None = usa DB_PATH (legado).
+        cliente_key: chave do cliente para dual-write no BQ
 
     Returns:
         (linhas_inseridas: int, periodo: str)
     """
     rows   = buscar_campanhas(customer_id=customer_id, dias=dias)
     linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+
+    # Dual-write: espelhar no BigQuery (silencioso em caso de falha)
+    try:
+        from db.bq_writer import write_ads, enabled
+        if enabled():
+            write_ads(rows, cliente=cliente_key, plataforma="google")
+    except Exception as _bq_exc:
+        import logging as _log
+        _log.getLogger(__name__).warning("[BQ dual-write] falha silenciosa: %s", _bq_exc)
+
     info   = resumo_banco(tabela, db_path=db_path)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
     return linhas, periodo

@@ -83,6 +83,7 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool | None:
             tabela=tabela,
             token_env=token_env,
             db_path=db_path,
+            cliente_key=cliente_key,
         )
         registrar_run(
             cliente_key=cliente_key,

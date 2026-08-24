@@ -87,6 +87,7 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool:
             append=True,
             tabela=tabela,
             db_path=db_path,
+            cliente_key=cliente_key,
         )
         registrar_run(
             cliente_key=cliente_key,
