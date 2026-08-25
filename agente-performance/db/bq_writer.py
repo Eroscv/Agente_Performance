@@ -151,6 +151,110 @@ def write_ads(
     _insert("ads_diario", bq_rows, f"{cliente}/{plataforma}")
 
 
+def create_views() -> None:
+    """
+    Cria ou recria as views analíticas no BigQuery.
+
+    Views criadas:
+      v_performance_mensal — consolidado mensal com ROAS real, CPA, retenção,
+                             variação MoM e YoY, cruzando ads + shopify.
+
+    Idempotente — usa CREATE OR REPLACE VIEW.
+    Silencioso em falha (não bloqueia o agente).
+    """
+    if not enabled():
+        return
+    try:
+        bq = _client()
+        project = os.environ.get("BQ_PROJECT", bq.project)
+        dataset = os.environ.get("BQ_DATASET", "guara_performance")
+        p = f"`{project}.{dataset}"
+
+        views = {
+            "v_performance_mensal": f"""
+                CREATE OR REPLACE VIEW `{project}.{dataset}.v_performance_mensal` AS
+                WITH ads_mes AS (
+                    SELECT
+                        cliente,
+                        DATE_TRUNC(data, MONTH)                                           AS mes,
+                        ROUND(SUM(CASE WHEN plataforma = 'meta'
+                                       THEN investimento * 1.1215 ELSE 0 END), 2)        AS investimento_meta,
+                        ROUND(SUM(CASE WHEN plataforma = 'google'
+                                       THEN investimento ELSE 0 END), 2)                  AS investimento_google,
+                        ROUND(SUM(CASE WHEN plataforma = 'meta'
+                                       THEN investimento * 1.1215
+                                       ELSE investimento END), 2)                         AS investimento_total,
+                        CAST(SUM(CASE WHEN plataforma = 'meta'
+                                      THEN compras ELSE 0 END) AS INT64)                  AS compras_meta,
+                        CAST(SUM(CASE WHEN plataforma = 'google'
+                                      THEN compras ELSE 0 END) AS INT64)                  AS compras_google,
+                        CAST(SUM(compras) AS INT64)                                       AS compras_total
+                    FROM `{project}.{dataset}.ads_diario`
+                    GROUP BY 1, 2
+                ),
+                shopify_mes AS (
+                    SELECT
+                        cliente,
+                        DATE_TRUNC(data, MONTH)                                           AS mes,
+                        ROUND(SUM(receita), 2)                                            AS receita_shopify,
+                        SUM(pedidos)                                                      AS pedidos,
+                        SUM(novos_clientes)                                               AS novos_clientes,
+                        SUM(recompradores)                                                AS recompradores,
+                        ROUND(AVG(ticket_medio), 2)                                       AS ticket_medio,
+                        ROUND(SUM(total_desconto), 2)                                     AS total_desconto,
+                        SUM(pedidos_acima_300)                                            AS pedidos_acima_300
+                    FROM `{project}.{dataset}.shopify_diario`
+                    GROUP BY 1, 2
+                ),
+                base AS (
+                    SELECT
+                        a.cliente, a.mes,
+                        a.investimento_meta, a.investimento_google, a.investimento_total,
+                        a.compras_meta, a.compras_google, a.compras_total,
+                        s.receita_shopify, s.pedidos, s.novos_clientes, s.recompradores,
+                        s.ticket_medio, s.total_desconto, s.pedidos_acima_300,
+                        ROUND(s.receita_shopify / NULLIF(a.investimento_total, 0), 2)    AS roas_real,
+                        ROUND(a.investimento_total / NULLIF(a.compras_total, 0), 2)      AS cpa,
+                        ROUND(s.recompradores / NULLIF(s.pedidos, 0) * 100, 1)          AS pct_retencao,
+                        ROUND(s.novos_clientes / NULLIF(s.pedidos, 0) * 100, 1)         AS pct_novos,
+                        ROUND(s.pedidos_acima_300 / NULLIF(s.pedidos, 0) * 100, 1)      AS pct_premium
+                    FROM ads_mes a
+                    LEFT JOIN shopify_mes s USING (cliente, mes)
+                )
+                SELECT
+                    *,
+                    LAG(investimento_total) OVER w  AS invest_mes_ant,
+                    LAG(receita_shopify)    OVER w  AS receita_mes_ant,
+                    LAG(roas_real)          OVER w  AS roas_mes_ant,
+                    LAG(compras_total)      OVER w  AS compras_mes_ant,
+                    LAG(cpa)               OVER w  AS cpa_mes_ant,
+                    ROUND((investimento_total - LAG(investimento_total) OVER w)
+                          / NULLIF(LAG(investimento_total) OVER w, 0) * 100, 1) AS var_invest_pct,
+                    ROUND((receita_shopify - LAG(receita_shopify) OVER w)
+                          / NULLIF(LAG(receita_shopify) OVER w, 0) * 100, 1)   AS var_receita_pct,
+                    ROUND((roas_real - LAG(roas_real) OVER w)
+                          / NULLIF(LAG(roas_real) OVER w, 0) * 100, 1)         AS var_roas_pct,
+                    LAG(receita_shopify, 12) OVER w   AS receita_yoy,
+                    LAG(roas_real, 12)       OVER w   AS roas_yoy,
+                    LAG(investimento_total, 12) OVER w AS invest_yoy,
+                    ROUND((receita_shopify - LAG(receita_shopify, 12) OVER w)
+                          / NULLIF(LAG(receita_shopify, 12) OVER w, 0) * 100, 1) AS var_receita_yoy_pct,
+                    ROUND((roas_real - LAG(roas_real, 12) OVER w)
+                          / NULLIF(LAG(roas_real, 12) OVER w, 0) * 100, 1)     AS var_roas_yoy_pct
+                FROM base
+                WINDOW w AS (PARTITION BY cliente ORDER BY mes)
+                ORDER BY cliente, mes DESC
+            """,
+        }
+
+        for name, ddl in views.items():
+            bq.query(ddl).result()
+            logger.info("[BQ] ✅ view %s criada/atualizada", name)
+
+    except Exception as exc:
+        logger.warning("[BQ] create_views — falha silenciosa: %s", exc)
+
+
 def write_shopify(rows: list[dict], cliente: str) -> None:
     """
     Espelha receita diária Shopify no BigQuery.
