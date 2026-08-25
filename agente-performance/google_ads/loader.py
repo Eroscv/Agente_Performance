@@ -237,8 +237,16 @@ def carregar_gads(customer_id: str, dias: int = 30, append: bool = False,
     Returns:
         (linhas_inseridas: int, periodo: str)
     """
-    rows   = buscar_campanhas(customer_id=customer_id, dias=dias)
-    linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+    try:
+        rows   = buscar_campanhas(customer_id=customer_id, dias=dias)
+        linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+    except Exception as _sync_exc:
+        try:
+            from db.sync_alerts import registrar_resultado
+            registrar_resultado(cliente_key, "google", sucesso=False, erro=str(_sync_exc))
+        except Exception:
+            pass
+        raise
 
     # Dual-write: espelhar no BigQuery (silencioso em caso de falha)
     try:
@@ -248,6 +256,21 @@ def carregar_gads(customer_id: str, dias: int = 30, append: bool = False,
     except Exception as _bq_exc:
         import logging as _log
         _log.getLogger(__name__).warning("[BQ dual-write] falha silenciosa: %s", _bq_exc)
+
+    # Invalida cache NLP/resposta após sync bem-sucedido
+    try:
+        from agent.cache import invalidar_tudo
+        invalidar_tudo()
+        logger.debug("[Cache] invalidado após sync Google Ads/%s", cliente_key)
+    except Exception:
+        pass
+
+    # Registra sucesso no monitor de alertas
+    try:
+        from db.sync_alerts import registrar_resultado
+        registrar_resultado(cliente_key, "google", sucesso=True)
+    except Exception:
+        pass
 
     info   = resumo_banco(tabela, db_path=db_path)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"

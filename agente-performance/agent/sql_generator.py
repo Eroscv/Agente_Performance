@@ -33,7 +33,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from db.connections import LEGACY_DB_PATH as DB_PATH
+from db.connections import LEGACY_DB_PATH as DB_PATH, get_federated_conn as _get_fed_conn, query_fed as _query_fed
 
 logger = logging.getLogger(__name__)
 
@@ -417,15 +417,25 @@ def executar_sql_dinamico(
         }
 
     try:
-        conn = sqlite3.connect(DB_PATH, timeout=8)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.execute(sql)
-        rows = [dict(r) for r in cursor.fetchall()]
-        conn.close()
-        logger.info(
-            "[SQLGenerator] OK — %d linhas em %dms (modo=%s)",
-            len(rows), int((time.time() - t0) * 1000), modo,
-        )
+        # Usa DuckDB federado (lê todos os DBs de performance + legado)
+        # Fallback para SQLite legado se DuckDB falhar
+        try:
+            rows = _query_fed(sql)
+            logger.info(
+                "[SQLGenerator] OK (DuckDB) — %d linhas em %dms (modo=%s)",
+                len(rows), int((time.time() - t0) * 1000), modo,
+            )
+        except Exception as _duck_exc:
+            logger.debug("[SQLGenerator] DuckDB falhou (%s), fallback SQLite", _duck_exc)
+            conn = sqlite3.connect(DB_PATH, timeout=8)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(sql)
+            rows = [dict(r) for r in cursor.fetchall()]
+            conn.close()
+            logger.info(
+                "[SQLGenerator] OK (SQLite fallback) — %d linhas em %dms (modo=%s)",
+                len(rows), int((time.time() - t0) * 1000), modo,
+            )
         return {
             "dados": rows,
             "sql": sql,

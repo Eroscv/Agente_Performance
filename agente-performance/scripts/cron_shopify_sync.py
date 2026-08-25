@@ -78,8 +78,24 @@ def main(dias: int = 8, full: bool = False) -> None:
             resultado["receita_total"],
             resultado["pedidos_total"],
         )
+        # Invalida cache e registra sucesso
+        try:
+            from agent.cache import invalidar_tudo
+            invalidar_tudo()
+        except Exception:
+            pass
+        try:
+            from db.sync_alerts import registrar_resultado
+            registrar_resultado("source_of", "shopify", sucesso=True)
+        except Exception:
+            pass
     except Exception as e:
         logger.error("❌ Sync falhou: %s", e)
+        try:
+            from db.sync_alerts import registrar_resultado
+            registrar_resultado("source_of", "shopify", sucesso=False, erro=str(e))
+        except Exception:
+            pass
         sys.exit(1)
 
 

@@ -353,8 +353,16 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
     if not account_id.startswith("act_"):
         account_id = f"act_{account_id}"
 
-    rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
-    linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+    try:
+        rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
+        linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+    except Exception as _sync_exc:
+        try:
+            from db.sync_alerts import registrar_resultado
+            registrar_resultado(cliente_key, "meta", sucesso=False, erro=str(_sync_exc))
+        except Exception:
+            pass
+        raise
 
     # Dual-write: espelhar no BigQuery (silencioso em caso de falha)
     try:
@@ -363,6 +371,21 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
             write_ads(rows, cliente=cliente_key, plataforma="meta")
     except Exception as _bq_exc:
         logger.warning("[BQ dual-write] falha silenciosa: %s", _bq_exc)
+
+    # Invalida cache NLP/resposta após sync bem-sucedido
+    try:
+        from agent.cache import invalidar_tudo
+        invalidar_tudo()
+        logger.debug("[Cache] invalidado após sync Meta/%s", cliente_key)
+    except Exception:
+        pass
+
+    # Registra sucesso no monitor de alertas
+    try:
+        from db.sync_alerts import registrar_resultado
+        registrar_resultado(cliente_key, "meta", sucesso=True)
+    except Exception:
+        pass
 
     info   = resumo_banco(tabela, db_path=db_path)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
