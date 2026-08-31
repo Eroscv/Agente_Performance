@@ -431,8 +431,8 @@ def build_shopify_source_of(desde: str) -> dict | None:
             "novos_clientes":    total_novos,
             "ticket_medio":      ticket_medio,
             "variacao_receita":  variacao_receita,
-            "period_start":      rows[0]["date"],
-            "period_end":        rows[-1]["date"],
+            "period_start":      rows[0]["data"],
+            "period_end":        rows[-1]["data"],
         },
         "campanhas": [],
     }

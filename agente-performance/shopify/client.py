@@ -59,7 +59,7 @@ def _get(endpoint: str, params: dict = None) -> dict:
     """GET com retry automático em 429."""
     url = f"{_BASE}/{endpoint}"
     for tentativa in range(1):  # 1 tentativa — relatórios não podem travar
-        r = requests.get(url, headers=_HEADERS, params=params or {}, timeout=(3, 5))
+        r = requests.get(url, headers=_HEADERS, params=params or {}, timeout=(5, 30))
         if r.status_code == 429:
             wait = float(r.headers.get("Retry-After", _RETRY_AFTER))
             logger.warning("[Shopify] Rate limit — aguardando %.1fs", wait)
