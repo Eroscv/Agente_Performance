@@ -362,6 +362,7 @@ def executar_cliente(
     tipo_builder: str,
     publicar: bool,
     apenas_alertas: bool = False,
+    skip_loader: bool = False,
 ) -> dict:
     """
     Executa loader + (alertas proativos) + builder + delta + Slack para um cliente.
@@ -411,21 +412,24 @@ def executar_cliente(
         # ── Loader (com retry) ────────────────────────────────────────────
         from db.registry import get_loader, get_builder
         import time as _time
-        loader_fn = get_loader(cliente_key)
-        _loader_ok = False
-        for _attempt in range(1, 4):  # até 3 tentativas
-            try:
-                loader_fn()
-                # sync via API já realizado pelos crons sync_*_diario.py
-                _loader_ok = True
-                break
-            except Exception as e:
-                logger.warning("[%s] Loader tentativa %d/3 falhou: %s", cliente_key, _attempt, e)
-                if _attempt < 3:
-                    _time.sleep(10)  # aguarda 10s antes de retry
-        if not _loader_ok:
-            logger.error("[%s] Loader falhou após 3 tentativas — abortando relatório", cliente_key)
-            raise RuntimeError(f"Sync de dados falhou após 3 tentativas para {cliente_key}")
+        if skip_loader:
+            logger.info("[%s] skip_loader=True — pulando sync de API, usando dados locais", cliente_key)
+        else:
+            loader_fn = get_loader(cliente_key)
+            _loader_ok = False
+            for _attempt in range(1, 4):  # até 3 tentativas
+                try:
+                    loader_fn()
+                    # sync via API já realizado pelos crons sync_*_diario.py
+                    _loader_ok = True
+                    break
+                except Exception as e:
+                    logger.warning("[%s] Loader tentativa %d/3 falhou: %s", cliente_key, _attempt, e)
+                    if _attempt < 3:
+                        _time.sleep(10)  # aguarda 10s antes de retry
+            if not _loader_ok:
+                logger.error("[%s] Loader falhou após 3 tentativas — abortando relatório", cliente_key)
+                raise RuntimeError(f"Sync de dados falhou após 3 tentativas para {cliente_key}")
 
         # ── Builder ───────────────────────────────────────────────────────
         builder_fn = get_builder(cliente_key, tipo_builder)
@@ -449,12 +453,12 @@ def executar_cliente(
         _url_val     = resultado.get("url", "—")
         _titulo_val  = resultado.get("titulo", "")
         _blocos_val  = resultado.get("blocos", [])
-        _periodo_ok  = resultado.get("data") or resultado.get("data_inicio")
+        _periodo_ok  = resultado.get("data") or resultado.get("data_inicio") or resultado.get("periodo")
 
         _falhas_val: list[str] = []
         if not _resumo_val:
             _falhas_val.append("resumo ausente ou vazio")
-        if not _resumo_val.get("investimento"):
+        if not (_resumo_val.get("investimento") or _resumo_val.get("invest") or _resumo_val.get("total_invest")):
             _falhas_val.append("investimento zerado/ausente no resumo")
         if not _titulo_val:
             _falhas_val.append("título do relatório ausente")
@@ -504,7 +508,7 @@ def executar_cliente(
         else:
             logger.info("[%s] ✅ Slack: mensagem enviada com sucesso", cliente_key)
 
-        logger.info("[%s] Slack: %s | Notion: %s", cliente_key, "OK" if ok_slack else "FALHOU", url)
+        logger.info("[%s] Slack: %s | Notion: %s", cliente_key, "OK" if ok_slack else "FALHOU", _url_val)
 
         # ── Persiste log detalhado do relatório no SQLite ──────────────────────
         try:
@@ -523,7 +527,7 @@ def executar_cliente(
                 data_inicio=str(data_inicio),
                 data_fim=str(data_fim),
                 titulo=resultado.get("titulo"),
-                notion_url=url if url != "—" else None,
+                notion_url=_url_val if _url_val != "—" else None,
                 notion_page_id=resultado.get("page_id"),
                 slack_ok=ok_slack,
                 slack_channel=_slack_ch if ok_slack else None,
@@ -541,7 +545,7 @@ def executar_cliente(
             data_inicio=str(data_inicio),
             data_fim=str(data_fim),
             status="sucesso",
-            notion_url=url,
+            notion_url=_url_val,
             slack_ok=ok_slack,
             run_id=run_id,
         )
@@ -631,6 +635,7 @@ def executar_cliente_multi_plataforma(
     tipo_builder: str,
     publicar: bool,
     apenas_alertas: bool = False,
+    skip_loader: bool = False,
 ) -> dict:
     """
     Gera relatórios separados por plataforma (Google Ads, Meta Ads, Shopify)
@@ -677,23 +682,26 @@ def executar_cliente_multi_plataforma(
     )
 
     # 1. Loader
-    loader_fn = get_loader(cliente_key)
-    _loader_ok = False
-    for _attempt in range(1, 4):
-        try:
-            loader_fn()
-            _loader_ok = True
-            break
-        except Exception as e:
-            logger.warning("[%s] Loader tentativa %d/3 falhou: %s", cliente_key, _attempt, e)
-            if _attempt < 3:
-                _time.sleep(10)
-    if not _loader_ok:
-        logger.error("[%s] Loader falhou após 3 tentativas", cliente_key)
-        registrar_run(cliente_key=cliente_key, periodo=periodo,
-                      data_inicio=str(data_inicio), data_fim=str(data_fim),
-                      status="erro", erro="Sync falhou após 3 tentativas", run_id=run_id)
-        postar_slack_fallback(f"❌ *{label} · Sync FALHOU*\n_3 tentativas sem sucesso._")
+    if skip_loader:
+        logger.info("[%s] skip_loader=True — pulando sync de API, usando dados locais", cliente_key)
+    else:
+        loader_fn = get_loader(cliente_key)
+        _loader_ok = False
+        for _attempt in range(1, 4):
+            try:
+                loader_fn()
+                _loader_ok = True
+                break
+            except Exception as e:
+                logger.warning("[%s] Loader tentativa %d/3 falhou: %s", cliente_key, _attempt, e)
+                if _attempt < 3:
+                    _time.sleep(10)
+        if not _loader_ok:
+            logger.error("[%s] Loader falhou após 3 tentativas", cliente_key)
+            registrar_run(cliente_key=cliente_key, periodo=periodo,
+                          data_inicio=str(data_inicio), data_fim=str(data_fim),
+                          status="erro", erro="Sync falhou após 3 tentativas", run_id=run_id)
+            postar_slack_fallback(f"❌ *{label} · Sync FALHOU*\n_3 tentativas sem sucesso._")
         return {"ok": False, "erro": "Sync falhou após 3 tentativas"}
 
     # 2. Detecta plataformas com dados (dinâmico por cliente via clientes.json)
@@ -943,6 +951,8 @@ def main():
                         help="Só checa alertas de ROAS, sem gerar relatório completo")
     parser.add_argument("--apenas-loader", action="store_true",
                         help="Só executa o loader (sincroniza dados), sem relatório nem alertas")
+    parser.add_argument("--skip-loader", action="store_true",
+                        help="Pula o loader de API — usa apenas dados já sincronizados no banco local")
     parser.add_argument("--data-inicio", default=None,
                         help="Sobrescreve data de início do período (formato YYYY-MM-DD)")
     parser.add_argument("--data-fim", default=None,
@@ -952,6 +962,7 @@ def main():
     publicar       = not args.no_notion
     apenas_alertas = args.apenas_alertas
     apenas_loader  = args.apenas_loader
+    skip_loader    = args.skip_loader
     data_inicio, data_fim = resolver_periodo(args.periodo)
     # Sobrescreve datas se passadas manualmente
     if args.data_inicio:
@@ -999,6 +1010,7 @@ def main():
             data_inicio=data_inicio, data_fim=data_fim,
             periodo_str=periodo_str, tipo_label=tipo_label, tipo_builder=tipo_builder,
             publicar=publicar, apenas_alertas=apenas_alertas,
+            skip_loader=skip_loader,
         )
         if cfg.get("multi_plataforma") and args.periodo == "diario":
             res = executar_cliente_multi_plataforma(**_kwargs)

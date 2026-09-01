@@ -549,8 +549,17 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
     # Normaliza sinônimos (enriquece com datas calculadas)
     pergunta_enriquecida = normalizar_pergunta(pergunta)
 
-    # Chave de cache: pergunta enriquecida + contexto (resumido)
-    cache_key = f"{pergunta_enriquecida}|ctx={contexto[:80] if contexto else ''}"
+    # Detecta plataforma explícita na pergunta para isolar cache por plataforma
+    # Evita que "como está source of" (meta) acerte cache de "google ads de hoje"
+    _p_lower = pergunta.lower()
+    _plat_hint = (
+        "google_ads" if any(k in _p_lower for k in ("google", "gads", "google ads", "search", "pmax"))
+        else "meta_ads" if any(k in _p_lower for k in ("meta", "facebook", "instagram", "meta ads"))
+        else "any"
+    )
+
+    # Chave de cache: pergunta enriquecida + plataforma detectada + contexto (resumido)
+    cache_key = f"{pergunta_enriquecida}|plat={_plat_hint}|ctx={contexto[:80] if contexto else ''}"
     cached = _nlp_cache_get(cache_key)
     if cached:
         logger.debug("[NLP] cache hit: '%s'", pergunta[:60])
