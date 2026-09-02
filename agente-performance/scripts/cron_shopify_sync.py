@@ -89,6 +89,20 @@ def main(dias: int = 8, full: bool = False) -> None:
             registrar_resultado("source_of", "shopify", sucesso=True)
         except Exception:
             pass
+        # Atualiza métricas no Obsidian (best-effort)
+        try:
+            from scripts.obsidian_sync import update_metricas
+            from datetime import timezone, timedelta
+            brt = timezone(timedelta(hours=-3))
+            from datetime import datetime as _dt
+            update_metricas({
+                "dias_sincronizados": resultado["dias_sincronizados"],
+                "total_pedidos": resultado["pedidos_total"],
+                "receita_total": f"R$ {resultado['receita_total']:,.2f}".replace(",", "."),
+                "ultima_sync": _dt.now(brt).strftime("%Y-%m-%d %H:%M BRT"),
+            })
+        except Exception as _e:
+            logger.warning("obsidian_sync: falha ao atualizar métricas — %s", _e)
     except Exception as e:
         logger.error("❌ Sync falhou: %s", e)
         try:
