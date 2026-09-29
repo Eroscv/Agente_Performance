@@ -19,7 +19,9 @@ from openpyxl.styles import (
 )
 from openpyxl.utils import get_column_letter
 
-DB_PATH = BASE_DIR / "data" / "campanhas.db"
+DB_PATH     = BASE_DIR / "data" / "campanhas.db"
+DB_PATH_POD = BASE_DIR / "data" / "performance" / "pod_kombucha" / "meta_ads.db"
+DB_PATH_POD_GADS = BASE_DIR / "data" / "performance" / "pod_kombucha" / "google_ads.db"
 OUT_DIR = BASE_DIR / "reports"
 OUT_DIR.mkdir(exist_ok=True)
 
@@ -137,26 +139,135 @@ def semanas_do_periodo(data_inicio: date, data_fim: date):
         d += timedelta(days=7)
     return semanas
 
+def _db_para_cliente(cliente_key, plataforma):
+    """Retorna o DB path correto para cada cliente/plataforma."""
+    if cliente_key == "pod_kombucha":
+        if plataforma == "meta_ads":
+            return DB_PATH_POD
+        elif plataforma == "google_ads":
+            return DB_PATH_POD_GADS
+    return DB_PATH
+
+def _tabela_meta(cliente_key):
+    if cliente_key == "pod_kombucha":
+        return "pod_kombucha_meta_ads_diario"
+    return "source_of_meta_ads_diario"
+
+def _tabela_gads(cliente_key):
+    if cliente_key == "pod_kombucha":
+        return "pod_kombucha_gads_diario"
+    return "source_of_gads_diario"
+
+def db_query_path(db_path, sql, params=()):
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    cur = conn.execute(sql, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
 def resumo_semana_ads(cliente_key, plataforma, seg, dom):
-    rows = db_query("""
-        SELECT
-            COUNT(DISTINCT campanha) AS campanhas,
-            ROUND(SUM(impressoes),0) AS impressoes,
-            ROUND(SUM(cliques),0) AS cliques,
-            ROUND(SUM(alcance),0) AS alcance,
-            ROUND(SUM(investimento),2) AS investimento,
-            ROUND(SUM(conversoes),0) AS conversoes,
-            ROUND(SUM(receita),2) AS receita,
-            ROUND(SUM(receita)/NULLIF(SUM(investimento),0),2) AS roas,
-            ROUND(SUM(cliques)/NULLIF(SUM(impressoes),0)*100,4) AS ctr,
-            ROUND(SUM(investimento)/NULLIF(SUM(cliques),0),2) AS cpc,
-            ROUND(SUM(investimento)/NULLIF(SUM(impressoes),0)*1000,2) AS cpm
-        FROM v_performance
-        WHERE data BETWEEN ? AND ? AND cliente_key = ? AND plataforma = ?
-    """, (str(seg), str(dom), cliente_key, plataforma))
+    hoje = date.today().isoformat()
+    # Exclui o dia atual (dados incompletos)
+    dom_efetivo = min(str(dom), hoje[:-1] + str(int(hoje[-1])-1)) if str(dom) >= hoje else str(dom)
+
+    if plataforma == "meta_ads":
+        db   = _db_para_cliente(cliente_key, plataforma)
+        tab  = _tabela_meta(cliente_key)
+        rows = db_query_path(db, f"""
+            SELECT
+                COUNT(DISTINCT campanha) AS campanhas,
+                ROUND(SUM(impressoes),0) AS impressoes,
+                ROUND(SUM(cliques_link),0) AS cliques,
+                ROUND(SUM(alcance),0) AS alcance,
+                ROUND(SUM(investimento),2) AS investimento,
+                ROUND(SUM(compras),0) AS conversoes,
+                ROUND(SUM(valor_compras),2) AS receita,
+                ROUND(SUM(valor_compras)/NULLIF(SUM(investimento),0),2) AS roas,
+                ROUND(SUM(cliques_link)/NULLIF(SUM(impressoes),0)*100,4) AS ctr,
+                ROUND(SUM(investimento)/NULLIF(SUM(cliques_link),0),2) AS cpc,
+                ROUND(SUM(cpm*impressoes)/NULLIF(SUM(impressoes),0),2) AS cpm
+            FROM {tab}
+            WHERE data BETWEEN ? AND ? AND data < date('now')
+              AND objetivo = 'OUTCOME_SALES'
+        """, (str(seg), str(dom)))
+    elif plataforma == "google_ads":
+        db   = _db_para_cliente(cliente_key, plataforma)
+        tab  = _tabela_gads(cliente_key)
+        rows = db_query_path(db, f"""
+            SELECT
+                COUNT(DISTINCT campanha) AS campanhas,
+                ROUND(SUM(impressoes),0) AS impressoes,
+                ROUND(SUM(cliques),0) AS cliques,
+                0 AS alcance,
+                ROUND(SUM(investimento),2) AS investimento,
+                ROUND(SUM(conversoes),0) AS conversoes,
+                ROUND(SUM(valor_conversao),2) AS receita,
+                ROUND(SUM(valor_conversao)/NULLIF(SUM(investimento),0),2) AS roas,
+                ROUND(SUM(cliques)/NULLIF(SUM(impressoes),0)*100,4) AS ctr,
+                ROUND(SUM(investimento)/NULLIF(SUM(cliques),0),2) AS cpc,
+                ROUND(SUM(investimento)/NULLIF(SUM(impressoes),0)*1000,2) AS cpm
+            FROM {tab}
+            WHERE data BETWEEN ? AND ? AND data < date('now')
+        """, (str(seg), str(dom)))
+    else:
+        rows = db_query("""
+            SELECT
+                COUNT(DISTINCT campanha) AS campanhas,
+                ROUND(SUM(impressoes),0) AS impressoes,
+                ROUND(SUM(cliques),0) AS cliques,
+                ROUND(SUM(alcance),0) AS alcance,
+                ROUND(SUM(investimento),2) AS investimento,
+                ROUND(SUM(conversoes),0) AS conversoes,
+                ROUND(SUM(receita),2) AS receita,
+                ROUND(SUM(receita)/NULLIF(SUM(investimento),0),2) AS roas,
+                ROUND(SUM(cliques)/NULLIF(SUM(impressoes),0)*100,4) AS ctr,
+                ROUND(SUM(investimento)/NULLIF(SUM(cliques),0),2) AS cpc,
+                ROUND(SUM(investimento)/NULLIF(SUM(impressoes),0)*1000,2) AS cpm
+            FROM v_performance
+            WHERE data BETWEEN ? AND ? AND data < date('now')
+              AND cliente_key = ? AND plataforma = ?
+        """, (str(seg), str(dom), cliente_key, plataforma))
     return rows[0] if rows else {}
 
 def campanhas_semana(cliente_key, plataforma, seg, dom):
+    if plataforma == "meta_ads":
+        db  = _db_para_cliente(cliente_key, plataforma)
+        tab = _tabela_meta(cliente_key)
+        return db_query_path(db, f"""
+            SELECT
+                campanha,
+                ROUND(SUM(investimento),2) AS investimento,
+                ROUND(SUM(valor_compras),2) AS receita,
+                ROUND(SUM(valor_compras)/NULLIF(SUM(investimento),0),2) AS roas,
+                ROUND(SUM(compras),0) AS conversoes,
+                ROUND(SUM(cliques_link),0) AS cliques,
+                ROUND(SUM(impressoes),0) AS impressoes,
+                ROUND(SUM(cliques_link)/NULLIF(SUM(impressoes),0)*100,4) AS ctr
+            FROM {tab}
+            WHERE data BETWEEN ? AND ? AND data < date('now')
+              AND objetivo = 'OUTCOME_SALES'
+            GROUP BY campanha
+            ORDER BY investimento DESC
+        """, (str(seg), str(dom)))
+    elif plataforma == "google_ads":
+        db  = _db_para_cliente(cliente_key, plataforma)
+        tab = _tabela_gads(cliente_key)
+        return db_query_path(db, f"""
+            SELECT
+                campanha,
+                ROUND(SUM(investimento),2) AS investimento,
+                ROUND(SUM(valor_conversao),2) AS receita,
+                ROUND(SUM(valor_conversao)/NULLIF(SUM(investimento),0),2) AS roas,
+                ROUND(SUM(conversoes),0) AS conversoes,
+                ROUND(SUM(cliques),0) AS cliques,
+                ROUND(SUM(impressoes),0) AS impressoes,
+                ROUND(SUM(cliques)/NULLIF(SUM(impressoes),0)*100,4) AS ctr
+            FROM {tab}
+            WHERE data BETWEEN ? AND ? AND data < date('now')
+            GROUP BY campanha
+            ORDER BY investimento DESC
+        """, (str(seg), str(dom)))
     return db_query("""
         SELECT
             campanha,
@@ -168,24 +279,40 @@ def campanhas_semana(cliente_key, plataforma, seg, dom):
             ROUND(SUM(impressoes),0) AS impressoes,
             ROUND(SUM(cliques)/NULLIF(SUM(impressoes),0)*100,4) AS ctr
         FROM v_performance
-        WHERE data BETWEEN ? AND ? AND cliente_key = ? AND plataforma = ?
+        WHERE data BETWEEN ? AND ? AND data < date('now')
+          AND cliente_key = ? AND plataforma = ?
         GROUP BY campanha
         ORDER BY investimento DESC
     """, (str(seg), str(dom), cliente_key, plataforma))
 
-def shopify_semana(seg, dom):
-    rows = db_query("""
-        SELECT
-            SUM(pedidos) AS pedidos,
-            ROUND(SUM(receita),2) AS receita,
-            SUM(novos_clientes) AS novos_clientes,
-            SUM(recompradores) AS recompradores,
-            ROUND(SUM(receita)/NULLIF(SUM(pedidos),0),2) AS ticket_medio,
-            ROUND(SUM(total_desconto),2) AS total_desconto,
-            SUM(pedidos_acima_300) AS pedidos_acima_300
-        FROM shopify_receita_diaria
-        WHERE data BETWEEN ? AND ?
-    """, (str(seg), str(dom)))
+def shopify_semana(seg, dom, cliente_key="source_of"):
+    # POD usa tabela separada
+    if cliente_key == "pod_kombucha":
+        rows = db_query("""
+            SELECT
+                SUM(pedidos) AS pedidos,
+                ROUND(SUM(receita),2) AS receita,
+                SUM(novos_clientes) AS novos_clientes,
+                SUM(recompradores) AS recompradores,
+                ROUND(SUM(receita)/NULLIF(SUM(pedidos),0),2) AS ticket_medio,
+                ROUND(SUM(total_desconto),2) AS total_desconto,
+                SUM(pedidos_acima_300) AS pedidos_acima_300
+            FROM pod_shopify_diario
+            WHERE data BETWEEN ? AND ? AND data < date('now')
+        """, (str(seg), str(dom)))
+    else:
+        rows = db_query("""
+            SELECT
+                SUM(pedidos) AS pedidos,
+                ROUND(SUM(receita),2) AS receita,
+                SUM(novos_clientes) AS novos_clientes,
+                SUM(recompradores) AS recompradores,
+                ROUND(SUM(receita)/NULLIF(SUM(pedidos),0),2) AS ticket_medio,
+                ROUND(SUM(total_desconto),2) AS total_desconto,
+                SUM(pedidos_acima_300) AS pedidos_acima_300
+            FROM shopify_receita_diaria
+            WHERE data BETWEEN ? AND ? AND data < date('now')
+        """, (str(seg), str(dom)))
     return rows[0] if rows else {}
 
 def escrever_aba_ads(wb, tab_name, cliente_key, plataforma, semanas_com_dados):
@@ -376,7 +503,7 @@ def escrever_aba_consolidado(wb, cliente_key, semanas, plataformas_disponiveis):
         col = 2
         for plat in plataformas_disponiveis:
             if plat == "shopify":
-                dados = shopify_semana(seg, dom)
+                dados = shopify_semana(seg, dom, cliente_key=cliente_key)
                 inv  = None
                 rec  = dados.get("receita")
                 roas = None
@@ -399,23 +526,28 @@ def escrever_aba_consolidado(wb, cliente_key, semanas, plataformas_disponiveis):
     return ws
 
 def gerar_cliente(cliente_key):
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    # Range de datas disponíveis por plataforma
+    plataformas = ["meta_ads", "google_ads"]
 
-    # Range de datas disponíveis
-    plataformas = []
-    if cliente_key == "source_of":
-        plataformas = ["meta_ads", "google_ads"]
+    # Determinar range de datas do cliente a partir dos DBs corretos
+    if cliente_key == "pod_kombucha":
+        conn_meta = sqlite3.connect(str(DB_PATH_POD))
+        conn_meta.row_factory = sqlite3.Row
+        rows = conn_meta.execute("""
+            SELECT MIN(data) as ini, MAX(data) as fim
+            FROM pod_kombucha_meta_ads_diario
+            WHERE data < date('now')
+        """).fetchone()
+        conn_meta.close()
     else:
-        plataformas = ["meta_ads", "google_ads"]
-
-    # Pega range geral
-    rows = conn.execute("""
-        SELECT MIN(data) as ini, MAX(data) as fim
-        FROM v_performance
-        WHERE cliente_key = ?
-    """, (cliente_key,)).fetchone()
-    conn.close()
+        conn = sqlite3.connect(str(DB_PATH))
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("""
+            SELECT MIN(data) as ini, MAX(data) as fim
+            FROM v_performance
+            WHERE cliente_key = ? AND data < date('now')
+        """, (cliente_key,)).fetchone()
+        conn.close()
 
     if not rows or not rows["ini"]:
         print(f"[{cliente_key}] Sem dados. Pulando.")
@@ -448,17 +580,16 @@ def gerar_cliente(cliente_key):
             plats_com_dados.append(plat)
             print(f"  [{cliente_key}] {plat}: {len(semanas_dados)} semanas com dados")
 
-    # Shopify (só source_of)
-    if cliente_key == "source_of":
-        shop_semanas = []
-        for seg, dom in semanas:
-            d = shopify_semana(seg, dom)
-            if d and d.get("pedidos"):
-                shop_semanas.append((seg, dom, d))
-        if shop_semanas:
-            escrever_aba_shopify(wb, shop_semanas)
-            plats_com_dados.append("shopify")
-            print(f"  [{cliente_key}] shopify: {len(shop_semanas)} semanas com dados")
+    # Shopify (source_of e pod_kombucha se tiver dados)
+    shop_semanas = []
+    for seg, dom in semanas:
+        d = shopify_semana(seg, dom, cliente_key=cliente_key)
+        if d and d.get("pedidos"):
+            shop_semanas.append((seg, dom, d))
+    if shop_semanas:
+        escrever_aba_shopify(wb, shop_semanas)
+        plats_com_dados.append("shopify")
+        print(f"  [{cliente_key}] shopify: {len(shop_semanas)} semanas com dados")
 
     # Consolidado
     if plats_com_dados:
