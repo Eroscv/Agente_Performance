@@ -101,6 +101,37 @@
       "multi_plataforma": true
     }
   },
+    "botica": {
+      "nome": "Botica Ouro Preto",
+      "ativo": true,
+      "plataformas": {
+        "meta_ads": {
+          "ativo": true,
+          "meta_account_id": "act_512078729981131",
+          "meta_token_env": "META_BOTICA_ACCESS_TOKEN",
+          "loader": "meta_ads.loader",
+          "loader_fn": "carregar_meta",
+          "loader_params": {
+            "dias": 8
+          },
+          "tabela_db": "botica_meta_ads_diario"
+        }
+      },
+      "builder": "relatorio.builder_diario",
+      "builder_semanal": "gerar_relatorio_semanal",
+      "builder_mensal": "gerar_relatorio_mensal",
+      "builder_diario": "gerar_relatorio_diario",
+      "notion_key": "botica",
+      "slack_emoji": "🟠",
+      "slack_label": "Botica Ouro Preto",
+      "schedules": {
+        "semanal": "0 8 * * 1",
+        "mensal": "0 8 1 * *"
+      },
+      "slack_channel_ids": [],
+      "multi_plataforma": false
+    }
+  },
   "_canal_generico_slack": "C05SFND7R1D",
   "_nota_canais": "Adicionar IDs reais em slack_channel_ids por cliente para roteamento preciso. Enquanto vazio, roteamento usa heurística de nome do canal."
 }
