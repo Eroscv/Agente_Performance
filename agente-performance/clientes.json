@@ -114,6 +114,15 @@
             "dias": 8
           },
           "tabela_db": "botica_meta_ads_diario"
+        },
+        "shopify": {
+          "ativo": true,
+          "loader": "shopify.sync_botica",
+          "loader_fn": "sincronizar",
+          "loader_params": { "dias": 8 },
+          "tabela_db": "shopify_receita_diaria",
+          "store": "00mngb-he",
+          "token_env": "SHOPIFY_BOTICA_TOKEN"
         }
       },
       "builder": "relatorio.builder_diario",
