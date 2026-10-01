@@ -48,6 +48,7 @@ _SQLITE_DBS = {
     "pod_meta":    DATA_DIR / "performance/pod_kombucha/meta_ads.db",
     "pod_gads":    DATA_DIR / "performance/pod_kombucha/google_ads.db",
     "shopify_src": DATA_DIR / "performance/source_of/shopify_receita.db",
+    "botica_meta": DATA_DIR / "performance/botica/meta_ads.db",
 }
 
 # ── DDL das views (idêntico ao connections.py para garantir paridade) ─────────
@@ -120,6 +121,25 @@ SELECT
     NULL,
     COALESCE(video_3s, 0), COALESCE(thruplays, 0)
 FROM pod_meta.pod_kombucha_meta_ads_diario
+
+UNION ALL
+
+SELECT
+    'botica'           AS cliente_key,
+    'Botica Ouro Preto' AS cliente_nome,
+    'meta_ads'         AS plataforma,
+    data, campanha, campaign_id, objetivo, status_criativo,
+    COALESCE(impressoes, 0), COALESCE(cliques_link, 0), COALESCE(alcance, 0),
+    COALESCE(investimento, 0), COALESCE(compras, 0), COALESCE(valor_compras, 0),
+    CASE WHEN investimento > 0
+         THEN ROUND(valor_compras / investimento, 4) END,
+    CASE WHEN compras > 0
+         THEN ROUND(investimento / compras, 2) END,
+    CASE WHEN impressoes > 0
+         THEN ROUND(cliques_link / impressoes * 100.0, 4) END,
+    NULL,
+    COALESCE(video_3s, 0), COALESCE(thruplays, 0)
+FROM botica_meta.botica_meta_ads_diario
 """
 
 _CAMPANHAS_UNIFICADA_DDL = """

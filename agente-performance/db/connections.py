@@ -47,6 +47,7 @@ PERFORMANCE_DBS: dict[tuple[str, str], Path] = {
     ("source_of",    "shopify"):    DATA_DIR / "performance/source_of/shopify.db",
     ("pod_kombucha", "meta_ads"):   DATA_DIR / "performance/pod_kombucha/meta_ads.db",
     ("pod_kombucha", "google_ads"): DATA_DIR / "performance/pod_kombucha/google_ads.db",
+    ("botica",       "meta_ads"):   DATA_DIR / "performance/botica/meta_ads.db",
 }
 
 # DBs de log
@@ -183,6 +184,19 @@ SELECT
     CASE WHEN impressoes>0          THEN ROUND(cliques_link/impressoes*100.0,4)        ELSE NULL END,
     NULL, COALESCE(video_3s,0), COALESCE(thruplays,0)
 FROM pod_meta.pod_kombucha_meta_ads_diario
+
+UNION ALL
+
+SELECT
+    'botica', 'Botica Ouro Preto', 'meta_ads',
+    data, campanha, campaign_id, objetivo, status_criativo,
+    COALESCE(impressoes,0), COALESCE(cliques_link,0), COALESCE(alcance,0),
+    COALESCE(investimento,0), COALESCE(compras,0), COALESCE(valor_compras,0),
+    CASE WHEN investimento>0 THEN ROUND(valor_compras/investimento,4) ELSE NULL END,
+    CASE WHEN compras>0      THEN ROUND(investimento/compras,2)       ELSE NULL END,
+    CASE WHEN impressoes>0   THEN ROUND(cliques_link/impressoes*100.0,4) ELSE NULL END,
+    NULL, COALESCE(video_3s,0), COALESCE(thruplays,0)
+FROM botica_meta.botica_meta_ads_diario
 """
 
 _CAMPANHAS_UNIFICADA_DDL = """

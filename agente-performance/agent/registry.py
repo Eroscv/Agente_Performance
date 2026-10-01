@@ -114,6 +114,8 @@ def get_contexto_cliente(canal_id: str) -> Optional[str]:
         return "pod_kombucha"
     if "source" in c or "sof" in c:
         return "source_of"
+    if "botica" in c or "ouro" in c or "preto" in c or "manipulacao" in c:
+        return "botica"
     return None
 
 

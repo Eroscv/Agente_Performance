@@ -10,6 +10,7 @@ despachar para o subagente certo sem conhecer os detalhes de cada cliente.
 from agent.clients.base import BaseClientAgent
 from agent.clients.pod import PODAgent
 from agent.clients.source_of import SourceOFAgent
+from agent.clients.botica import BoticaAgent
 from agent.clients.general import GeneralAgent
 
 
@@ -18,7 +19,7 @@ def get_client_agent(cliente_key: str | None) -> "BaseClientAgent":
     Factory: retorna o agente correto para o cliente.
 
     Args:
-        cliente_key: 'source_of' | 'pod_kombucha' | None
+        cliente_key: 'source_of' | 'pod_kombucha' | 'botica' | None
 
     Returns:
         Instância do agente cliente correspondente.
@@ -28,6 +29,8 @@ def get_client_agent(cliente_key: str | None) -> "BaseClientAgent":
         return SourceOFAgent()
     if cliente_key == "pod_kombucha":
         return PODAgent()
+    if cliente_key == "botica":
+        return BoticaAgent()
     return GeneralAgent()
 
 
@@ -35,6 +38,7 @@ __all__ = [
     "BaseClientAgent",
     "PODAgent",
     "SourceOFAgent",
+    "BoticaAgent",
     "GeneralAgent",
     "get_client_agent",
 ]
