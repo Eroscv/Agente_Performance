@@ -99,8 +99,7 @@
       },
       "slack_channel_ids": [],
       "multi_plataforma": true
-    }
-  },
+    },
     "botica": {
       "nome": "Botica Ouro Preto",
       "ativo": true,
