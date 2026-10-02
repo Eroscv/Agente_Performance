@@ -79,7 +79,12 @@ async def lifespan(app: FastAPI):
         logger.error("Erro ao inicializar DB federado: %s", e)
 
     logger.info("✅ Pronto para receber consultas")
+
+    # ── Dashboard ingest — desabilitado: gerenciado pelo cron dashboard-ingest-15min ──
+    # (removido loop interno para evitar duplicação com o cron externo)
+
     yield
+
     logger.info("⚙️  Agente encerrado.")
 
 

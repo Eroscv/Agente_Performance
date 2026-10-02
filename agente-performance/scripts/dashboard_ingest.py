@@ -43,7 +43,7 @@ logging.basicConfig(
 # CONFIG
 # ============================================================
 
-BASE_DIR      = Path(__file__).parent
+BASE_DIR      = Path(__file__).parent.parent  # raiz do projeto (agente-performance/)
 DATA_DIR      = BASE_DIR / "data" / "performance" / "source_of"
 DATA_DIR_POD  = BASE_DIR / "data" / "performance" / "pod_kombucha"
 SYNC_DB_PATH  = BASE_DIR / "data" / "dashboard_sync.db"
@@ -640,7 +640,10 @@ PLATAFORMAS = {
     "pod_google_ads": ("POD Kombucha", build_google_pod),
 }
 
-DEFAULT_LOOKBACK_DAYS = 30  # primeira sync: últimos 30 dias
+DEFAULT_LOOKBACK_DAYS   = 30   # primeira sync: últimos 30 dias
+INCREMENTAL_SAFETY_DAYS = 2    # janela de segurança para atualizações tardias (apenas no dia seguinte)
+# Quando a última sync foi há menos de INCREMENTAL_FAST_HOURS, não retroage dias inteiros
+INCREMENTAL_FAST_HOURS  = 2    # execuções recentes: janela de segurança de 2h, não 2 dias
 
 
 def _desde_para(cliente: str, plataforma: str, force: bool, dias: int | None) -> str:
@@ -650,8 +653,14 @@ def _desde_para(cliente: str, plataforma: str, force: bool, dias: int | None) ->
 
     last = get_last_sync(cliente, plataforma)
     if last:
-        # Re-envia desde 2 dias antes do last_sync (janela de segurança para atualizações tardias)
-        dt = datetime.fromisoformat(last) - timedelta(days=2)
+        last_dt = datetime.fromisoformat(last)
+        age_hours = (datetime.now(timezone.utc) - last_dt).total_seconds() / 3600
+        if age_hours < INCREMENTAL_FAST_HOURS:
+            # Sync recente (≤2h) → retroage apenas 2h para não reenviar o dia inteiro
+            dt = last_dt - timedelta(hours=2)
+        else:
+            # Sync mais antigo → retroage INCREMENTAL_SAFETY_DAYS para pegar atualizações tardias
+            dt = last_dt - timedelta(days=INCREMENTAL_SAFETY_DAYS)
         return dt.strftime("%Y-%m-%d")
 
     # Primeira vez: últimos 30 dias
@@ -697,6 +706,182 @@ def run(force: bool = False, dias: int | None = None, dry_run: bool = False,
     print(f"  Erros    : {err_count}")
     print("=" * 50)
 
+    # Registra snapshot de crescimento após cada sync bem-sucedido
+    if ok_count > 0 and not dry_run:
+        try:
+            snapshot_table_growth()
+        except Exception as _e:
+            log.warning("[growth] Snapshot falhou (não crítico): %s", _e)
+
+
+# ============================================================
+# MONITORAMENTO DE CRESCIMENTO DAS TABELAS
+# ============================================================
+
+GROWTH_DB_PATH = BASE_DIR / "data" / "dashboard_growth.db"
+
+@contextmanager
+def _growth_db():
+    conn = sqlite3.connect(str(GROWTH_DB_PATH), timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS table_growth (
+            ts         TEXT NOT NULL,
+            cliente    TEXT NOT NULL,
+            plataforma TEXT NOT NULL,
+            row_count  INTEGER NOT NULL,
+            PRIMARY KEY (ts, cliente, plataforma)
+        )
+    """)
+    conn.commit()
+    try:
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _count_rows(db_path: Path, table: str) -> int | None:
+    """Retorna o número de linhas de uma tabela SQLite. None se a tabela não existir."""
+    try:
+        with sqlite3.connect(str(db_path), timeout=5) as conn:
+            row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            return row[0] if row else 0
+    except Exception:
+        return None
+
+
+# Mapeamento (cliente, plataforma) → (db_path, table)
+_TABLE_MAP = {
+    ("Source OF",   "meta_ads"):      (DATA_DIR / "meta_ads.db",         "source_of_meta_ads_diario"),
+    ("Source OF",   "google_ads"):    (DATA_DIR / "google_ads.db",        "source_of_gads_diario"),
+    ("Source OF",   "shopify"):       (DATA_DIR / "shopify_receita.db",   "shopify_receita_diaria"),
+    ("POD Kombucha","pod_meta_ads"):  (DATA_DIR_POD / "meta_ads.db",      "pod_kombucha_meta_ads_diario"),
+    ("POD Kombucha","pod_google_ads"):(DATA_DIR_POD / "google_ads.db",    "pod_kombucha_gads_diario"),
+}
+
+
+def snapshot_table_growth() -> dict:
+    """Registra o tamanho atual de cada tabela em dashboard_growth.db."""
+    ts = datetime.now(timezone.utc).isoformat()
+    results = {}
+    with _growth_db() as conn:
+        for (cliente, plat), (db_path, table) in _TABLE_MAP.items():
+            count = _count_rows(db_path, table)
+            if count is None:
+                log.warning("[growth] Tabela não encontrada: %s / %s", cliente, plat)
+                continue
+            conn.execute(
+                "INSERT OR IGNORE INTO table_growth (ts, cliente, plataforma, row_count) VALUES (?,?,?,?)",
+                (ts, cliente, plat, count)
+            )
+            results[f"{cliente}/{plat}"] = count
+    log.info("[growth] Snapshot registrado: %s", results)
+    return results
+
+
+def report_table_growth(days: int = 7) -> str:
+    """Retorna um relatório de crescimento das tabelas nos últimos N dias."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    lines = [f"=== Crescimento das tabelas (últimos {days} dias) ==="]
+    try:
+        with _growth_db() as conn:
+            rows = conn.execute("""
+                SELECT cliente, plataforma,
+                       MIN(row_count) AS inicio,
+                       MAX(row_count) AS fim,
+                       MAX(row_count) - MIN(row_count) AS delta,
+                       COUNT(*) AS snapshots
+                FROM table_growth
+                WHERE ts >= ?
+                GROUP BY cliente, plataforma
+                ORDER BY cliente, plataforma
+            """, (since,)).fetchall()
+        for r in rows:
+            lines.append(f"  {r[0]}/{r[1]}: {r[2]:,} → {r[3]:,} (+{r[4]:,} linhas | {r[5]} snaps)")
+        if not rows:
+            lines.append("  Nenhum dado de crescimento registrado ainda.")
+    except Exception as e:
+        lines.append(f"  Erro ao ler growth DB: {e}")
+    return "\n".join(lines)
+
+
+# ============================================================
+# VALIDAÇÃO CONTRA RELATÓRIO SEMANAL
+# ============================================================
+
+def validate_against_weekly(dias: int = 7) -> str:
+    """
+    Compara totais do SQLite local com o que foi enviado ao dashboard
+    nas últimas `dias` semanas. Retorna um relatório de diferenças.
+    """
+    since = (datetime.now(timezone.utc) - timedelta(days=dias)).strftime("%Y-%m-%d")
+    lines = [f"=== Validação local x dashboard (últimos {dias} dias — desde {since}) ==="]
+
+    checks = [
+        {
+            "label":    "Source OF / Meta Ads",
+            "db":       DATA_DIR / "meta_ads.db",
+            "table":    "source_of_meta_ads_diario",
+            "col_inv":  "investimento",
+            "col_rec":  "valor_compras",
+        },
+        {
+            "label":    "Source OF / Google Ads",
+            "db":       DATA_DIR / "google_ads.db",
+            "table":    "source_of_gads_diario",
+            "col_inv":  "investimento",
+            "col_rec":  "valor_conversao",
+        },
+        {
+            "label":    "POD Kombucha / Meta Ads",
+            "db":       DATA_DIR_POD / "meta_ads.db",
+            "table":    "pod_kombucha_meta_ads_diario",
+            "col_inv":  "investimento",
+            "col_rec":  "valor_compras",
+        },
+    ]
+
+    for chk in checks:
+        try:
+            with sqlite3.connect(str(chk["db"]), timeout=5) as conn:
+                row = conn.execute(f"""
+                    SELECT
+                        COUNT(DISTINCT data)                AS dias,
+                        ROUND(SUM({chk['col_inv']}), 2)    AS investimento,
+                        ROUND(SUM({chk['col_rec']}), 2)    AS receita
+                    FROM {chk['table']}
+                    WHERE data >= ?
+                """, (since,)).fetchone()
+            if row and row[0]:
+                dias_c, inv, rec = row
+                roas = round(rec / inv, 2) if inv else 0
+                lines.append(
+                    f"  {chk['label']}: {dias_c} dias | Inv R${inv:,.0f} | "
+                    f"Receita R${rec:,.0f} | ROAS {roas}"
+                )
+            else:
+                lines.append(f"  {chk['label']}: sem dados desde {since}")
+        except Exception as e:
+            lines.append(f"  {chk['label']}: ERRO — {e}")
+
+    # Shopify separado (não tem investimento)
+    try:
+        with sqlite3.connect(str(DATA_DIR / "shopify_receita.db"), timeout=5) as conn:
+            row = conn.execute("""
+                SELECT COUNT(DISTINCT data), ROUND(SUM(receita), 2), SUM(pedidos)
+                FROM shopify_receita_diaria
+                WHERE data >= ?
+            """, (since,)).fetchone()
+        if row and row[0]:
+            lines.append(f"  Source OF / Shopify: {row[0]} dias | R${row[1]:,.0f} | {row[2]} pedidos")
+        else:
+            lines.append(f"  Source OF / Shopify: sem dados desde {since}")
+    except Exception as e:
+        lines.append(f"  Source OF / Shopify: ERRO — {e}")
+
+    return "\n".join(lines)
+
 
 # ============================================================
 # CLI
@@ -708,14 +893,25 @@ def _parse():
     p.add_argument("--dias",     type=int, default=None, help="Lookback em dias")
     p.add_argument("--dry-run",  action="store_true", help="Mostra payload sem enviar")
     p.add_argument("--plat",     nargs="*", help="Filtra plataformas (meta_ads google_ads shopify)")
+    p.add_argument("--growth",   action="store_true", help="Mostra relatório de crescimento das tabelas")
+    p.add_argument("--validate", action="store_true", help="Valida dados locais vs dashboard (sem enviar)")
+    p.add_argument("--snapshot", action="store_true", help="Só registra snapshot de crescimento (sem sync)")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse()
-    run(
-        force=args.force,
-        dias=args.dias,
-        dry_run=args.dry_run,
-        plataformas=args.plat,
-    )
+
+    if args.snapshot:
+        snapshot_table_growth()
+    elif args.growth:
+        print(report_table_growth())
+    elif args.validate:
+        print(validate_against_weekly())
+    else:
+        run(
+            force=args.force,
+            dias=args.dias,
+            dry_run=args.dry_run,
+            plataformas=args.plat,
+        )
