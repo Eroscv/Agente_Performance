@@ -190,15 +190,144 @@ print(f"{len(blocos)} blocos gerados")
 
 ---
 
+## 📡 Pipeline de Dashboard — Atualização em Tempo Real
+
+O agente mantém um pipeline de ingestão contínua que envia os dados consolidados (Meta Ads + Google Ads + Shopify) para o dashboard externo via API REST (Supabase). O pipeline foi desenhado para:
+
+- **Baixo volume por envio** — só envia datas novas, nunca reprocessa o histórico inteiro
+- **Alta frequência** — atualização a cada 15 minutos durante o dia
+- **Rastreabilidade** — cada envio é registrado com timestamp em `data/dashboard_sync.db`
+- **Observabilidade** — crescimento das tabelas é monitorado em `data/dashboard_growth.db`
+
+### ✅ Checklist de Qualidade do Pipeline
+
+#### [x] Coleta a cada 15 minutos
+
+O script `scripts/dashboard_ingest.py` é acionado pelo cron `dashboard-ingest-15min` nos minutos `:02/:17/:32/:47` de cada hora — com offset para não colidir com os syncs de fonte (Meta nos `:00/:15/:30/:45`, Google nos `:05/:20/:35/:50`, Shopify nos `:10/:25/:40/:55`).
+
+```
+:00  Meta sync        :02  Dashboard ingest
+:05  GAds sync        :10  Shopify sync
+:15  Meta sync        :17  Dashboard ingest
+:20  GAds sync        :25  Shopify sync
+...
+```
+
+#### [x] Empilhar só os dados novos, sem refazer a janela do dia
+
+A lógica de `_desde_para()` é **adaptativa**:
+
+| Situação | Janela retroativa | Motivo |
+|---|---|---|
+| Último sync há < 2h | 2 horas | Evita reenviar o dia inteiro em cada ciclo de 15min |
+| Último sync há ≥ 2h | 2 dias | Segurança para pegar dados tardios da API (Meta/Google atualizam retroativamente) |
+| Primeira execução | 30 dias | Carga inicial completa |
+
+O estado de cada plataforma é persistido em `data/dashboard_sync.db`:
+
+```sql
+CREATE TABLE sync_state (
+    cliente    TEXT NOT NULL,
+    plataforma TEXT NOT NULL,
+    last_sync  TEXT NOT NULL,  -- ISO timestamp UTC
+    PRIMARY KEY (cliente, plataforma)
+);
+```
+
+#### [x] Monitorar o crescimento das tabelas
+
+Após cada sync bem-sucedido, `snapshot_table_growth()` registra o tamanho atual de cada tabela em `data/dashboard_growth.db`:
+
+```sql
+CREATE TABLE table_growth (
+    ts         TEXT NOT NULL,
+    cliente    TEXT NOT NULL,
+    plataforma TEXT NOT NULL,
+    row_count  INTEGER NOT NULL,
+    PRIMARY KEY (ts, cliente, plataforma)
+);
+```
+
+Tabelas monitoradas:
+
+| Cliente | Plataforma | Tabela SQLite |
+|---|---|---|
+| Source OF | meta_ads | `source_of_meta_ads_diario` |
+| Source OF | google_ads | `source_of_gads_diario` |
+| Source OF | shopify | `shopify_receita_diaria` |
+| POD Kombucha | pod_meta_ads | `pod_kombucha_meta_ads_diario` |
+| POD Kombucha | pod_google_ads | `pod_kombucha_gads_diario` |
+
+Para ver o relatório de crescimento:
+
+```bash
+python scripts/dashboard_ingest.py --growth
+# Saída:
+# === Crescimento das tabelas (últimos 7 dias) ===
+#   Source OF/meta_ads: 34,100 → 34,838 (+738 linhas | 96 snaps)
+#   Source OF/shopify:  451 → 459 (+8 linhas | 96 snaps)
+#   ...
+```
+
+#### [x] Validar os dados batendo com o relatório semanal
+
+O comando `--validate` compara os totais locais (SQLite) e exibe investimento, receita e ROAS por plataforma — usado para cruzar com o relatório semanal gerado pelo `cron_relatorio.py`:
+
+```bash
+python scripts/dashboard_ingest.py --validate
+# Saída:
+# === Validação local x dashboard (últimos 7 dias — desde 2026-09-25) ===
+#   Source OF / Meta Ads: 7 dias | Inv R$45,201 | Receita R$168,698 | ROAS 3.73
+#   Source OF / Google Ads: 7 dias | Inv R$3,209 | Receita R$17,577 | ROAS 5.48
+#   POD Kombucha / Meta Ads: 7 dias | Inv R$33,501 | Receita R$149,233 | ROAS 4.45
+#   Source OF / Shopify: 8 dias | R$222,121 | 660 pedidos
+```
+
+Um cron semanal (`dashboard-growth-weekly`, toda segunda às 9h BRT) roda automaticamente `--validate` + `--growth` e avisa se detectar divergências.
+
+### Comandos CLI do `dashboard_ingest.py`
+
+```bash
+# Sync normal (incremental inteligente)
+python scripts/dashboard_ingest.py
+
+# Forçar reenvio de todos os dados (ignora last_sync)
+python scripts/dashboard_ingest.py --force
+
+# Lookback customizado
+python scripts/dashboard_ingest.py --dias 7
+
+# Simular sem enviar
+python scripts/dashboard_ingest.py --dry-run
+
+# Filtrar plataforma
+python scripts/dashboard_ingest.py --plat meta_ads
+
+# Ver relatório de crescimento
+python scripts/dashboard_ingest.py --growth
+
+# Validar dados locais vs dashboard
+python scripts/dashboard_ingest.py --validate
+
+# Só registrar snapshot (sem sync)
+python scripts/dashboard_ingest.py --snapshot
+```
+
+---
+
 ## ⏰ Crons Configurados
 
-| Horário (UTC) | Script | Descrição |
+| Horário (BRT) | Nome | Descrição |
 |---|---|---|
-| 06h00 | `shopify-sync-diario` | Sync Shopify → SQLite (últimos 8 dias) |
-| 07h00 | `sync_gads_diario.py` | Sync Google Ads → SQLite |
-| 07h30 | `sync_meta_diario.py` | Sync Meta Ads → SQLite |
-| 08h00 (seg) | `cron_relatorio.py` | Relatório semanal automático |
-| 08h00 (dia 1) | `cron_relatorio.py` | Relatório mensal automático |
+| :00/:15/:30/:45 | `meta-sync-horario` | Sync Meta Ads → SQLite (últimos 2 dias) |
+| :05/:20/:35/:50 | `gads-sync-horario` | Sync Google Ads → SQLite (últimos 2 dias) |
+| :10/:25/:40/:55 | `shopify-sync-horario` | Sync Shopify → SQLite (últimos 2 dias) |
+| :02/:17/:32/:47 | `dashboard-ingest-15min` | Ingestão incremental → Dashboard |
+| 06h00 | `shopify-sync-diario` | Sync Shopify histórico (últimos 8 dias) |
+| 09h00 (seg) | `dashboard-growth-weekly` | Validação + crescimento de tabelas |
+| 09h00 (seg) | `flora-learning-report-semanal` | Relatório de aprendizado Flora |
+| 02h00 (seg) | `flora-relatorio-semanal` | Relatório semanal Flora |
+| 02h00 (dia 1) | `flora-relatorio-mensal` | Relatório mensal Flora |
 
 ---
 
