@@ -2,7 +2,7 @@
 shopify/client.py
 
 Cliente Shopify para o Agente de Performance Guará.
-Busca pedidos reais da loja Source Of para alimentar os relatórios.
+Busca pedidos reais da loja Source Of (e outros clientes) para alimentar os relatórios.
 
 Funções principais:
   - pedidos_por_sku(data_inicio, data_fim)   → lista de dicts {sku, pedidos, receita}
@@ -11,6 +11,9 @@ Funções principais:
   - assiduidade_clientes(data_inicio, data_fim) → lista de dicts {faixa, clientes, pct}
   - receita_total(data_inicio, data_fim)      → float
   - resumo_periodo(data_inicio, data_fim)     → dict com KPIs consolidados
+
+Multi-loja: use get_client_for(cliente_key) para obter funções contextualizadas
+de paginação para qualquer cliente configurado.
 
 Paginação automática (cursor-based). Rate limit: 80 req/s (leaky bucket).
 """
@@ -38,6 +41,133 @@ _TOKEN   = os.getenv("SHOPIFY_TOKEN", "")
 _API_VER = "2024-01"
 _BASE    = f"https://{_STORE}.myshopify.com/admin/api/{_API_VER}"
 _HEADERS = {"X-Shopify-Access-Token": _TOKEN, "Content-Type": "application/json"}
+
+# Mapa de configurações por cliente_key
+_CLIENT_CONFIG: dict[str, dict[str, str]] = {
+    "source_of": {
+        "store_env": "SHOPIFY_STORE",
+        "token_env": "SHOPIFY_TOKEN",
+        "store_default": "source-of-brasil",
+    },
+    "pod_kombucha": {
+        "store_env": "SHOPIFY_POD_STORE",
+        "token_env": "SHOPIFY_POD_TOKEN",
+        "store_default": "",
+    },
+    "botica": {
+        "store_env": "SHOPIFY_BOTICA_STORE",
+        "token_env": "SHOPIFY_BOTICA_TOKEN",
+        "store_default": "",
+    },
+}
+
+
+def get_client_for(cliente_key: str):
+    """
+    Retorna um objeto com _paginar_pedidos e _orders_count_por_cliente
+    contextualizados para o cliente informado.
+
+    Uso:
+        c = get_client_for("pod_kombucha")
+        for pedido in c._paginar_pedidos(data_inicio, data_fim):
+            ...
+    """
+    cfg = _CLIENT_CONFIG.get(cliente_key)
+    if not cfg:
+        raise ValueError(f"cliente_key '{cliente_key}' não configurado em shopify/client.py")
+
+    store = os.getenv(cfg["store_env"], cfg["store_default"])
+    token = os.getenv(cfg["token_env"], "")
+
+    if not store:
+        raise ValueError(
+            f"[Shopify/{cliente_key}] {cfg['store_env']} não definido no .env"
+        )
+    if not token:
+        raise ValueError(
+            f"[Shopify/{cliente_key}] {cfg['token_env']} não definido no .env"
+        )
+
+    base    = f"https://{store}.myshopify.com/admin/api/{_API_VER}"
+    headers = {"X-Shopify-Access-Token": token, "Content-Type": "application/json"}
+
+    class _ShopifyClient:
+        """Instância de cliente Shopify isolada por loja."""
+
+        def _get(self, endpoint: str, params: dict = None):
+            url = f"{base}/{endpoint}"
+            for _ in range(3):
+                r = requests.get(url, headers=headers, params=params or {}, timeout=(5, 30))
+                if r.status_code == 429:
+                    wait = float(r.headers.get("Retry-After", _RETRY_AFTER))
+                    logger.warning("[Shopify/%s] Rate limit — aguardando %.1fs", cliente_key, wait)
+                    time.sleep(wait)
+                    continue
+                r.raise_for_status()
+                return r
+            raise RuntimeError(f"[Shopify/{cliente_key}] falha após 3 tentativas em {endpoint}")
+
+        def _paginar_pedidos(
+            self,
+            data_inicio: date,
+            data_fim: date,
+            campos: str = _ORDER_FIELDS,
+            status: str = "paid",
+        ) -> Iterator[dict]:
+            """Itera sobre pedidos paginando cursor-based."""
+            created_at_min = f"{data_inicio.isoformat()}T00:00:00-03:00"
+            created_at_max = f"{data_fim.isoformat()}T23:59:59-03:00"
+            params = {
+                "limit":            _PAGE_SIZE,
+                "status":           "any",
+                "financial_status": status,
+                "created_at_min":   created_at_min,
+                "created_at_max":   created_at_max,
+                "fields":           campos,
+            }
+            page = 0
+            total = 0
+            while True:
+                r = self._get("orders.json", params)
+                pedidos = r.json().get("orders", [])
+                if not pedidos:
+                    break
+                page += 1
+                total += len(pedidos)
+                for pedido in pedidos:
+                    yield pedido
+                link_header = r.headers.get("Link", "")
+                next_url = _extrair_next_link(link_header)
+                if not next_url:
+                    break
+                from urllib.parse import urlparse, parse_qs
+                qs = parse_qs(urlparse(next_url).query)
+                page_info = qs.get("page_info", [None])[0]
+                if not page_info:
+                    break
+                params = {"limit": _PAGE_SIZE, "page_info": page_info}
+            logger.info(
+                "[Shopify/%s] Total pedidos lidos: %d (%s → %s)",
+                cliente_key, total, data_inicio, data_fim,
+            )
+
+        def _orders_count_por_cliente(self, customer_ids: list[int]) -> dict[int, int]:
+            """Retorna {customer_id: orders_count} para a lista de IDs."""
+            if not customer_ids:
+                return {}
+            result: dict[int, int] = {}
+            BATCH = 250
+            for i in range(0, len(customer_ids), BATCH):
+                batch = customer_ids[i:i + BATCH]
+                for cid in batch:
+                    try:
+                        r = self._get(f"customers/{cid}/orders/count.json", {"status": "any"})
+                        result[cid] = r.json().get("count", 1)
+                    except Exception:
+                        result[cid] = 1
+            return result
+
+    return _ShopifyClient()
 
 # Campos mínimos para reduzir payload
 _ORDER_FIELDS = (

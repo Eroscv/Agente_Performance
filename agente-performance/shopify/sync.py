@@ -2,16 +2,14 @@
 shopify/sync.py
 
 Sincronização e consultas Shopify do Agente de Performance Guará.
-Movido de db/shopify_sync.py — lógica de negócio separada da camada de dados.
+Multi-cliente: source_of e pod_kombucha (e qualquer cliente com SHOPIFY_*_STORE/TOKEN).
 
 Funções principais:
-  - sincronizar(dias)          → busca pedidos na API Shopify e salva no DB
-  - metricas_shopify_periodo() → métricas consolidadas do período
-  - roas_real_periodo()        → ROAS real (receita Shopify / invest Meta)
-  - status_sync()              → status da última sincronização
-  - carregar_shopify(dias)     → alias para uso pelo registry
-
-Source OF é o único cliente com Shopify integrado.
+  - sincronizar(data_inicio, data_fim, cliente_key)  → busca pedidos na API e salva no DB
+  - metricas_shopify_periodo(data_inicio, data_fim, cliente_key)  → KPIs consolidados
+  - roas_real_periodo(data_inicio, data_fim, investimento_meta, cliente_key)  → ROAS real
+  - status_sync(cliente_key)              → status da última sincronização
+  - carregar_shopify(dias, cliente_key)   → alias para uso pelo registry
 """
 from __future__ import annotations
 
@@ -27,9 +25,21 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).parent.parent
-# DB correto: data/performance/source_of/shopify_receita.db
-# (campanhas.db era legado — dashboard_ingest lê daqui)
-DB_PATH = BASE_DIR / "data" / "performance" / "source_of" / "shopify_receita.db"
+
+# DB por cliente — source_of mantém path histórico
+_DB_PATHS: dict[str, Path] = {
+    "source_of":   BASE_DIR / "data" / "performance" / "source_of" / "shopify_receita.db",
+    "pod_kombucha": BASE_DIR / "data" / "performance" / "pod_kombucha" / "shopify_receita.db",
+}
+
+# Compatibilidade: DB_PATH padrão aponta para source_of
+DB_PATH = _DB_PATHS["source_of"]
+
+
+def _db_path_for(cliente_key: str) -> Path:
+    p = _DB_PATHS.get(cliente_key, BASE_DIR / "data" / "performance" / cliente_key / "shopify_receita.db")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
 
 # DDL da tabela de receita Shopify
 _CREATE_TABLE = """
@@ -72,8 +82,8 @@ def _garantir_tabela(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
-def _get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), timeout=30)
+def _get_conn(cliente_key: str = "source_of") -> sqlite3.Connection:
+    conn = sqlite3.connect(str(_db_path_for(cliente_key)), timeout=30)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -84,9 +94,16 @@ def sincronizar(
     data_inicio: date,
     data_fim: date,
     dry_run: bool = False,
+    cliente_key: str = "source_of",
 ) -> dict:
     """
     Sincroniza receita Shopify para o período especificado.
+
+    Args:
+        data_inicio: data de início do período
+        data_fim: data de fim do período
+        dry_run: se True, não grava no banco
+        cliente_key: 'source_of' | 'pod_kombucha' | outros configurados
 
     Retorna:
         {
@@ -98,24 +115,18 @@ def sincronizar(
         }
     """
     logger.info(
-        "[ShopifySync] Sincronizando %s → %s (dry_run=%s)",
-        data_inicio, data_fim, dry_run,
+        "[ShopifySync/%s] Sincronizando %s → %s (dry_run=%s)",
+        cliente_key, data_inicio, data_fim, dry_run,
     )
 
-    # Importa o cliente Shopify (falha cedo se credenciais ausentes)
+    # Obtém cliente contextualizado para a loja correta
     try:
-        from shopify.client import _paginar_pedidos, _orders_count_por_cliente
-    except ImportError as e:
+        from shopify.client import get_client_for
+        sh = get_client_for(cliente_key)
+    except (ImportError, ValueError) as e:
         raise RuntimeError(
-            "shopify.client não encontrado — verifique o ambiente."
+            f"[ShopifySync/{cliente_key}] Erro ao obter cliente Shopify: {e}"
         ) from e
-
-    shopify_token = os.getenv("SHOPIFY_TOKEN", "")
-    if not shopify_token:
-        raise ValueError(
-            "SHOPIFY_TOKEN não configurado. "
-            "Adicione ao .env: SHOPIFY_TOKEN=shpat_..."
-        )
 
     # ── 1. Coletar pedidos do Shopify ────────────────────────────────────────
     receita_por_dia: dict[str, float]   = defaultdict(float)
@@ -127,7 +138,7 @@ def sincronizar(
     customer_ids_global: set[int]       = set()
 
     total_pedidos_lidos = 0
-    for pedido in _paginar_pedidos(data_inicio, data_fim):
+    for pedido in sh._paginar_pedidos(data_inicio, data_fim):
         total_pedidos_lidos += 1
         criado_em = pedido.get("created_at", "")[:10]  # "YYYY-MM-DD"
         if not criado_em:
@@ -152,8 +163,8 @@ def sincronizar(
 
     if total_pedidos_lidos == 0:
         logger.warning(
-            "[ShopifySync] Nenhum pedido encontrado para %s → %s",
-            data_inicio, data_fim,
+            "[ShopifySync/%s] Nenhum pedido encontrado para %s → %s",
+            cliente_key, data_inicio, data_fim,
         )
         return {
             "dias_sincronizados": 0,
@@ -164,7 +175,7 @@ def sincronizar(
         }
 
     # ── 2. Calcular novos clientes / recompradores por dia ───────────────────
-    oc_map = _orders_count_por_cliente(list(customer_ids_global))
+    oc_map = sh._orders_count_por_cliente(list(customer_ids_global))
 
     novos_por_dia:   dict[str, int] = defaultdict(int)
     recomp_por_dia:  dict[str, int] = defaultdict(int)
@@ -192,7 +203,7 @@ def sincronizar(
         rows.append((dia_str, receita, pedidos, novos, recomp, ticket, desconto, p300))
 
     if dry_run:
-        logger.info("[ShopifySync] DRY RUN — %d linhas seriam gravadas", len(rows))
+        logger.info("[ShopifySync/%s] DRY RUN — %d linhas seriam gravadas", cliente_key, len(rows))
         for r in rows[:5]:
             logger.info("  %s", r)
         return {
@@ -204,18 +215,40 @@ def sincronizar(
         }
 
     # ── 4. Upsert no SQLite ───────────────────────────────────────────────────
-    conn = _get_conn()
+    conn = _get_conn(cliente_key)
     _garantir_tabela(conn)
 
     conn.executemany(_UPSERT_SQL, rows)
     conn.commit()
 
-    # ── 5. Registra em cron_runs ──────────────────────────────────────────────
+    # ── 5. Dual-write: espelhar no BigQuery ───────────────────────────────────
+    try:
+        from db.bq_writer import write_shopify, enabled as bq_enabled
+        if bq_enabled():
+            bq_rows = [
+                {
+                    "data":              r[0],
+                    "receita":           r[1],
+                    "pedidos":           r[2],
+                    "novos_clientes":    r[3],
+                    "recompradores":     r[4],
+                    "ticket_medio":      r[5],
+                    "total_desconto":    r[6],
+                    "pedidos_acima_300": r[7],
+                }
+                for r in rows
+            ]
+            write_shopify(bq_rows, cliente_key)
+            logger.info("[ShopifySync/%s] BQ dual-write: %d linhas", cliente_key, len(bq_rows))
+    except Exception as _bq_exc:
+        logger.warning("[ShopifySync/%s] BQ dual-write falhou (silencioso): %s", cliente_key, _bq_exc)
+
+    # ── 6. Registra em cron_runs ──────────────────────────────────────────────
     try:
         conn.execute(
             "INSERT INTO cron_runs (job, status, detalhes, executado_em) "
             "VALUES ('shopify_sync', 'ok', ?, datetime('now'))",
-            (f"Período: {data_inicio} → {data_fim}, dias: {len(rows)}, pedidos: {total_pedidos_lidos}",),
+            (f"cliente={cliente_key} | Período: {data_inicio} → {data_fim}, dias: {len(rows)}, pedidos: {total_pedidos_lidos}",),
         )
         conn.commit()
     except Exception:
@@ -227,8 +260,8 @@ def sincronizar(
     pedidos_total = sum(r[2] for r in rows)
 
     logger.info(
-        "[ShopifySync] ✅ %d dias sincronizados | R$ %.2f | %d pedidos",
-        len(rows), receita_total, pedidos_total,
+        "[ShopifySync/%s] ✅ %d dias sincronizados | R$ %.2f | %d pedidos",
+        cliente_key, len(rows), receita_total, pedidos_total,
     )
     return {
         "dias_sincronizados": len(rows),
@@ -244,12 +277,13 @@ def sincronizar(
 def receita_por_dia(
     data_inicio: date,
     data_fim: date,
+    cliente_key: str = "source_of",
 ) -> dict[str, float]:
     """
     Retorna dict {data_str: receita} para o período.
     Se não houver dados sincronizados, retorna {}.
     """
-    conn = _get_conn()
+    conn = _get_conn(cliente_key)
     _garantir_tabela(conn)
     rows = conn.execute(
         "SELECT data, receita FROM shopify_receita_diaria "
@@ -263,12 +297,13 @@ def receita_por_dia(
 def receita_periodo(
     data_inicio: date,
     data_fim: date,
+    cliente_key: str = "source_of",
 ) -> float:
     """
     Retorna receita total Shopify no período.
     Usa dados sincronizados (não bate na API).
     """
-    conn = _get_conn()
+    conn = _get_conn(cliente_key)
     _garantir_tabela(conn)
     row = conn.execute(
         "SELECT COALESCE(SUM(receita), 0) AS total FROM shopify_receita_diaria "
@@ -282,6 +317,7 @@ def receita_periodo(
 def metricas_shopify_periodo(
     data_inicio: date,
     data_fim: date,
+    cliente_key: str = "source_of",
 ) -> dict:
     """
     Retorna KPIs Shopify agregados para o período a partir dos dados sincronizados.
@@ -295,7 +331,7 @@ def metricas_shopify_periodo(
             sincronizado: bool   (False se não há dados no período)
         }
     """
-    conn = _get_conn()
+    conn = _get_conn(cliente_key)
     _garantir_tabela(conn)
     row = conn.execute(
         """
@@ -349,6 +385,7 @@ def roas_real_periodo(
     data_inicio: date,
     data_fim: date,
     investimento_meta: float,
+    cliente_key: str = "source_of",
 ) -> Optional[float]:
     """
     ROAS real = Receita Shopify sincronizada / Investimento ajustado Meta.
@@ -360,18 +397,18 @@ def roas_real_periodo(
     invest_ajustado = spend_com_imposto(investimento_meta)
     if invest_ajustado == 0:
         return None
-    receita = receita_periodo(data_inicio, data_fim)
+    receita = receita_periodo(data_inicio, data_fim, cliente_key=cliente_key)
     if receita == 0:
         return None
     return round(receita / invest_ajustado, 4)
 
 
-def status_sync() -> dict:
+def status_sync(cliente_key: str = "source_of") -> dict:
     """
     Retorna informações sobre o estado da sincronização.
     Útil para o endpoint /shopify/status.
     """
-    conn = _get_conn()
+    conn = _get_conn(cliente_key)
     _garantir_tabela(conn)
     row = conn.execute(
         """
@@ -390,7 +427,7 @@ def status_sync() -> dict:
     if not row or not row["data_minima"]:
         return {
             "sincronizado": False,
-            "mensagem": "Nenhum dado sincronizado ainda. Execute: python -m db.shopify_sync",
+            "mensagem": f"Nenhum dado sincronizado ainda para {cliente_key}. Execute: carregar_shopify(cliente_key='{cliente_key}')",
         }
 
     return {
@@ -404,27 +441,28 @@ def status_sync() -> dict:
     }
 
 
-def carregar_shopify(dias: int = 8) -> dict:
+def carregar_shopify(dias: int = 8, cliente_key: str = "source_of") -> dict:
     """
-    Wrapper sem argumentos obrigatórios para uso como loader no registry.
+    Wrapper para uso como loader no registry.
 
     Sincroniza os últimos `dias` dias de receita Shopify.
     Se a tabela estiver vazia, faz carga inicial dos últimos 90 dias.
 
     Args:
         dias: quantidade de dias a sincronizar (padrão: 8)
+        cliente_key: 'source_of' | 'pod_kombucha' | outros
 
     Returns:
         dict com resultado da sincronização
     """
-    status = status_sync()
+    status = status_sync(cliente_key=cliente_key)
     if not status.get("sincronizado", False):
-        logger.info("[Shopify] Tabela vazia — carga inicial (90 dias)")
+        logger.info("[Shopify/%s] Tabela vazia — carga inicial (90 dias)", cliente_key)
         dias = 90
 
     d_fim    = date.today()
     d_inicio = d_fim - timedelta(days=dias - 1)
-    return sincronizar(d_inicio, d_fim)
+    return sincronizar(d_inicio, d_fim, cliente_key=cliente_key)
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

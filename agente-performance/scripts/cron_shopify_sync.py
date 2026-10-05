@@ -1,18 +1,20 @@
 """
 scripts/cron_shopify_sync.py
 
-Cron de sincronização automática Shopify → SQLite.
-Chamado diariamente pelo OpenClaw para manter receita_shopify_diaria atualizado.
+Cron de sincronização automática Shopify → SQLite + BigQuery.
+Roda para todos os clientes com Shopify configurado (source_of e pod_kombucha).
 
 Estratégia:
   - Por padrão sincroniza os últimos 8 dias (7 + margem para pedidos tardios)
   - Se a tabela estiver vazia, sincroniza os últimos 90 dias
-  - Registra resultado em cron_runs
+  - Registra resultado em cron_runs + dual-write BQ
 
 Uso:
-    python scripts/cron_shopify_sync.py            # últimos 8 dias
-    python scripts/cron_shopify_sync.py --dias 30  # últimos 30 dias
-    python scripts/cron_shopify_sync.py --full     # desde jan/2023
+    python scripts/cron_shopify_sync.py                           # todos os clientes, últimos 8 dias
+    python scripts/cron_shopify_sync.py --dias 30                 # todos os clientes, 30 dias
+    python scripts/cron_shopify_sync.py --cliente source_of       # apenas source_of
+    python scripts/cron_shopify_sync.py --cliente pod_kombucha    # apenas POD
+    python scripts/cron_shopify_sync.py --full                    # desde jan/2023
 """
 
 from __future__ import annotations
@@ -38,47 +40,56 @@ logging.basicConfig(
 logger = logging.getLogger("cron_shopify_sync")
 
 
-def _tabela_vazia() -> bool:
-    """Verifica se shopify_receita_diaria está vazia."""
+def _tabela_vazia(cliente_key: str = "source_of") -> bool:
+    """Verifica se shopify_receita_diaria está vazia para o cliente."""
     try:
-        from db.shopify_sync import status_sync
-        status = status_sync()
+        from shopify.sync import status_sync
+        status = status_sync(cliente_key=cliente_key)
         return not status.get("sincronizado", False)
     except Exception:
         return True
 
 
-def main(dias: int = 8, full: bool = False) -> None:
-    from db.shopify_sync import sincronizar
+CLIENTES_SHOPIFY = [
+    {"key": "source_of",   "token_env": "SHOPIFY_TOKEN",     "full_inicio": date(2023, 1, 1)},
+    {"key": "pod_kombucha", "token_env": "SHOPIFY_POD_TOKEN", "full_inicio": date(2024, 1, 1)},
+]
 
-    shopify_token = os.getenv("SHOPIFY_TOKEN", "")
-    if not shopify_token:
-        logger.error("SHOPIFY_TOKEN não configurado — sync abortado.")
-        sys.exit(1)
 
-    # Se tabela vazia, faz carga inicial dos últimos 90 dias
-    if not full and _tabela_vazia():
-        logger.info("Tabela vazia — fazendo carga inicial (últimos 90 dias)...")
-        dias = 90
+def sync_cliente(cfg: dict, dias: int, full: bool) -> bool:
+    """Executa sync Shopify para um cliente. Retorna True se sucesso."""
+    from shopify.sync import sincronizar, status_sync
+
+    cliente_key = cfg["key"]
+    token_env   = cfg["token_env"]
+    full_inicio = cfg["full_inicio"]
+
+    token = os.getenv(token_env, "")
+    if not token:
+        logger.error("[%s] %s não configurado — sync abortado.", cliente_key, token_env)
+        return False
 
     if full:
-        d_inicio = date(2023, 1, 1)
+        d_inicio = full_inicio
         d_fim    = date.today()
     else:
+        _dias = dias
+        if _tabela_vazia(cliente_key):
+            logger.info("[%s] Tabela vazia — fazendo carga inicial (90 dias)...", cliente_key)
+            _dias = 90
         d_fim    = date.today()
-        d_inicio = d_fim - timedelta(days=dias - 1)
+        d_inicio = d_fim - timedelta(days=_dias - 1)
 
-    logger.info("Sincronizando Shopify: %s → %s", d_inicio, d_fim)
-
+    logger.info("[%s] Sincronizando Shopify: %s → %s", cliente_key, d_inicio, d_fim)
     try:
-        resultado = sincronizar(d_inicio, d_fim)
+        resultado = sincronizar(d_inicio, d_fim, cliente_key=cliente_key)
         logger.info(
-            "✅ Sync OK: %d dias | R$ %.2f | %d pedidos",
+            "[%s] ✅ Sync OK: %d dias | R$ %.2f | %d pedidos",
+            cliente_key,
             resultado["dias_sincronizados"],
             resultado["receita_total"],
             resultado["pedidos_total"],
         )
-        # Invalida cache e registra sucesso
         try:
             from agent.cache import invalidar_tudo
             invalidar_tudo()
@@ -86,36 +97,44 @@ def main(dias: int = 8, full: bool = False) -> None:
             pass
         try:
             from db.sync_alerts import registrar_resultado
-            registrar_resultado("source_of", "shopify", sucesso=True)
+            registrar_resultado(cliente_key, "shopify", sucesso=True)
         except Exception:
             pass
-        # Atualiza métricas no Obsidian (best-effort)
-        try:
-            from scripts.obsidian_sync import update_metricas
-            from datetime import timezone, timedelta
-            brt = timezone(timedelta(hours=-3))
-            from datetime import datetime as _dt
-            update_metricas({
-                "dias_sincronizados": resultado["dias_sincronizados"],
-                "total_pedidos": resultado["pedidos_total"],
-                "receita_total": f"R$ {resultado['receita_total']:,.2f}".replace(",", "."),
-                "ultima_sync": _dt.now(brt).strftime("%Y-%m-%d %H:%M BRT"),
-            })
-        except Exception as _e:
-            logger.warning("obsidian_sync: falha ao atualizar métricas — %s", _e)
+        return True
     except Exception as e:
-        logger.error("❌ Sync falhou: %s", e)
+        logger.error("[%s] ❌ Sync falhou: %s", cliente_key, e)
         try:
             from db.sync_alerts import registrar_resultado
-            registrar_resultado("source_of", "shopify", sucesso=False, erro=str(e))
+            registrar_resultado(cliente_key, "shopify", sucesso=False, erro=str(e))
         except Exception:
             pass
+        return False
+
+
+def main(dias: int = 8, full: bool = False, cliente: str = None) -> None:
+    clientes = [c for c in CLIENTES_SHOPIFY if not cliente or c["key"] == cliente]
+    if not clientes:
+        logger.error("Cliente '%s' não encontrado em CLIENTES_SHOPIFY.", cliente)
+        sys.exit(1)
+
+    sucessos = erros = 0
+    for cfg in clientes:
+        ok = sync_cliente(cfg, dias=dias, full=full)
+        if ok:
+            sucessos += 1
+        else:
+            erros += 1
+
+    logger.info("Sync Shopify concluído: %d sucesso(s), %d erro(s)", sucessos, erros)
+    if erros > 0 and sucessos == 0:
         sys.exit(1)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Cron sync Shopify → SQLite")
-    parser.add_argument("--dias", type=int, default=8)
-    parser.add_argument("--full", action="store_true")
+    parser = argparse.ArgumentParser(description="Cron sync Shopify → SQLite + BQ")
+    parser.add_argument("--dias",    type=int,  default=8)
+    parser.add_argument("--full",    action="store_true")
+    parser.add_argument("--cliente", type=str,  default=None,
+                        help="Rodar apenas para um cliente (source_of | pod_kombucha)")
     args = parser.parse_args()
-    main(dias=args.dias, full=args.full)
+    main(dias=args.dias, full=args.full, cliente=args.cliente)

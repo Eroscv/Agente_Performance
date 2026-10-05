@@ -24,6 +24,18 @@
           "dias": 8
         },
         "tabela_db": "pod_kombucha_meta_ads_diario"
+      },
+      "shopify": {
+        "ativo": true,
+        "store_env": "SHOPIFY_POD_STORE",
+        "token_env": "SHOPIFY_POD_TOKEN",
+        "loader": "shopify.sync",
+        "loader_fn": "carregar_shopify",
+        "loader_params": {
+          "dias": 8,
+          "cliente_key": "pod_kombucha"
+        },
+        "tabela_db": "pod_kombucha_shopify_diario"
       }
     },
     "builder": "relatorio.builder_pod",
