@@ -1,0 +1,38 @@
+{
+  "botica": {
+    "nome": "Botica Ouro Preto",
+    "ativo": true,
+    "plataformas": {
+      "meta_ads": {
+        "ativo": true,
+        "meta_account_id": null,
+        "meta_token_env": "META_ACCESS_TOKEN",
+        "loader": "meta_ads.loader",
+        "loader_fn": "carregar_meta",
+        "loader_params": {
+          "dias": 8
+        },
+        "tabela_db": "botica_meta_ads_diario"
+      },
+      "shopify": {
+        "ativo": true,
+        "store_env": "SHOPIFY_BOTICA_STORE",
+        "token_env": "SHOPIFY_BOTICA_TOKEN",
+        "loader": "shopify.sync",
+        "loader_fn": "carregar_shopify",
+        "loader_params": {
+          "dias": 8,
+          "cliente_key": "botica"
+        },
+        "tabela_db": "botica_shopify_diario"
+      }
+    },
+    "notion_key": "botica",
+    "slack_emoji": "🌿",
+    "slack_label": "Botica Ouro Preto",
+    "schedules": {
+      "semanal": "0 8 * * 1",
+      "mensal": "0 8 1 * *"
+    }
+  }
+}

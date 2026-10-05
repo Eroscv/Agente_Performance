@@ -51,8 +51,9 @@ def _tabela_vazia(cliente_key: str = "source_of") -> bool:
 
 
 CLIENTES_SHOPIFY = [
-    {"key": "source_of",   "token_env": "SHOPIFY_TOKEN",     "full_inicio": date(2023, 1, 1)},
-    {"key": "pod_kombucha", "token_env": "SHOPIFY_POD_TOKEN", "full_inicio": date(2024, 1, 1)},
+    {"key": "source_of",   "token_env": "SHOPIFY_TOKEN",       "full_inicio": date(2023, 1, 1)},
+    {"key": "pod_kombucha", "token_env": "SHOPIFY_POD_TOKEN",  "full_inicio": date(2024, 1, 1)},
+    {"key": "botica",      "token_env": "SHOPIFY_BOTICA_TOKEN", "full_inicio": date(2024, 1, 1)},
 ]
 
 
