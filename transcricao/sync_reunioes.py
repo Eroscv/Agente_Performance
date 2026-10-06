@@ -75,18 +75,31 @@ def get_drive_service():
     return build("drive", "v3", credentials=creds)
 
 
+MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+MIME_GDOC = "application/vnd.google-apps.document"
+
+
 def listar_docx(service) -> list[dict]:
-    """Lista todos os .docx acessíveis pela conta de serviço."""
+    """Lista .docx e Google Docs acessíveis pela conta de serviço."""
     results = service.files().list(
         pageSize=100,
-        q="mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document'",
+        q=(
+            f"(mimeType='{MIME_DOCX}' or mimeType='{MIME_GDOC}')"
+            " and trashed=false"
+        ),
         fields="files(id, name, mimeType, modifiedTime, parents)",
+        orderBy="modifiedTime desc",
     ).execute()
     return results.get("files", [])
 
 
-def baixar_docx(service, file_id: str) -> bytes:
-    """Baixa o conteúdo binário de um arquivo do Drive."""
+def baixar_docx(service, file_id: str, mime_type: str = MIME_DOCX) -> bytes:
+    """Baixa conteúdo binário. Google Docs são exportados como .docx."""
+    if mime_type == MIME_GDOC:
+        return service.files().export_media(
+            fileId=file_id,
+            mimeType=MIME_DOCX,
+        ).execute()
     return service.files().get_media(fileId=file_id).execute()
 
 
@@ -400,7 +413,7 @@ def main():
         logger.info(f"  📥 Processando: {nome}")
 
         try:
-            conteudo = baixar_docx(service, file_id)
+            conteudo = baixar_docx(service, file_id, arq.get("mimeType", MIME_DOCX))
             texto    = extrair_texto(conteudo)
             dados    = parsear_reuniao(texto, nome)
             salvar_reuniao(conn, dados, nome, file_id)
