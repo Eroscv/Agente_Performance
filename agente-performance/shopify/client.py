@@ -159,11 +159,16 @@ def get_client_for(cliente_key: str):
             BATCH = 250
             for i in range(0, len(customer_ids), BATCH):
                 batch = customer_ids[i:i + BATCH]
-                for cid in batch:
-                    try:
-                        r = self._get(f"customers/{cid}/orders/count.json", {"status": "any"})
-                        result[cid] = r.json().get("count", 1)
-                    except Exception:
+                ids_str = ",".join(str(c) for c in batch)
+                try:
+                    r = self._get(
+                        "customers.json",
+                        {"ids": ids_str, "fields": "id,orders_count", "limit": BATCH},
+                    )
+                    for c in r.json().get("customers", []):
+                        result[int(c["id"])] = int(c.get("orders_count") or 1)
+                except Exception:
+                    for cid in batch:
                         result[cid] = 1
             return result
 

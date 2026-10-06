@@ -192,6 +192,16 @@ def create_views() -> None:
                     FROM `{project}.{dataset}.ads_diario`
                     GROUP BY 1, 2
                 ),
+                shopify_dedup AS (
+                    -- Deduplica: mantém apenas a linha mais recente por (cliente, data)
+                    SELECT * EXCEPT(rn)
+                    FROM (
+                        SELECT *,
+                            ROW_NUMBER() OVER (PARTITION BY cliente, data ORDER BY criado_em DESC) AS rn
+                        FROM `{project}.{dataset}.shopify_diario`
+                    )
+                    WHERE rn = 1
+                ),
                 shopify_mes AS (
                     SELECT
                         cliente,
@@ -203,7 +213,7 @@ def create_views() -> None:
                         ROUND(AVG(ticket_medio), 2)                                       AS ticket_medio,
                         ROUND(SUM(total_desconto), 2)                                     AS total_desconto,
                         SUM(pedidos_acima_300)                                            AS pedidos_acima_300
-                    FROM `{project}.{dataset}.shopify_diario`
+                    FROM shopify_dedup
                     GROUP BY 1, 2
                 ),
                 base AS (
