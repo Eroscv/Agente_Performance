@@ -12,4 +12,6 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Iniciando análise de sentimento..." >> "$L
 "$VENV" "$DIR/analisador_reunioes.py" >> "$LOG" 2>&1
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Iniciando gestão de tickets..." >> "$LOG"
 "$VENV" "$DIR/gestor_alertas.py" --processar >> "$LOG" 2>&1
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Gestão de tickets finalizada." >> "$LOG"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Salvando métricas SLA..." >> "$LOG"
+"$VENV" "$DIR/metricas_alertas.py" --bq >> "$LOG" 2>&1
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Métricas finalizadas." >> "$LOG"
