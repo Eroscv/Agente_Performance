@@ -34,12 +34,23 @@ try:
 except ImportError:
     _MONGO_AVAILABLE = False
 
+try:
+    from google.cloud import bigquery as bq
+    _BQ_AVAILABLE = True
+except ImportError:
+    _BQ_AVAILABLE = False
+
 # ── Configuração ──────────────────────────────────────────────────────────────
 
 BASE_DIR   = Path(__file__).parent
 CREDS_FILE = BASE_DIR / "credentials" / "gdrive-service-account.json"
 DB_PATH    = BASE_DIR / "db" / "reunioes.db"
 SCOPES     = ["https://www.googleapis.com/auth/drive"]
+
+BQ_PROJECT  = os.getenv("BQ_PROJECT",  "transcricao-510015")
+BQ_DATASET  = os.getenv("BQ_DATASET",  "transcricao")
+BQ_TABLE    = os.getenv("BQ_TABLE",    "transcricao")
+BQ_CREDS    = os.getenv("BQ_CREDS",    str(BASE_DIR / "credentials" / "gdrive-service-account.json"))
 
 MONGO_URI  = os.getenv(
     "MONGODB_URI",
@@ -271,6 +282,93 @@ def salvar_mongo(dados: dict, nome_arquivo: str, file_id: str) -> bool:
         return False
 
 
+# ── BigQuery ─────────────────────────────────────────────────────────────────
+
+_bq_client = None
+
+BQ_SCHEMA = [
+    bq.SchemaField("fonte_id",        "STRING",    mode="REQUIRED") if _BQ_AVAILABLE else None,
+    bq.SchemaField("data",            "DATE",      mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("hora",            "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("titulo",          "STRING",    mode="REQUIRED") if _BQ_AVAILABLE else None,
+    bq.SchemaField("participantes",   "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("resumo",          "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("decisoes",        "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("proximas_etapas", "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("detalhes",        "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("fonte_arquivo",   "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("criado_em",       "TIMESTAMP", mode="NULLABLE") if _BQ_AVAILABLE else None,
+] if _BQ_AVAILABLE else []
+
+
+def get_bq_table():
+    """Retorna referência à tabela BQ, criando dataset e tabela se necessário."""
+    global _bq_client
+    if not _BQ_AVAILABLE:
+        return None
+    try:
+        if _bq_client is None:
+            if os.path.exists(BQ_CREDS):
+                from google.oauth2 import service_account as _sa
+                _creds = _sa.Credentials.from_service_account_file(
+                    BQ_CREDS,
+                    scopes=["https://www.googleapis.com/auth/bigquery"],
+                )
+                _bq_client = bq.Client(project=BQ_PROJECT, credentials=_creds)
+            else:
+                _bq_client = bq.Client(project=BQ_PROJECT)  # ADC fallback
+        dataset_ref = _bq_client.dataset(BQ_DATASET)
+        # Cria dataset se não existir
+        try:
+            _bq_client.get_dataset(dataset_ref)
+        except Exception:
+            ds = bq.Dataset(dataset_ref)
+            ds.location = "US"
+            _bq_client.create_dataset(ds)
+            logger.info("[BigQuery] Dataset '%s' criado.", BQ_DATASET)
+        # Cria tabela se não existir
+        table_ref = dataset_ref.table(BQ_TABLE)
+        try:
+            return _bq_client.get_table(table_ref)
+        except Exception:
+            table = bq.Table(table_ref, schema=BQ_SCHEMA)
+            _bq_client.create_table(table)
+            logger.info("[BigQuery] Tabela '%s.%s' criada.", BQ_DATASET, BQ_TABLE)
+            return _bq_client.get_table(table_ref)
+    except Exception as e:
+        logger.warning("[BigQuery] Falha ao obter tabela: %s", e)
+        return None
+
+
+def salvar_bigquery(dados: dict, nome_arquivo: str, file_id: str) -> bool:
+    """Insere reunião no BigQuery via streaming insert. Retorna True se sucesso."""
+    table = get_bq_table()
+    if table is None:
+        return False
+    try:
+        row = {
+            "fonte_id":        file_id,
+            "data":            dados.get("data") or None,
+            "hora":            dados.get("hora") or None,
+            "titulo":          dados.get("titulo", ""),
+            "participantes":   dados.get("participantes") or None,
+            "resumo":          dados.get("resumo") or None,
+            "decisoes":        dados.get("decisoes") or None,
+            "proximas_etapas": dados.get("proximas_etapas") or None,
+            "detalhes":        dados.get("detalhes") or None,
+            "fonte_arquivo":   nome_arquivo,
+            "criado_em":       datetime.now(timezone.utc).isoformat(),
+        }
+        errors = _bq_client.insert_rows_json(table, [row], row_ids=[file_id])
+        if errors:
+            logger.warning("[BigQuery] Erros ao inserir '%s': %s", file_id, errors)
+            return False
+        return True
+    except Exception as e:
+        logger.warning("[BigQuery] Exceção ao inserir '%s': %s", file_id, e)
+        return False
+
+
 # ── Ponto de entrada ──────────────────────────────────────────────────────────
 
 def main():
@@ -311,7 +409,11 @@ def main():
             mongo_ok = salvar_mongo(dados, nome, file_id)
             mongo_status = "✅ Mongo" if mongo_ok else "⚡ Mongo já existia"
 
-            logger.info(f"  ✅ SQLite | {mongo_status} | {dados['titulo']} | {dados['data']} {dados['hora']}")
+            # Triple-write → BigQuery
+            bq_ok = salvar_bigquery(dados, nome, file_id)
+            bq_status = "✅ BQ" if bq_ok else "⚠️ BQ falhou" if _BQ_AVAILABLE else "BQ indisponível"
+
+            logger.info(f"  ✅ SQLite | {mongo_status} | {bq_status} | {dados['titulo']} | {dados['data']} {dados['hora']}")
             salvar_log(conn, file_id, nome, "ok", f"Salvo: {dados['titulo']}")
             novos += 1
 
@@ -323,6 +425,11 @@ def main():
     conn.close()
     if _mongo_client:
         _mongo_client.close()
+    if _BQ_AVAILABLE and _bq_client is not None:
+        try:
+            _bq_client.close()
+        except Exception:
+            pass
     logger.info(f"\nSync concluído — novos: {novos} | pulados: {pulados} | erros: {erros}")
 
 
