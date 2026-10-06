@@ -47,7 +47,7 @@ CREDS_FILE = BASE_DIR / "credentials" / "gdrive-service-account.json"
 DB_PATH    = BASE_DIR / "db" / "reunioes.db"
 SCOPES     = ["https://www.googleapis.com/auth/drive"]
 
-BQ_PROJECT  = os.getenv("BQ_PROJECT",  "transcricao-510015")
+BQ_PROJECT  = os.getenv("BQ_PROJECT",  "guara-db")
 BQ_DATASET  = os.getenv("BQ_DATASET",  "transcricao")
 BQ_TABLE    = os.getenv("BQ_TABLE",    "transcricao")
 BQ_CREDS    = os.getenv("BQ_CREDS",    str(BASE_DIR / "credentials" / "gdrive-service-account.json"))
