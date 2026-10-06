@@ -175,6 +175,8 @@ BQ_SCHEMA_ANALISE = [
     bq.SchemaField("clientes_mencionados", "STRING",    mode="NULLABLE"),  # JSON
     bq.SchemaField("resumo_analise",       "STRING",    mode="NULLABLE"),
     bq.SchemaField("analisado_em",         "TIMESTAMP", mode="NULLABLE"),
+    bq.SchemaField("atualizado_em",        "TIMESTAMP", mode="NULLABLE",
+                   description="Timestamp desta versão — use v_analise_reunioes para deduplicar"),
 ]
 
 
@@ -214,6 +216,7 @@ def salvar_analise_bq(reuniao, resultado: dict) -> bool:
     if table is None:
         return False
     try:
+        agora = datetime.now(timezone.utc).isoformat()
         row = {
             "fonte_id":             reuniao["fonte_id"],
             "titulo":               reuniao["titulo"],
@@ -222,9 +225,11 @@ def salvar_analise_bq(reuniao, resultado: dict) -> bool:
             "alertas":              json.dumps(resultado.get("alertas", []), ensure_ascii=False),
             "clientes_mencionados": json.dumps(resultado.get("clientes_mencionados", []), ensure_ascii=False),
             "resumo_analise":       resultado.get("resumo_analise", ""),
-            "analisado_em":         datetime.now(timezone.utc).isoformat(),
+            "analisado_em":         agora,
+            "atualizado_em":        agora,  # sempre a hora desta versão
         }
-        errors = _bq_client.insert_rows_json(table, [row], row_ids=[reuniao["fonte_id"]])
+        # Sem row_ids — append puro. Deduplicar via view v_analise_reunioes
+        errors = _bq_client.insert_rows_json(table, [row])
         if errors:
             logger.warning("[BQ] Erros ao inserir análise: %s", errors)
             return False

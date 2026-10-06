@@ -75,30 +75,93 @@ def get_drive_service():
     return build("drive", "v3", credentials=creds)
 
 
-MIME_DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-MIME_GDOC = "application/vnd.google-apps.document"
+MIME_DOCX     = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+MIME_GDOC     = "application/vnd.google-apps.document"
+MIME_SHORTCUT = "application/vnd.google-apps.shortcut"
+MIME_FOLDER   = "application/vnd.google-apps.folder"
+
+# Pasta Google Meet compartilhada
+GOOGLE_MEET_FOLDER_ID = os.getenv("GOOGLE_MEET_FOLDER_ID", "1OQ3iHb19iiAedxiB8m-nXIOTqbn7sShz")
+
+
+def _resolver_shortcut(service, file_id: str) -> dict | None:
+    """Resolve atalho para o arquivo real. Retorna metadados ou None."""
+    try:
+        meta = service.files().get(
+            fileId=file_id,
+            fields="id,name,mimeType,modifiedTime,shortcutDetails"
+        ).execute()
+        sc = meta.get("shortcutDetails", {})
+        target_id   = sc.get("targetId")
+        target_mime = sc.get("targetMimeType", "")
+        if target_id and target_mime in (MIME_GDOC, MIME_DOCX):
+            return service.files().get(
+                fileId=target_id,
+                fields="id,name,mimeType,modifiedTime"
+            ).execute()
+    except Exception as e:
+        logger.debug("[shortcut] Falha ao resolver %s: %s", file_id, e)
+    return None
+
+
+def _listar_pasta_recursivo(service, folder_id: str) -> list[dict]:
+    """Varre recursivamente a pasta e resolve atalhos."""
+    docs = []
+    page_token = None
+    while True:
+        kwargs = dict(
+            q=f"'{folder_id}' in parents and trashed=false",
+            pageSize=200,
+            fields="nextPageToken,files(id,name,mimeType,modifiedTime)",
+        )
+        if page_token:
+            kwargs["pageToken"] = page_token
+        result = service.files().list(**kwargs).execute()
+        for f in result.get("files", []):
+            mime = f["mimeType"]
+            if mime in (MIME_GDOC, MIME_DOCX):
+                docs.append(f)
+            elif mime == MIME_FOLDER:
+                docs.extend(_listar_pasta_recursivo(service, f["id"]))
+            elif mime == MIME_SHORTCUT:
+                real = _resolver_shortcut(service, f["id"])
+                if real:
+                    docs.append(real)
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
+    return docs
 
 
 def listar_docx(service) -> list[dict]:
-    """Lista .docx e Google Docs acessíveis pela conta de serviço."""
-    results = service.files().list(
-        pageSize=100,
+    """Lista todos os docs: busca global + varredura recursiva da pasta Google Meet."""
+    # 1. Busca global
+    result = service.files().list(
+        pageSize=200,
         q=(
             f"(mimeType='{MIME_DOCX}' or mimeType='{MIME_GDOC}')"
             " and trashed=false"
         ),
-        fields="files(id, name, mimeType, modifiedTime, parents)",
+        fields="files(id,name,mimeType,modifiedTime,parents)",
         orderBy="modifiedTime desc",
     ).execute()
-    return results.get("files", [])
+    todos = {f["id"]: f for f in result.get("files", [])}
+
+    # 2. Varredura recursiva (resolve atalhos)
+    for f in _listar_pasta_recursivo(service, GOOGLE_MEET_FOLDER_ID):
+        todos[f["id"]] = f
+
+    docs = list(todos.values())
+    docs.sort(key=lambda x: x.get("modifiedTime", ""), reverse=True)
+    logger.info("Docs encontrados (global + Meet recursivo): %d", len(docs))
+    return docs
 
 
 def baixar_docx(service, file_id: str, mime_type: str = MIME_DOCX) -> bytes:
-    """Baixa conteúdo binário. Google Docs são exportados como .docx."""
+    """Baixa conteúdo. Google Docs são exportados como .docx."""
     if mime_type == MIME_GDOC:
         return service.files().export_media(
-            fileId=file_id,
-            mimeType=MIME_DOCX,
+            fileId=file_id, mimeType=MIME_DOCX,
         ).execute()
     return service.files().get_media(fileId=file_id).execute()
 
@@ -311,6 +374,8 @@ BQ_SCHEMA = [
     bq.SchemaField("detalhes",        "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
     bq.SchemaField("fonte_arquivo",   "STRING",    mode="NULLABLE") if _BQ_AVAILABLE else None,
     bq.SchemaField("criado_em",       "TIMESTAMP", mode="NULLABLE") if _BQ_AVAILABLE else None,
+    bq.SchemaField("atualizado_em",   "TIMESTAMP", mode="NULLABLE",
+                   description="Timestamp da última versão — use para deduplicar via v_transcricao") if _BQ_AVAILABLE else None,
 ] if _BQ_AVAILABLE else []
 
 
@@ -359,6 +424,7 @@ def salvar_bigquery(dados: dict, nome_arquivo: str, file_id: str) -> bool:
     if table is None:
         return False
     try:
+        agora = datetime.now(timezone.utc).isoformat()
         row = {
             "fonte_id":        file_id,
             "data":            dados.get("data") or None,
@@ -370,9 +436,11 @@ def salvar_bigquery(dados: dict, nome_arquivo: str, file_id: str) -> bool:
             "proximas_etapas": dados.get("proximas_etapas") or None,
             "detalhes":        dados.get("detalhes") or None,
             "fonte_arquivo":   nome_arquivo,
-            "criado_em":       datetime.now(timezone.utc).isoformat(),
+            "criado_em":       agora,
+            "atualizado_em":   agora,  # sempre a hora desta versão
         }
-        errors = _bq_client.insert_rows_json(table, [row], row_ids=[file_id])
+        # Sem row_ids — append puro. Deduplicar via view v_transcricao
+        errors = _bq_client.insert_rows_json(table, [row])
         if errors:
             logger.warning("[BigQuery] Erros ao inserir '%s': %s", file_id, errors)
             return False
