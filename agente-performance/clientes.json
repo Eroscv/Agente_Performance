@@ -55,9 +55,9 @@
       "ativo": true,
       "plataformas": {
         "google_ads": {
-          "ativo": false,
-          "_comentario": "API: aguardando customer_id. Dados históricos via Sheets migrados.",
-          "gads_customer_id": null,
+          "ativo": true,
+          "_comentario": "customer_id confirmado 06/10/2026 — API respondendo normalmente",
+          "gads_customer_id": "4311260590",
           "loader": "google_ads.loader",
           "loader_fn": "carregar_gads",
           "loader_params": {
