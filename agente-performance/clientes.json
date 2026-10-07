@@ -56,8 +56,8 @@
       "plataformas": {
         "google_ads": {
           "ativo": true,
-          "_comentario": "customer_id confirmado 06/10/2026 — API respondendo normalmente",
-          "gads_customer_id": "4311260590",
+          "_comentario": "MCC 612-367-2195 inserido 07/10/2026",
+          "gads_customer_id": "6123672195",
           "loader": "google_ads.loader",
           "loader_fn": "carregar_gads",
           "loader_params": {
