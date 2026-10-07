@@ -91,7 +91,7 @@ def atualizar_prefs(
                 ini = date.fromisoformat(data_inicio)
                 fim = date.fromisoformat(data_fim)
                 delta = (fim - ini).days
-                hoje = date.today()
+                hoje = hoje_brt()
                 if data_fim == str(hoje) or data_fim == str(hoje - timedelta(days=1)):
                     if delta <= 1:
                         periodo = "hoje"
@@ -153,7 +153,7 @@ def aplicar_prefs(
         return data_inicio, data_fim
 
     from datetime import date, timedelta
-    hoje = date.today()
+    hoje = hoje_brt()
     periodo = prefs["periodo_default"]
 
     if periodo == "hoje":

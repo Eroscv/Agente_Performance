@@ -24,6 +24,7 @@ import sqlite3
 import threading
 import time
 from datetime import date, timedelta
+from agent.tz import hoje_brt
 from pathlib import Path
 from typing import Optional
 
@@ -463,7 +464,7 @@ def _verificar_cobertura_dados(
     try:
         from datetime import date as _date
         df  = _date.fromisoformat(data_fim)
-        hoje = _date.today()
+        hoje = _hoje_brt()
         # Só alertar para períodos recentes (dentro dos últimos 7 dias)
         if (hoje - df).days > 7:
             return None
@@ -544,7 +545,7 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
 
     Fallback: regex simples se Claude falhar em todas as tentativas.
     """
-    hoje = date.today().isoformat()
+    hoje = hoje_brt().isoformat()
 
     # Normaliza sinônimos (enriquece com datas calculadas)
     pergunta_enriquecida = normalizar_pergunta(pergunta)

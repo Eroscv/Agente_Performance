@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
+from agent.tz import hoje_brt
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ class BaseRelatorioAgent:
             if tipo == "diario":
                 data_str = (
                     data_fim.isoformat() if data_fim
-                    else kwargs.get("data") or (date.today() - timedelta(days=1)).isoformat()
+                    else kwargs.get("data") or (hoje_brt() - timedelta(days=1)).isoformat()
                 )
                 return self.gerar_diario(
                     data=data_str,

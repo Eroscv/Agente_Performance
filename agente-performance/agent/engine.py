@@ -49,6 +49,7 @@ from agent.registry import (
 
 import re
 from datetime import date, timedelta
+from agent.tz import hoje_brt
 
 def _detect_intent(text: str) -> str:
     import unicodedata as _ud
@@ -236,7 +237,7 @@ def _aviso_delay_dados(
     Retorna uma string de aviso ou None se tudo estiver OK.
     """
     from datetime import date as _date
-    hoje = _date.today().isoformat()
+    hoje = _hoje_brt().isoformat()
     data_ref = data_fim or data_inicio
     if not data_ref or data_ref < hoje:
         return None  # não pediu hoje — sem aviso

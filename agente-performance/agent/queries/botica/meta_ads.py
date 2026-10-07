@@ -75,7 +75,7 @@ def campanhas_ativas(
     """Retorna campanhas com gasto nos últimos N dias."""
     from datetime import date, timedelta
     from db.connections import query_fed
-    data_inicio = str(date.today() - timedelta(days=janela_dias))
+    data_inicio = str(hoje_brt() - timedelta(days=janela_dias))
     rows = query_fed(
         "SELECT DISTINCT campanha FROM botica_meta.botica_meta_ads_diario "
         f"WHERE data >= '{data_inicio}' AND investimento > 0 ORDER BY campanha",

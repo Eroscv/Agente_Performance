@@ -253,7 +253,7 @@ def historico_mensal(
     import calendar as _cal
     from datetime import date as _date
 
-    hoje = _date.today()
+    hoje = _hoje_brt()
     resultado = []
 
     for i in range(meses - 1, -1, -1):
@@ -444,7 +444,7 @@ def projecao_fechamento_mes(
     from datetime import date, timedelta
     import calendar
 
-    hoje = date.today()
+    hoje = hoje_brt()
     primeiro_dia = hoje.replace(day=1)
     ultimo_dia_mes = hoje.replace(day=calendar.monthrange(hoje.year, hoje.month)[1])
     dias_mes = ultimo_dia_mes.day

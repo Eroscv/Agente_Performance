@@ -22,6 +22,7 @@ import json
 import logging
 import sqlite3
 from datetime import datetime, timedelta
+from agent.tz import agora_brt
 from pathlib import Path
 from typing import Optional
 
@@ -110,7 +111,7 @@ def get_history(thread_ts: str) -> list[dict]:
 
     # Verifica TTL
     updated = datetime.fromisoformat(row["updated_at"])
-    if datetime.utcnow() - updated > timedelta(hours=TTL_HOURS):
+    if agora_brt() - updated > timedelta(hours=TTL_HOURS):
         delete_history(thread_ts)
         return []
 
@@ -136,7 +137,7 @@ def append_history(thread_ts: str, channel: str, role: str, text: str, meta: dic
             "role": role,
             "text": text,
             "meta": meta or {},
-            "ts":   datetime.utcnow().isoformat(),
+            "ts":   agora_brt().isoformat(),
         })
 
         if len(history) > HISTORY_LIMIT:
@@ -148,7 +149,7 @@ def append_history(thread_ts: str, channel: str, role: str, text: str, meta: dic
             ON CONFLICT(thread_ts) DO UPDATE SET
                 history    = excluded.history,
                 updated_at = excluded.updated_at
-        """, (thread_ts, channel, json.dumps(history, ensure_ascii=False), datetime.utcnow().isoformat()))
+        """, (thread_ts, channel, json.dumps(history, ensure_ascii=False), agora_brt().isoformat()))
         conn.commit()
     except Exception as e:
         logger.warning("[context_store] Falha ao salvar em context.db: %s", e)
@@ -188,7 +189,7 @@ def cleanup_expired():
     # Legado context.db
     try:
         conn     = _get_conn()
-        cutoff   = (datetime.utcnow() - timedelta(hours=TTL_HOURS)).isoformat()
+        cutoff   = (agora_brt() - timedelta(hours=TTL_HOURS)).isoformat()
         deleted  = conn.execute(
             "DELETE FROM thread_context WHERE updated_at < ?", (cutoff,)
         ).rowcount

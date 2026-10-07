@@ -15,6 +15,7 @@ Tipos de comparativo disponíveis:
 """
 import logging
 from datetime import date, timedelta
+from agent.tz import hoje_brt
 from typing import Optional
 
 from db.connections import query_fed as query, query_fed_one as query_one
@@ -218,7 +219,7 @@ def comparar_semana_a_semana(
     """
     Retorna últimas N semanas com variação WoW (week over week).
     """
-    hoje  = date.today()
+    hoje  = hoje_brt()
     filtro_camp  = "AND campanha = ?" if campanha else ""
     resultado    = []
     semana_ant   = None
@@ -277,7 +278,7 @@ def comparar_mes_a_mes(
     """
     import calendar as cal
 
-    hoje         = date.today()
+    hoje         = hoje_brt()
     filtro_camp  = "AND campanha = ?" if campanha else ""
     resultado    = []
     mes_ant      = None

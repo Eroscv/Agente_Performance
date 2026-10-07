@@ -14,6 +14,7 @@ v2:
 
 import calendar
 from datetime import date, timedelta
+from agent.tz import hoje_brt
 
 # Sinônimos de métricas → nome canônico
 METRIC_SYNONYMS: dict[str, str] = {
@@ -105,7 +106,7 @@ def _build_period_synonyms() -> dict[str, str]:
     - "semana passada" → segunda a domingo da semana anterior
     - Trimestres calculados com base no trimestre atual
     """
-    hoje = date.today()
+    hoje = hoje_brt()
     ano  = hoje.year
 
     # ── Relativos ─────────────────────────────────────────────────────────────

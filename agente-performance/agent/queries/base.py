@@ -246,7 +246,7 @@ def verificar_gap_dados(cliente_key: Optional[str] = None, plataforma: Optional[
 
     try:
         ultimo_dt = date.fromisoformat(str(ultimo)[:10])
-        hoje = date.today()
+        hoje = hoje_brt()
         ontem = hoje - timedelta(days=1)
         dias_atrasado = (ontem - ultimo_dt).days
 
@@ -412,7 +412,7 @@ def aviso_janela_atribuicao(
     from datetime import date as _date
     try:
         dt_fim = _date.fromisoformat(data_fim)
-        hoje   = _date.today()
+        hoje   = _hoje_brt()
         dias_atras = (hoje - dt_fim).days
 
         plats = [plataforma] if plataforma else list(_JANELA_ATRIBUICAO.keys())
