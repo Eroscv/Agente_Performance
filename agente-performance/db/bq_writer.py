@@ -42,7 +42,14 @@ def _client():
 
 
 def _insert(table_id: str, rows: list[dict], desc: str) -> int:
-    """Insere linhas no BQ. Retorna número de erros."""
+    """
+    Faz MERGE (upsert) no BQ usando uma tabela temporária.
+    Garante que não há duplicatas na tabela destino.
+    
+    Para ads_diario: chave única = (cliente, plataforma, data, campaign_id, adset_id, ad_id)
+    Para shopify_diario: chave única = (cliente, data)
+    Retorna número de erros.
+    """
     if not rows or not enabled():
         return 0
     try:
@@ -50,17 +57,71 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
         bq = _client()
         project = os.environ.get("BQ_PROJECT", bq.project)
         dataset = os.environ.get("BQ_DATASET", "guara_performance")
-        table = bq.get_table(f"{project}.{dataset}.{table_id}")
+        full_table = f"{project}.{dataset}.{table_id}"
+
+        # Chaves de merge por tabela
+        merge_keys = {
+            "ads_diario":     ["cliente", "plataforma", "data", "campaign_id", "adset_id", "ad_id"],
+            "shopify_diario": ["cliente", "data"],
+        }
+        keys = merge_keys.get(table_id, [])
+
+        if not keys:
+            # fallback: insert simples para tabelas sem chave definida
+            table = bq.get_table(full_table)
+            errors = []
+            for i in range(0, len(rows), 500):
+                errs = bq.insert_rows_json(table, rows[i:i+500])
+                errors.extend(errs)
+            if errors:
+                logger.warning("[BQ] %s — %d erros: %s", desc, len(errors), errors[:1])
+            else:
+                logger.info("[BQ] ✅ %s — %d linhas inseridas", desc, len(rows))
+            return len(errors)
+
+        # MERGE via tabela temporária
+        tmp_table = f"{project}.{dataset}._{table_id}_tmp_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
+        schema = bq.get_table(full_table).schema
+
+        # Cria tabela temporária com TTL de 1 dia
+        tmp_ref = bigquery.Table(tmp_table, schema=schema)
+        tmp_ref.expires = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0).replace(
+            day=datetime.now(timezone.utc).day + 1
+        )
+        bq.create_table(tmp_ref, exists_ok=True)
+
+        # Insere na temp
         errors = []
         for i in range(0, len(rows), 500):
-            batch = rows[i:i+500]
-            errs = bq.insert_rows_json(table, batch)
+            errs = bq.insert_rows_json(bq.get_table(tmp_table), rows[i:i+500])
             errors.extend(errs)
         if errors:
-            logger.warning("[BQ] %s — %d erros: %s", desc, len(errors), errors[:1])
-        else:
-            logger.info("[BQ] ✅ %s — %d linhas espelhadas", desc, len(rows))
-        return len(errors)
+            logger.warning("[BQ] %s — erro ao popular temp: %s", desc, errors[:1])
+            bq.delete_table(tmp_table, not_found_ok=True)
+            return len(errors)
+
+        # MERGE: atualiza se existe, insere se não existe
+        on_clause = " AND ".join(f"T.{k} = S.{k}" for k in keys)
+        all_cols = [f.name for f in schema]
+        update_cols = [c for c in all_cols if c not in keys]
+        update_clause = ", ".join(f"T.{c} = S.{c}" for c in update_cols)
+        insert_cols = ", ".join(all_cols)
+        insert_vals = ", ".join(f"S.{c}" for c in all_cols)
+
+        merge_sql = f"""
+        MERGE `{full_table}` T
+        USING `{tmp_table}` S
+        ON {on_clause}
+        WHEN MATCHED AND S.criado_em > T.criado_em THEN
+          UPDATE SET {update_clause}
+        WHEN NOT MATCHED THEN
+          INSERT ({insert_cols}) VALUES ({insert_vals})
+        """
+        bq.query(merge_sql).result()
+        bq.delete_table(tmp_table, not_found_ok=True)
+
+        logger.info("[BQ] ✅ %s — MERGE %d linhas OK", desc, len(rows))
+        return 0
     except Exception as exc:
         logger.warning("[BQ] %s — falha silenciosa: %s", desc, exc)
         return -1

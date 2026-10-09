@@ -183,7 +183,30 @@ def _normalizar(row: dict) -> dict:
 
 def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
                             token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
-    """Busca insights para um período específico (máx 30 dias recomendado)."""
+    """Busca insights para um período específico.
+    
+    Ranges > 30 dias são automaticamente quebrados em lotes de 30 dias
+    para evitar HTTP 500 da Meta API.
+    """
+    # Guarda contra ranges longos: Meta retorna 500 com >30 dias + level=ad + time_increment=1
+    MAX_RANGE_DIAS = 30
+    total_dias = (date_end - date_start).days + 1
+    if total_dias > MAX_RANGE_DIAS:
+        logger.warning(
+            "[%s] Range de %d dias excede limite (%d). Quebrando em lotes.",
+            account_id, total_dias, MAX_RANGE_DIAS
+        )
+        all_rows: list[dict] = []
+        cursor = date_start
+        while cursor <= date_end:
+            lote_fim = min(cursor + timedelta(days=MAX_RANGE_DIAS - 1), date_end)
+            rows = buscar_insights_periodo(account_id, cursor, lote_fim, token_env=token_env)
+            all_rows.extend(rows)
+            cursor = lote_fim + timedelta(days=1)
+            if cursor <= date_end:
+                time.sleep(0.5)
+        return all_rows
+
     token = _get_token(token_env)
 
     logger.info("[%s] Buscando %s → %s", account_id, date_start, date_end)
