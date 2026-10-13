@@ -60,11 +60,21 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
         full_table = f"{project}.{dataset}.{table_id}"
 
         # Chaves de merge por tabela
-        merge_keys = {
-            "ads_diario":     ["cliente", "plataforma", "data", "campaign_id", "adset_id", "ad_id"],
-            "shopify_diario": ["cliente", "data"],
-        }
-        keys = merge_keys.get(table_id, [])
+        # Para ads_diario, a chave varia por plataforma:
+        #   meta   → chave completa com ad_id (anúncio)
+        #   google → apenas até campaign_id (Google Ads é por campanha, sem ad_id)
+        if table_id == "ads_diario":
+            # Detecta plataforma pelo primeiro row
+            plataforma_rows = (rows[0].get("plataforma") or "") if rows else ""
+            if plataforma_rows == "google":
+                keys = ["cliente", "plataforma", "data", "campaign_id"]
+            else:
+                keys = ["cliente", "plataforma", "data", "campaign_id", "adset_id", "ad_id"]
+        else:
+            merge_keys = {
+                "shopify_diario": ["cliente", "data"],
+            }
+            keys = merge_keys.get(table_id, [])
 
         if not keys:
             # fallback: insert simples para tabelas sem chave definida
@@ -101,7 +111,8 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
             return len(errors)
 
         # MERGE: atualiza se existe, insere se não existe
-        on_clause = " AND ".join(f"T.{k} = S.{k}" for k in keys)
+        # Usa (T.k IS NOT DISTINCT FROM S.k) para lidar corretamente com NULLs
+        on_clause = " AND ".join(f"(T.{k} IS NOT DISTINCT FROM S.{k})" for k in keys)
         all_cols = [f.name for f in schema]
         update_cols = [c for c in all_cols if c not in keys]
         update_clause = ", ".join(f"T.{c} = S.{c}" for c in update_cols)
