@@ -947,13 +947,244 @@ for row in affected:
 
 ---
 
+## 🗂️ Incidente 3 — Campanhas Source OF gravadas como POD Kombucha (13/10/2026)
+
+### O que aconteceu
+
+5 campanhas da conta **Source OF** (`customer_id=4311260590`) estavam sendo gravadas na tabela `pod_kombucha_gads_diario` e espelhadas no BigQuery como `cliente='pod_kombucha'`.
+
+**Campanhas afetadas:**
+
+| campaign_id | Campanha | Conta real |
+|---|---|---|
+| 21877133703 | PMax Geral | Source OF (4311260590) |
+| 23745716805 | [SEARCH] Hidratante Corporal Pele Ressecada | Source OF (4311260590) |
+| 23314457019 | [SEARCH] Branded | Source OF (4311260590) |
+| 23096632725 | [Guará] Shopping - Branded | Source OF (4311260590) |
+| 24242405738 | [Guara] Shopping - Gel Creme Facial | Source OF (4311260590) |
+
+**Impacto:** R$ 1.348 a mais no Google Ads da POD na semana. Total acumulado: **264 linhas** entre 07/08/2026 e 06/10/2026.
+
+---
+
+### O que eu fiz
+
+1. **Diagnostiquei** de qual conta as campanhas vinham (confirmado via API: todas pertencem à `4311260590` / Source OF — inexistentes na conta `6123672195` / POD)
+2. **Limpei** as 264 linhas errôneas do SQLite (`pod_kombucha_gads_diario`) e do BigQuery (`ads_diario` onde `cliente='pod_kombucha'`)
+3. **Corrigi** o loader para nunca mais aceitar campanhas de contas diferentes da solicitada:
+   - Adicionei `customer.id` ao SELECT da GAQL
+   - Adicionei guarda que rejeita e loga qualquer linha cuja conta não bata com o `customer_id` do sync
+
+---
+
+### Como eu fiz
+
+#### Diagnóstico — rastrear a origem das campanhas
+
+**Passo 1 — Identificar as campanhas suspeitas no BQ:**
+```sql
+SELECT cliente, campanha, campaign_id, data,
+  ROUND(SUM(CAST(investimento AS FLOAT64)), 2) AS investimento
+FROM `guara-db.guara_performance.ads_diario`
+WHERE cliente = 'pod_kombucha'
+  AND plataforma = 'google'
+  AND data >= DATE_SUB(CURRENT_DATE(), INTERVAL 14 DAY)
+GROUP BY cliente, campanha, campaign_id, data
+ORDER BY data DESC, campanha;
+-- Resultado: campanhas sem prefixo [POD] com campaign_ids nunca vistos antes
+```
+
+**Passo 2 — Confirmar a origem via Google Ads API:**
+```python
+# Buscar as campanhas suspeitas diretamente nas duas contas
+for customer_id in ["6123672195", "4311260590"]:
+    query = """
+        SELECT campaign.id, campaign.name, customer.id, customer.descriptive_name
+        FROM campaign
+        WHERE campaign.id IN (21877133703, 23745716805, 23314457019, 23096632725, 24242405738)
+    """
+    stream = service.search_stream(customer_id=customer_id, query=query)
+    # Resultado:
+    # 6123672195 (POD)     → NENHUMA encontrada
+    # 4311260590 (Source OF) → todas as 5 encontradas
+```
+
+**Resultado:** campanhas são 100% Source OF. Não existem na conta POD.
+
+#### Limpeza — SQLite e BigQuery
+
+```python
+CAMP_IDS_ERRADAS = ('21877133703','23745716805','23314457019','23096632725','24242405738')
+
+# SQLite
+conn.execute(
+    f"DELETE FROM pod_kombucha_gads_diario WHERE campaign_id IN ({','.join('?'*5)})",
+    CAMP_IDS_ERRADAS
+)
+# Removidas: 264 linhas (08/2026 → 10/2026)
+
+# BigQuery
+client.query(f"""
+    DELETE FROM `guara-db.guara_performance.ads_diario`
+    WHERE cliente = 'pod_kombucha'
+      AND plataforma = 'google'
+      AND campaign_id IN ('21877133703','23745716805','23314457019','23096632725','24242405738')
+""").result()
+# Removidas: 264 linhas ✅
+```
+
+#### Fix no loader — guarda de conta
+
+**Query GAQL — antes (sem `customer.id`):**
+```sql
+SELECT
+    campaign.id,
+    campaign.name,
+    ...
+FROM campaign
+```
+
+**Query GAQL — depois (com `customer.id`):**
+```sql
+SELECT
+    customer.id,   -- ← adicionado para verificar a conta de cada linha
+    campaign.id,
+    campaign.name,
+    ...
+FROM campaign
+```
+
+**Loop de resultados — antes:**
+```python
+for row in batch.results:
+    rows.append({"customer_id": customer_id, ...})  # confiava cegamente no param
+```
+
+**Loop de resultados — depois:**
+```python
+for row in batch.results:
+    # Guarda: rejeita campanhas de contas diferentes da solicitada
+    row_cid = str(row.customer.id) if row.customer.id else None
+    if row_cid and row_cid != str(customer_id):
+        logger.warning(
+            "[%s] campanha ignorada — pertence à conta %s, não %s: campaign_id=%s (%s)",
+            customer_id, row_cid, customer_id, c.id, c.name
+        )
+        skipped += 1
+        continue  # ← não grava, não espelha no BQ
+    rows.append({"customer_id": customer_id, ...})
+```
+
+#### Diagrama — Fluxo antes e depois da guarda
+
+```
+                ANTES (sem guarda)
+
+MCC 2208127533
+    │
+    ├─► Conta POD     (6123672195) ─── campanhas [POD]...  ─┐
+    │                                                        ├──► tudo gravado como pod_kombucha ❌
+    └─► Conta Source  (4311260590) ─── PMax Geral, etc.   ──┘
+
+
+                DEPOIS (com guarda)
+
+MCC 2208127533
+    │
+    └─► sync_gads_diario --cliente pod_kombucha
+              │
+              │  customer_id solicitado = 6123672195
+              │
+              ▼
+         Google Ads API retorna:
+              │
+    ┌─────────┴──────────────────────┐
+    │                                │
+row.customer.id = 6123672195     row.customer.id = 4311260590
+    │                                │
+    ▼                                ▼
+ ✅ ACEITA                     ❌ IGNORADA + WARNING no log
+ gravada como pod_kombucha       "campanha ignorada — pertence
+                                  à conta 4311260590, não 6123672195"
+```
+
+---
+
+### Por que fiz desse jeito
+
+**Por que verificar `row.customer.id` em vez de filtrar na query GAQL?**
+
+A alternativa seria adicionar `AND customer.id = '6123672195'` no WHERE da GAQL. O problema: em contas MCC com hierarquia complexa, esse filtro pode silenciosamente remover dados válidos se a API retornar um `customer.id` de subconta diferente do esperado.
+
+A guarda no loop é mais defensiva: aceita tudo que vem da conta certa, rejeita e **loga** o que vem errado — em vez de simplesmente não retornar nada (o que dificultaria o diagnóstico).
+
+**Por que `skipped` no log:**
+O log `"[%s] %d linhas retornadas (ignoradas de outras contas: %d)"` permite detectar rapidamente se o problema está acontecendo em produção sem precisar consultar o banco.
+
+**Por que não adicionar um filtro whitelist por `campaign_id` no SQLite:**
+Whitelist seria frágil — precisaria ser atualizada toda vez que uma nova campanha fosse criada. A guarda por `customer.id` é estrutural: funciona independente de quantas campanhas existam em cada conta.
+
+---
+
+### Consequências: custo, crescimento e monitoramento
+
+#### Custo do incidente
+
+| Item | Valor |
+|---|---|
+| Linhas errôneas gravadas no BQ | 264 (08/08 → 06/10/2026, ~2 meses) |
+| Bytes processados na limpeza BQ | ~132 KB (DELETE por partição) |
+| Custo do DELETE no BQ | R$ 0,00 (abaixo do free tier) |
+| Impacto no dashboard | R$ 1.348 a mais no Google Ads POD na semana |
+
+#### Custo futuro com a guarda ativa
+
+A guarda adiciona apenas uma comparação de string por linha de resultado da API — custo computacional negligenciável. O warning no log usa ~100 bytes por ocorrência ignorada. Em operação normal (zero campanhas erradas): impacto zero.
+
+#### O que precisa ser acompanhado
+
+**🔴 Verificar semanalmente — warnings de conta no log:**
+
+```bash
+journalctl -u agente-guara.service --since "7 days ago" \
+  | grep "campanha ignorada"
+# Resultado esperado: nenhuma linha
+# Se aparecer: ver qual campaign_id e de qual conta — pode indicar
+# mudança de estrutura do MCC ou erro de configuração do customer_id
+```
+
+**🟡 Verificar mensalmente — campanhas sem prefixo [POD] na tabela da POD:**
+
+```sql
+-- Campanhas no Google Ads da POD sem o padrão de nomenclatura esperado
+SELECT DISTINCT campanha, campaign_id, COUNT(DISTINCT data) AS dias
+FROM `guara-db.guara_performance.ads_diario`
+WHERE cliente = 'pod_kombucha'
+  AND plataforma = 'google'
+  AND campanha NOT LIKE '%[POD%'
+  AND campanha NOT LIKE '%[SEARCH][PODDI%'
+GROUP BY campanha, campaign_id
+ORDER BY campanha;
+-- Resultado esperado: 0 linhas
+-- Se aparecer: verificar se são campanhas legítimas novas (renomeadas)
+-- ou campanha de outra conta escapando pela guarda
+```
+
+**🟢 A cada novo cliente Google Ads adicionado:**
+- Confirmar que `gads_customer_id` em `clientes.json` é o ID direto da conta, não o MCC
+- Fazer um sync de dry-run e checar o log por warnings de `"campanha ignorada"`
+
+---
+
 ## Arquivos relacionados
 
 | Arquivo | Descrição |
 |---|---|
 | `db/bq_writer.py` | Módulo corrigido — função `_insert()` com MERGE e chave dinâmica |
+| `google_ads/loader.py` | Loader corrigido — guarda por `customer.id` + `customer.id` na GAQL |
 | `alteracoes/2026-10-09_bigquery-deduplicacao.md` | Registro do primeiro incidente e fix |
 | `alteracoes/2026-10-13_bigquery-dedup-fix-merge-chave-plataforma.md` | Registro do segundo fix |
+| `alteracoes/2026-10-13_gads-campanhas-source-of-gravadas-como-pod.md` | Registro do terceiro fix |
 | `docs/ARQUITETURA_DADOS.md` | Arquitetura completa dual-write + BigQuery |
 
 ---
