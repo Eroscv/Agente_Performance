@@ -1648,27 +1648,228 @@ GROUP BY cliente;
 
 ---
 
-## 🗂️ Nota: Campo `receita` do Shopify — `total_price` vs `subtotal_price`
+## 🗂️ Incidente 6 — Receita Shopify incluía frete (`total_price` → `subtotal_price`) — 13/10/2026
 
-### O que foi identificado
+### O que aconteceu
 
-Durante a investigação do incidente 5, foi confirmado que o campo `receita` na tabela `shopify_diario` usa `total_price` da API Shopify. Isso significa:
+A coluna `receita` da tabela `shopify_diario` usava `total_price` da API Shopify, que inclui o frete. O relatório usa vendas brutas menos desconto, sem frete (`subtotal_price`). A diferença era visível na Semana 41 da POD:
 
-| Campo Shopify | O que inclui | Usado aqui |
-|---|---|---|
-| `subtotal_price` | Valor dos produtos, após descontos, sem frete | ❌ Não |
-| `total_discounts` | Valor total dos descontos aplicados | ✅ Armazenado separado em `total_desconto` |
-| `total_price` | `subtotal_price` + frete | ✅ Usado como `receita` |
+| | Valor |
+|---|---|
+| Receita no BQ (com frete) | R$ 143.564,42 |
+| Receita no relatório (sem frete) | R$ 135.450,37 |
+| Diferença | R$ 8.114,05 ← frete da semana |
 
-**Confirmação em pedidos reais:**
+Pedidos e novos clientes já batiam. Apenas a receita estava ~6% acima do esperado.
+
+---
+
+### O que eu fiz
+
+1. **Confirmei a causa** buscando pedidos reais da POD via API e somando `total_price - subtotal_price`
+2. **Troquei o campo** de `total_price` para `subtotal_price` como `receita` no `shopify/sync.py`
+3. **Adicionei coluna `frete`** = `total_price - subtotal_price`, separada, em SQLite e BigQuery
+4. **Atualizei DDL, UPSERT, bq_rows** em todos os pontos do pipeline
+5. **Rodei sync retroativo 30 dias** para reprocessar o histórico com os valores corretos
+6. **Validei**: Semana 41 POD → receita = R$ 135.450 ✅, frete = R$ 8.114 ✅
+
+---
+
+### Como eu fiz
+
+#### Diagnóstico — confirmar origem da diferença
+
+```python
+# Buscar pedidos reais da POD e somar os campos
+sh = get_client_for('pod_kombucha')
+total_price_sum = subtotal_sum = frete_sum = 0
+
+for p in sh._paginar_pedidos(date(2026,10,7), date(2026,10,13)):
+    tp  = float(p.get('total_price') or 0)
+    sub = float(p.get('subtotal_price') or 0)
+    total_price_sum += tp
+    subtotal_sum    += sub
+    frete_sum       += (tp - sub)
+
+print(f"total_price:   R$ {total_price_sum:,.2f}")  # 140.553,14
+print(f"subtotal_price: R$ {subtotal_sum:,.2f}")   # 132.771,21
+print(f"frete:         R$ {frete_sum:,.2f}")        # 7.781,93
+# Confirma: diferença = frete. Diagnóstico encerrado.
 ```
-total_price=255.55 | subtotal_price=219.90 | total_discounts=0.00 | frete_implícito=35.65
-total_price=377.82 | subtotal_price=377.82 | total_discounts=41.98 | frete_implícito=0.00
+
+#### Campos da API Shopify — o que cada um significa
+
+| Campo | Definição | Antes | Depois |
+|---|---|---|---|
+| `total_price` | Subtotal + frete (valor cobrado do cliente) | ✅ usado como `receita` | ❌ |
+| `subtotal_price` | Produtos após desconto, sem frete | ❌ | ✅ usado como `receita` |
+| `total_discounts` | Desconto total aplicado | ✅ em `total_desconto` | ✅ inalterado |
+| `total_price - subtotal_price` | Frete cobrado no pedido | ❌ embutido | ✅ coluna `frete` |
+
+#### Fix em `shopify/sync.py` — coleta por pedido
+
+**Antes:**
+```python
+preco    = float(pedido.get("total_price") or 0)   # inclui frete
+desconto = float(pedido.get("total_discounts") or 0)
+receita_por_dia[criado_em] += preco
 ```
 
-**Impacto:** Uma diferença de ~R$ 8.114 entre a receita reportada aqui e o relatório que usa `subtotal_price` ou valor pago (descontando frete) é esperada e correta — é o frete acumulado dos pedidos pagos da semana. Não é erro de dados.
+**Depois:**
+```python
+total_p  = float(pedido.get("total_price") or 0)
+sub_p    = float(pedido.get("subtotal_price") or 0)
+desconto = float(pedido.get("total_discounts") or 0)
+receita  = sub_p                        # vendas brutas - desconto, sem frete
+frete    = round(total_p - sub_p, 2)   # frete isolado
 
-**Se quiser alinhar com relatório que usa subtotal:** trocar `total_price` por `subtotal_price` em `shopify/sync.py` linha 147. Impacto: receita diária cai em média ~3–7% (varia conforme taxa de frete gratis do período).
+receita_por_dia[criado_em] += receita
+frete_por_dia[criado_em]   += frete
+```
+
+#### Fix na consolidação por dia — tuple agora com 9 campos
+
+```python
+# Antes: (data, receita, pedidos, novos, recomp, ticket, desconto, p300)
+# Depois: (data, receita, frete, pedidos, novos, recomp, ticket, desconto, p300)
+rows.append((dia_str, receita, frete, pedidos, novos, recomp, ticket, desconto, p300))
+```
+
+#### Fix no DDL SQLite e UPSERT
+
+```sql
+-- DDL: coluna frete adicionada
+CREATE TABLE IF NOT EXISTS shopify_receita_diaria (
+    ...
+    receita         REAL NOT NULL DEFAULT 0,
+    frete           REAL NOT NULL DEFAULT 0,   -- NOVO
+    pedidos         INTEGER NOT NULL DEFAULT 0,
+    ...
+);
+
+-- ALTER TABLE nas bases existentes
+ALTER TABLE shopify_receita_diaria ADD COLUMN frete REAL NOT NULL DEFAULT 0;
+```
+
+#### Fix no BigQuery — 3 passos (ADD COLUMN com default não é suportado direto)
+
+```sql
+-- 1. Adicionar coluna sem default
+ALTER TABLE `guara-db.guara_performance.shopify_diario`
+ADD COLUMN frete NUMERIC;
+
+-- 2. Definir default
+ALTER TABLE `guara-db.guara_performance.shopify_diario`
+ALTER COLUMN frete SET DEFAULT 0;
+
+-- 3. Preencher linhas existentes
+UPDATE `guara-db.guara_performance.shopify_diario`
+SET frete = 0 WHERE TRUE;
+```
+
+#### Diagrama — campos Shopify e o que vai para cada coluna
+
+```
+         API Shopify (pedido individual)
+         ┌─────────────────────────────────────────────┐
+         │  total_price      = R$ 255.55               │
+         │  subtotal_price   = R$ 219.90               │
+         │  total_discounts  = R$ 0.00                 │
+         └────────────┬──────────────────┬─────────────┘
+                      │                  │
+                      ▼                  ▼
+           subtotal_price          total_price - subtotal_price
+           R$ 219.90               R$ 35.65
+                │                        │
+                ▼                        ▼
+         receita_por_dia[]        frete_por_dia[]
+                │                        │
+                ▼                        ▼
+         SQLite: receita          SQLite: frete
+         BQ: receita              BQ: frete
+
+
+         total_discounts  ──────────►  SQLite: total_desconto
+                                       BQ: total_desconto
+```
+
+#### Validação pós-sync (POD Kombucha, semana 41)
+
+```sql
+SELECT
+  FORMAT_DATE('%G-W%V', data)      AS semana,
+  SUM(CAST(receita AS FLOAT64))    AS receita_sem_frete,
+  SUM(CAST(frete AS FLOAT64))      AS frete,
+  SUM(CAST(receita AS FLOAT64)
+    + CAST(frete AS FLOAT64))      AS total_com_frete,
+  SUM(CAST(pedidos AS INTEGER))    AS pedidos
+FROM `guara-db.guara_performance.shopify_diario`
+WHERE cliente = 'pod_kombucha'
+  AND data >= '2026-09-28'
+GROUP BY semana
+ORDER BY semana DESC;
+```
+
+Resultado:
+```
+Semana    Receita (sem frete)   Frete      Total c/frete  Pedidos
+2026-W41  R$ 135.450,37         R$ 8.114   R$ 143.564     502
+```
+→ **R$ 135.450 bate exato com o relatório** ✅
+
+---
+
+### Por que fiz desse jeito
+
+**Por que `subtotal_price` e não `total_price - total_discounts`?**
+
+`subtotal_price` já é calculado pela Shopify como `(soma dos line_items) - total_discounts`. Não precisamos recalcular — a plataforma garante a consistência. Usar `total_price - total_discounts` seria impreciso porque `total_price` inclui frete, e o frete não tem desconto aplicado sobre ele.
+
+**Por que criar coluna `frete` separada em vez de só trocar o campo?**
+
+O frete é uma informação útil por si só: permite calcular ticket médio real, identificar pedidos com frete grátis, e cruzar custo de frete com margem. Perder essa informação seria um passo para trás. Separar é melhor do que embutir ou descartar.
+
+**Por que não alterar `ticket_medio` para refletir só produtos?**
+
+`ticket_medio` = `receita / pedidos` — com a troca de `total_price` para `subtotal_price`, o `ticket_medio` já passa a refletir o valor dos produtos sem frete automaticamente. Nenhuma mudança adicional necessária.
+
+**Por que os 3 passos no BQ para ADD COLUMN com default?**
+
+O BigQuery não suporta `ADD COLUMN frete NUMERIC DEFAULT 0` em tabelas existentes — exige separar em: ADD (sem default) → SET DEFAULT → UPDATE rows. É uma limitação do BQ para tabelas particionadas.
+
+---
+
+### Consequências: custo, crescimento e monitoramento
+
+#### Impacto nos dados históricos
+
+- Sync retroativo de 30 dias reprocessou ambos os clientes com os valores corretos
+- Linhas anteriores a 30 dias têm `frete = 0` (valor de preenchimento do ALTER TABLE)
+- Se precisar de histórico completo de frete: rodar `sync --full` (desde jan/2023 para Source OF)
+
+#### Queries de monitoramento
+
+**🟡 Verificar mensalmente — consistência receita vs total_price:**
+
+```sql
+-- Receita + frete deve se manter estável como proporção
+-- Frete muito alto (>15% da receita) pode indicar problema
+SELECT
+  cliente,
+  DATE_TRUNC(data, MONTH) AS mes,
+  ROUND(SUM(CAST(receita AS FLOAT64)), 2) AS receita,
+  ROUND(SUM(CAST(frete AS FLOAT64)), 2) AS frete,
+  ROUND(
+    SUM(CAST(frete AS FLOAT64))
+    / NULLIF(SUM(CAST(receita AS FLOAT64)), 0) * 100, 1
+  ) AS pct_frete
+FROM `guara-db.guara_performance.shopify_diario`
+WHERE data >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 MONTH)
+GROUP BY cliente, mes
+ORDER BY mes DESC, cliente;
+-- Esperado: pct_frete entre 3% e 10%
+-- Se > 15%: verificar se campo receita não voltou a incluir frete por acidente
+```
 
 ---
 
@@ -1676,11 +1877,11 @@ total_price=377.82 | subtotal_price=377.82 | total_discounts=41.98 | frete_impl�
 
 | Arquivo | Descrição |
 |---|---|
-| `db/bq_writer.py` | Módulo corrigido — `load_table_from_json` + MERGE sem filtro `criado_em` |
-| `google_ads/loader.py` | Loader corrigido — guarda por `customer.id` + DELETE por período |
-| `scripts/sync_gads_diario.py` | Script corrigido — `append=False` (replace por período) |
-| `shopify/sync.py` | Sync Shopify — usa `total_price` (inclui frete) |
-| `shopify/client.py` | Cliente Shopify — filtro `financial_status=paid` |
+| `db/bq_writer.py` | `load_table_from_json` + MERGE sem filtro `criado_em` + campo `frete` em `write_shopify()` |
+| `google_ads/loader.py` | Guarda por `customer.id` + DELETE por período |
+| `scripts/sync_gads_diario.py` | `append=False` (replace por período) |
+| `shopify/sync.py` | `subtotal_price` como receita + `frete` separado |
+| `shopify/client.py` | Filtro `financial_status=paid` |
 | `alteracoes/2026-10-09_bigquery-deduplicacao.md` | Registro do primeiro incidente e fix |
 | `alteracoes/2026-10-13_bigquery-dedup-fix-merge-chave-plataforma.md` | Registro do segundo fix |
 | `alteracoes/2026-10-13_gads-campanhas-source-of-gravadas-como-pod.md` | Registro do terceiro fix |
