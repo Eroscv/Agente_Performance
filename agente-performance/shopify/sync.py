@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS shopify_receita_diaria (
     ticket_medio    REAL,
     total_desconto  REAL    NOT NULL DEFAULT 0,
     pedidos_acima_300 INTEGER NOT NULL DEFAULT 0,
+    receita_criada    REAL    NOT NULL DEFAULT 0,
+    pedidos_criados   INTEGER NOT NULL DEFAULT 0,
     atualizado_em   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 """
@@ -61,8 +63,9 @@ CREATE TABLE IF NOT EXISTS shopify_receita_diaria (
 _UPSERT_SQL = """
 INSERT INTO shopify_receita_diaria
     (data, receita, frete, pedidos, novos_clientes, recompradores,
-     ticket_medio, total_desconto, pedidos_acima_300, atualizado_em)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     ticket_medio, total_desconto, pedidos_acima_300,
+     receita_criada, pedidos_criados, atualizado_em)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
 ON CONFLICT(data) DO UPDATE SET
     receita           = excluded.receita,
     frete             = excluded.frete,
@@ -72,6 +75,8 @@ ON CONFLICT(data) DO UPDATE SET
     ticket_medio      = excluded.ticket_medio,
     total_desconto    = excluded.total_desconto,
     pedidos_acima_300 = excluded.pedidos_acima_300,
+    receita_criada    = excluded.receita_criada,
+    pedidos_criados   = excluded.pedidos_criados,
     atualizado_em     = datetime('now')
 ;
 """
@@ -140,8 +145,9 @@ def sincronizar(
     pedidos_buffer: list[dict]          = []
     customer_ids_global: set[int]       = set()
 
+    # 1a. Pedidos PAGOS — receita, frete, novos clientes
     total_pedidos_lidos = 0
-    for pedido in sh._paginar_pedidos(data_inicio, data_fim):
+    for pedido in sh._paginar_pedidos(data_inicio, data_fim, status="paid"):
         total_pedidos_lidos += 1
         criado_em = pedido.get("created_at", "")[:10]  # "YYYY-MM-DD"
         if not criado_em:
@@ -168,7 +174,23 @@ def sincronizar(
             customer_ids_global.add(cid)
             pedidos_buffer.append({"dia": criado_em, "cid": cid, "pedido": pedido})
 
-    logger.info("[ShopifySync] %d pedidos lidos do Shopify", total_pedidos_lidos)
+    logger.info("[ShopifySync] %d pedidos pagos lidos", total_pedidos_lidos)
+
+    # 1b. Pedidos CRIADOS (todos os status) — receita_criada e pedidos_criados
+    # Inclui pending, authorized, partially_paid, refunded, voided etc.
+    receita_criada_por_dia: dict[str, float] = defaultdict(float)
+    pedidos_criados_por_dia: dict[str, int]  = defaultdict(int)
+    total_criados = 0
+    for pedido in sh._paginar_pedidos(data_inicio, data_fim, status="any"):
+        total_criados += 1
+        criado_em = pedido.get("created_at", "")[:10]
+        if not criado_em:
+            continue
+        sub_p = float(pedido.get("subtotal_price") or 0)
+        receita_criada_por_dia[criado_em]  += sub_p
+        pedidos_criados_por_dia[criado_em] += 1
+
+    logger.info("[ShopifySync] %d pedidos criados (todos status) lidos", total_criados)
 
     if total_pedidos_lidos == 0:
         logger.warning(
@@ -199,18 +221,22 @@ def sincronizar(
             recomp_por_dia[dia] += 1
 
     # ── 3. Consolidar por dia ─────────────────────────────────────────────────
-    todos_os_dias = set(receita_por_dia.keys())
+    # União de dias pagos + dias criados (pode haver dias só em criados)
+    todos_os_dias = set(receita_por_dia.keys()) | set(receita_criada_por_dia.keys())
     rows: list[tuple] = []
     for dia_str in sorted(todos_os_dias):
-        pedidos  = pedidos_por_dia[dia_str]
-        receita  = round(receita_por_dia[dia_str], 2)
-        frete    = round(frete_por_dia[dia_str], 2)
-        novos    = novos_por_dia[dia_str]
-        recomp   = recomp_por_dia[dia_str]
-        ticket   = round(receita / pedidos, 2) if pedidos else None
-        desconto = round(desconto_por_dia[dia_str], 2)
-        p300     = ped_300_por_dia[dia_str]
-        rows.append((dia_str, receita, frete, pedidos, novos, recomp, ticket, desconto, p300))
+        pedidos          = pedidos_por_dia[dia_str]
+        receita          = round(receita_por_dia[dia_str], 2)
+        frete            = round(frete_por_dia[dia_str], 2)
+        novos            = novos_por_dia[dia_str]
+        recomp           = recomp_por_dia[dia_str]
+        ticket           = round(receita / pedidos, 2) if pedidos else None
+        desconto         = round(desconto_por_dia[dia_str], 2)
+        p300             = ped_300_por_dia[dia_str]
+        receita_criada   = round(receita_criada_por_dia[dia_str], 2)
+        pedidos_criados  = pedidos_criados_por_dia[dia_str]
+        rows.append((dia_str, receita, frete, pedidos, novos, recomp, ticket, desconto, p300,
+                     receita_criada, pedidos_criados))
 
     if dry_run:
         logger.info("[ShopifySync/%s] DRY RUN — %d linhas seriam gravadas", cliente_key, len(rows))
@@ -246,6 +272,8 @@ def sincronizar(
                     "ticket_medio":      r[6],
                     "total_desconto":    r[7],
                     "pedidos_acima_300": r[8],
+                    "receita_criada":    r[9],
+                    "pedidos_criados":   r[10],
                 }
                 for r in rows
             ]
