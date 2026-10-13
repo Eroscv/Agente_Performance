@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS shopify_receita_diaria (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     data            DATE    NOT NULL UNIQUE,
     receita         REAL    NOT NULL DEFAULT 0,
+    frete           REAL    NOT NULL DEFAULT 0,
     pedidos         INTEGER NOT NULL DEFAULT 0,
     novos_clientes  INTEGER NOT NULL DEFAULT 0,
     recompradores   INTEGER NOT NULL DEFAULT 0,
@@ -59,11 +60,12 @@ CREATE TABLE IF NOT EXISTS shopify_receita_diaria (
 
 _UPSERT_SQL = """
 INSERT INTO shopify_receita_diaria
-    (data, receita, pedidos, novos_clientes, recompradores,
+    (data, receita, frete, pedidos, novos_clientes, recompradores,
      ticket_medio, total_desconto, pedidos_acima_300, atualizado_em)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
 ON CONFLICT(data) DO UPDATE SET
     receita           = excluded.receita,
+    frete             = excluded.frete,
     pedidos           = excluded.pedidos,
     novos_clientes    = excluded.novos_clientes,
     recompradores     = excluded.recompradores,
@@ -130,6 +132,7 @@ def sincronizar(
 
     # ── 1. Coletar pedidos do Shopify ────────────────────────────────────────
     receita_por_dia: dict[str, float]   = defaultdict(float)
+    frete_por_dia: dict[str, float]     = defaultdict(float)
     pedidos_por_dia: dict[str, int]     = defaultdict(int)
     desconto_por_dia: dict[str, float]  = defaultdict(float)
     ped_300_por_dia: dict[str, int]     = defaultdict(int)
@@ -144,13 +147,19 @@ def sincronizar(
         if not criado_em:
             continue
 
-        preco    = float(pedido.get("total_price") or 0)
+        total_p  = float(pedido.get("total_price") or 0)
+        sub_p    = float(pedido.get("subtotal_price") or 0)
         desconto = float(pedido.get("total_discounts") or 0)
+        # receita = subtotal_price (produtos após desconto, sem frete)
+        # frete   = total_price - subtotal_price
+        receita  = sub_p
+        frete    = round(total_p - sub_p, 2)
 
-        receita_por_dia[criado_em]  += preco
+        receita_por_dia[criado_em]  += receita
+        frete_por_dia[criado_em]    += frete
         pedidos_por_dia[criado_em]  += 1
         desconto_por_dia[criado_em] += desconto
-        if preco > 300:
+        if total_p > 300:
             ped_300_por_dia[criado_em] += 1
 
         cid = (pedido.get("customer") or {}).get("id")
@@ -195,12 +204,13 @@ def sincronizar(
     for dia_str in sorted(todos_os_dias):
         pedidos  = pedidos_por_dia[dia_str]
         receita  = round(receita_por_dia[dia_str], 2)
+        frete    = round(frete_por_dia[dia_str], 2)
         novos    = novos_por_dia[dia_str]
         recomp   = recomp_por_dia[dia_str]
         ticket   = round(receita / pedidos, 2) if pedidos else None
         desconto = round(desconto_por_dia[dia_str], 2)
         p300     = ped_300_por_dia[dia_str]
-        rows.append((dia_str, receita, pedidos, novos, recomp, ticket, desconto, p300))
+        rows.append((dia_str, receita, frete, pedidos, novos, recomp, ticket, desconto, p300))
 
     if dry_run:
         logger.info("[ShopifySync/%s] DRY RUN — %d linhas seriam gravadas", cliente_key, len(rows))
@@ -209,7 +219,7 @@ def sincronizar(
         return {
             "dias_sincronizados": len(rows),
             "receita_total": sum(r[1] for r in rows),
-            "pedidos_total": sum(r[2] for r in rows),
+            "pedidos_total": sum(r[3] for r in rows),
             "periodo": {"inicio": str(data_inicio), "fim": str(data_fim)},
             "dry_run": True,
         }
@@ -229,12 +239,13 @@ def sincronizar(
                 {
                     "data":              r[0],
                     "receita":           r[1],
-                    "pedidos":           r[2],
-                    "novos_clientes":    r[3],
-                    "recompradores":     r[4],
-                    "ticket_medio":      r[5],
-                    "total_desconto":    r[6],
-                    "pedidos_acima_300": r[7],
+                    "frete":             r[2],
+                    "pedidos":           r[3],
+                    "novos_clientes":    r[4],
+                    "recompradores":     r[5],
+                    "ticket_medio":      r[6],
+                    "total_desconto":    r[7],
+                    "pedidos_acima_300": r[8],
                 }
                 for r in rows
             ]
@@ -257,7 +268,7 @@ def sincronizar(
     conn.close()
 
     receita_total = sum(r[1] for r in rows)
-    pedidos_total = sum(r[2] for r in rows)
+    pedidos_total = sum(r[3] for r in rows)
 
     logger.info(
         "[ShopifySync/%s] ✅ %d dias sincronizados | R$ %.2f | %d pedidos",

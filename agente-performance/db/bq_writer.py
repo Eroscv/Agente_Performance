@@ -365,6 +365,7 @@ def write_shopify(rows: list[dict], cliente: str) -> None:
             "cliente":           cliente,
             "data":              r.get("data"),
             "receita":           str(round(r.get("receita") or 0, 2)),
+            "frete":             str(round(r.get("frete") or 0, 2)),
             "pedidos":           int(r.get("pedidos") or 0),
             "novos_clientes":    int(r.get("novos_clientes") or 0),
             "recompradores":     int(r.get("recompradores") or 0),
