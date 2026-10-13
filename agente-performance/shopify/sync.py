@@ -56,6 +56,15 @@ CREATE TABLE IF NOT EXISTS shopify_receita_diaria (
     pedidos_acima_300 INTEGER NOT NULL DEFAULT 0,
     receita_criada    REAL    NOT NULL DEFAULT 0,
     pedidos_criados   INTEGER NOT NULL DEFAULT 0,
+    pedidos_meta      INTEGER NOT NULL DEFAULT 0,
+    receita_meta      REAL    NOT NULL DEFAULT 0,
+    novos_meta        INTEGER NOT NULL DEFAULT 0,
+    pedidos_google    INTEGER NOT NULL DEFAULT 0,
+    receita_google    REAL    NOT NULL DEFAULT 0,
+    novos_google      INTEGER NOT NULL DEFAULT 0,
+    pedidos_outros    INTEGER NOT NULL DEFAULT 0,
+    receita_outros    REAL    NOT NULL DEFAULT 0,
+    novos_outros      INTEGER NOT NULL DEFAULT 0,
     atualizado_em   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 """
@@ -64,8 +73,12 @@ _UPSERT_SQL = """
 INSERT INTO shopify_receita_diaria
     (data, receita, frete, pedidos, novos_clientes, recompradores,
      ticket_medio, total_desconto, pedidos_acima_300,
-     receita_criada, pedidos_criados, atualizado_em)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+     receita_criada, pedidos_criados,
+     pedidos_meta, receita_meta, novos_meta,
+     pedidos_google, receita_google, novos_google,
+     pedidos_outros, receita_outros, novos_outros,
+     atualizado_em)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
 ON CONFLICT(data) DO UPDATE SET
     receita           = excluded.receita,
     frete             = excluded.frete,
@@ -77,6 +90,15 @@ ON CONFLICT(data) DO UPDATE SET
     pedidos_acima_300 = excluded.pedidos_acima_300,
     receita_criada    = excluded.receita_criada,
     pedidos_criados   = excluded.pedidos_criados,
+    pedidos_meta      = excluded.pedidos_meta,
+    receita_meta      = excluded.receita_meta,
+    novos_meta        = excluded.novos_meta,
+    pedidos_google    = excluded.pedidos_google,
+    receita_google    = excluded.receita_google,
+    novos_google      = excluded.novos_google,
+    pedidos_outros    = excluded.pedidos_outros,
+    receita_outros    = excluded.receita_outros,
+    novos_outros      = excluded.novos_outros,
     atualizado_em     = datetime('now')
 ;
 """
@@ -145,6 +167,26 @@ def sincronizar(
     pedidos_buffer: list[dict]          = []
     customer_ids_global: set[int]       = set()
 
+    # Acumuladores UTM por origem (pedidos pagos)
+    utm_pedidos = {"meta": defaultdict(int), "google": defaultdict(int), "outros": defaultdict(int)}
+    utm_receita = {"meta": defaultdict(float), "google": defaultdict(float), "outros": defaultdict(float)}
+    utm_novos   = {"meta": defaultdict(int), "google": defaultdict(int), "outros": defaultdict(int)}
+
+    def _classificar_utm(pedido):
+        notes = {n["name"].lower(): (n.get("value") or "").lower()
+                 for n in (pedido.get("note_attributes") or [])}
+        combined = " ".join([
+            notes.get("utm_source", ""),
+            notes.get("utm_medium", ""),
+            (pedido.get("landing_site") or "").lower(),
+            (pedido.get("referring_site") or "").lower(),
+        ])
+        if any(x in combined for x in ["facebook", "instagram", "fb", "meta", "ig"]):
+            return "meta"
+        if any(x in combined for x in ["google", "gclid", "cpc", "pmax"]):
+            return "google"
+        return "outros"
+
     # 1a. Pedidos PAGOS — receita, frete, novos clientes
     total_pedidos_lidos = 0
     for pedido in sh._paginar_pedidos(data_inicio, data_fim, status="paid"):
@@ -173,6 +215,11 @@ def sincronizar(
             clientes_por_dia[criado_em].add(cid)
             customer_ids_global.add(cid)
             pedidos_buffer.append({"dia": criado_em, "cid": cid, "pedido": pedido})
+
+        # Classificar por UTM (acumula provisoriamente; novos serão ajustados após oc_map)
+        _origem = _classificar_utm(pedido)
+        utm_pedidos[_origem][criado_em] += 1
+        utm_receita[_origem][criado_em] += receita
 
     logger.info("[ShopifySync] %d pedidos pagos lidos", total_pedidos_lidos)
 
@@ -212,11 +259,14 @@ def sincronizar(
     recomp_por_dia:  dict[str, int] = defaultdict(int)
 
     for item in pedidos_buffer:
-        dia = item["dia"]
-        cid = item["cid"]
-        oc  = oc_map.get(cid, 1)
+        dia    = item["dia"]
+        cid    = item["cid"]
+        pedido = item["pedido"]
+        oc     = oc_map.get(cid, 1)
+        origem = _classificar_utm(pedido)
         if oc == 1:
-            novos_por_dia[dia]  += 1
+            novos_por_dia[dia]          += 1
+            utm_novos[origem][dia]      += 1
         else:
             recomp_por_dia[dia] += 1
 
@@ -235,8 +285,21 @@ def sincronizar(
         p300             = ped_300_por_dia[dia_str]
         receita_criada   = round(receita_criada_por_dia[dia_str], 2)
         pedidos_criados  = pedidos_criados_por_dia[dia_str]
+        # UTM por origem
+        ped_meta    = utm_pedidos["meta"][dia_str]
+        rec_meta    = round(utm_receita["meta"][dia_str], 2)
+        nov_meta    = utm_novos["meta"][dia_str]
+        ped_google  = utm_pedidos["google"][dia_str]
+        rec_google  = round(utm_receita["google"][dia_str], 2)
+        nov_google  = utm_novos["google"][dia_str]
+        ped_outros  = utm_pedidos["outros"][dia_str]
+        rec_outros  = round(utm_receita["outros"][dia_str], 2)
+        nov_outros  = utm_novos["outros"][dia_str]
         rows.append((dia_str, receita, frete, pedidos, novos, recomp, ticket, desconto, p300,
-                     receita_criada, pedidos_criados))
+                     receita_criada, pedidos_criados,
+                     ped_meta, rec_meta, nov_meta,
+                     ped_google, rec_google, nov_google,
+                     ped_outros, rec_outros, nov_outros))
 
     if dry_run:
         logger.info("[ShopifySync/%s] DRY RUN — %d linhas seriam gravadas", cliente_key, len(rows))
@@ -274,6 +337,15 @@ def sincronizar(
                     "pedidos_acima_300": r[8],
                     "receita_criada":    r[9],
                     "pedidos_criados":   r[10],
+                    "pedidos_meta":      r[11],
+                    "receita_meta":      r[12],
+                    "novos_meta":        r[13],
+                    "pedidos_google":    r[14],
+                    "receita_google":    r[15],
+                    "novos_google":      r[16],
+                    "pedidos_outros":    r[17],
+                    "receita_outros":    r[18],
+                    "novos_outros":      r[19],
                 }
                 for r in rows
             ]

@@ -374,6 +374,15 @@ def write_shopify(rows: list[dict], cliente: str) -> None:
             "pedidos_acima_300": int(r.get("pedidos_acima_300") or 0),
             "receita_criada":    str(round(r.get("receita_criada") or 0, 2)),
             "pedidos_criados":   int(r.get("pedidos_criados") or 0),
+            "pedidos_meta":      int(r.get("pedidos_meta") or 0),
+            "receita_meta":      str(round(r.get("receita_meta") or 0, 2)),
+            "novos_meta":        int(r.get("novos_meta") or 0),
+            "pedidos_google":    int(r.get("pedidos_google") or 0),
+            "receita_google":    str(round(r.get("receita_google") or 0, 2)),
+            "novos_google":      int(r.get("novos_google") or 0),
+            "pedidos_outros":    int(r.get("pedidos_outros") or 0),
+            "receita_outros":    str(round(r.get("receita_outros") or 0, 2)),
+            "novos_outros":      int(r.get("novos_outros") or 0),
             "criado_em":         agora,
         })
 
