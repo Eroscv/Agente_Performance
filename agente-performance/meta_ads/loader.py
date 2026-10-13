@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     qualidade_ranking   TEXT,
     engagement_ranking  TEXT,
     conversion_ranking  TEXT,
+    account_id          TEXT,
     UNIQUE(data, campanha, ad_id)
 )
 """
@@ -97,6 +98,7 @@ FIELDS = ",".join([
     "quality_ranking",
     "engagement_rate_ranking",
     "conversion_rate_ranking",
+    "account_id",
 ])
 
 
@@ -178,6 +180,7 @@ def _normalizar(row: dict) -> dict:
         "qualidade_ranking":  row.get("quality_ranking"),
         "engagement_ranking": row.get("engagement_rate_ranking"),
         "conversion_ranking": row.get("conversion_rate_ranking"),
+        "account_id":         row.get("account_id"),
     }
 
 
@@ -319,6 +322,7 @@ def salvar(rows: list[dict], append: bool = False,
         "cpm", "frequencia", "video_3s", "video_50pct", "thruplays",
         "adicoes_carrinho", "checkout_iniciado", "visualizacoes_landing",
         "qualidade_ranking", "engagement_ranking", "conversion_ranking",
+        "account_id",
     ]
     sql = f"""
         INSERT OR REPLACE INTO {tabela} ({', '.join(cols)})
@@ -378,6 +382,16 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
 
     try:
         rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
+        # Guarda: rejeitar linhas de contas diferentes da solicitada
+        # (pode ocorrer em Business Managers com contas compartilhadas)
+        antes = len(rows)
+        rows = [r for r in rows if not r.get("account_id") or r["account_id"] == account_id]
+        ignoradas = antes - len(rows)
+        if ignoradas:
+            logger.warning(
+                "[%s] %d linhas ignoradas — account_id diferente de %s",
+                account_id, ignoradas, account_id
+            )
         linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
     except Exception as _sync_exc:
         try:

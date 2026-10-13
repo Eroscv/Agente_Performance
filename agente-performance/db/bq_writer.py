@@ -204,6 +204,7 @@ def write_ads(
                 "qualidade_ranking":   r.get("qualidade_ranking"),
                 "engagement_ranking":  r.get("engagement_ranking"),
                 "conversion_ranking":  r.get("conversion_ranking"),
+                "account_id":          r.get("account_id"),
                 "criado_em":           agora,
             })
         else:  # google
@@ -225,6 +226,7 @@ def write_ads(
                 "roas":         round(rec / inv, 4) if inv > 0 else 0.0,
                 "cpa":          round(inv / comp, 2) if comp > 0 else 0.0,
                 "cpm":          round(inv / r["impressoes"] * 1000, 2) if r.get("impressoes") else None,
+                "account_id":   r.get("customer_id"),
                 "criado_em":    agora,
             })
 
