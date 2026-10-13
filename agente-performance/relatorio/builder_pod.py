@@ -537,8 +537,11 @@ def gerar_relatorio_pod(
         return {
             "titulo":    titulo,
             "periodo":   periodo_str,
-            "resumo":    resumo,
+            "data_inicio": str(data_inicio),
+            "data":      str(data_fim),
+            "resumo":    {**resumo, "investimento": resumo.get("invest")},
             "campanhas": campanhas,
+            "blocos":    blocos,
             "page_id":   resultado.get("page_id"),
             "url":       resultado.get("url"),
             "erro":      None,

@@ -29,13 +29,12 @@ def get_conn():
 
 def query(sql: str, params: tuple = ()) -> list[dict]:
     """Executa SELECT e retorna lista de dicts."""
-    conn = get_conn()
-    cur  = conn.execute(sql, params)
-    return [dict(r) for r in cur.fetchall()]
+    from db.connections import query_fed
+    return query_fed(sql, params)
 
 
 def query_one(sql: str, params: tuple = ()) -> Optional[dict]:
     """Executa SELECT e retorna primeiro resultado ou None."""
-    results = query(sql, params)
-    return results[0] if results else None
+    from db.connections import query_fed_one
+    return query_fed_one(sql, params)
 

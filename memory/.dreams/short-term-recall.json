@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-08-17T15:32:27.399Z",
+  "updatedAt": "2026-10-06T11:57:49.087Z",
   "entries": {
     "memory:memory/2026-06-22.md:1:30": {
       "key": "memory:memory/2026-06-22.md:1:30",
@@ -89,13 +89,13 @@
       "endLine": 31,
       "source": "memory",
       "snippet": "# Memória — 2026-06-23 ## Projeto: Agente de Performance Guará ### Localização - Projeto: `/home/ubuntu/.openclaw/workspace/agente-performance` - Banco SQLite campanhas: `data/campanhas.db` (30.905 registros, 93 colunas, mai/2023–jun/2026) - Banco contexto: `data/context.db` (TTL 24h) - Banco logs: `data/logs.db` - Env virtual: `venv/` dentro do projeto - Serviço systemd: `agente-guara.service` (User=ubuntu, porta 8001) - Apache proxy: vhost `flora-webhook.conf`, rotas `/guara/` e `/guara/slack/events` - Repositório GitHub: https://github.com/Eroscv/Flora-Agente (privado) - Último commit pushado: `feat: comparativos WoW/MoM/antes-depois/períodos/ranking` ### Regras absolutas - **Flora é I",
-      "recallCount": 7,
+      "recallCount": 11,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 7,
+      "totalScore": 11,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-08-17T15:32:27.399Z",
+      "lastRecalledAt": "2026-10-06T11:57:49.087Z",
       "queryHashes": [
         "eb94228f54b4",
         "a4c58fc2a09b",
@@ -103,7 +103,11 @@
         "137494fd710e",
         "45e4baf90404",
         "7b71f84b7a6c",
-        "a1489de516bc"
+        "a1489de516bc",
+        "181dc1adbe8b",
+        "d1a81b7f8df5",
+        "e1ef71978c2b",
+        "0c9a946a1a8e"
       ],
       "recallDays": [
         "2026-06-24",
@@ -112,7 +116,10 @@
         "2026-07-22",
         "2026-07-28",
         "2026-07-31",
-        "2026-08-17"
+        "2026-08-17",
+        "2026-09-01",
+        "2026-09-22",
+        "2026-10-06"
       ],
       "conceptTags": [
         "home/ubuntu",
@@ -132,26 +139,31 @@
       "endLine": 95,
       "source": "memory",
       "snippet": "- `ranking_comparativo` — ranking de todas as campanhas por qualquer métrica ### Pendências do usuário (Slack app) - Configurar no painel api.slack.com: - Event Subscriptions URL: `https://44.204.251.251/guara/slack/events` - Bot events: `app_mention`, `message.im` - OAuth Scopes: `chat:write`, `reactions:write`, `reactions:read`, `app_mentions:read`, `im:history` - Slash command `/ajuda` → mesma URL ### Pendências técnicas abertas - Integrar `agent/cache.py` e `agent/conversation_log.py` no fluxo principal do `engine.py` - Integrar handler Slack para export (detectar palavras \"excel\"/\"pdf\" e chamar `reports/exporter.py`) - Testar bot com perguntas reais no Slack - Exposição do",
-      "recallCount": 5,
+      "recallCount": 8,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 5,
+      "totalScore": 8,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-07-28T18:39:33.305Z",
+      "lastRecalledAt": "2026-10-06T11:57:49.087Z",
       "queryHashes": [
         "eb94228f54b4",
         "a4c58fc2a09b",
         "9aed56b80585",
         "137494fd710e",
-        "45e4baf90404"
+        "45e4baf90404",
+        "d1a81b7f8df5",
+        "e1ef71978c2b",
+        "0c9a946a1a8e"
       ],
       "recallDays": [
         "2026-06-24",
         "2026-07-13",
         "2026-07-16",
         "2026-07-22",
-        "2026-07-28"
+        "2026-07-28",
+        "2026-09-22",
+        "2026-10-06"
       ],
       "conceptTags": [
         "ranking-comparativo",
@@ -311,22 +323,26 @@
       "endLine": 178,
       "source": "memory",
       "snippet": "5. **Exportação para Notion via Slack:** - Detecta \"notion\" no texto da mensagem ou no argumento do `/relatorio` - Detecta cliente por token no texto (consórcio, source of, mushin, bazar, máximo) - Publica página e retorna link clicável no Slack - Suporta combinação: \"excel e notion\" → upload no Slack + link no Notion 6. **Source OF identificado em tudo:** - System prompt do Claude menciona \"Source OF — empresa de beleza e cosméticos\" - Arquivos exportados: `source_of_*.xlsx`, `source_of_*.pdf` - Cabeçalho Excel: \"Source OF — Meta Ads\" - Páginas Notion: título `📊 Source OF — Meta Ads · período` - Database padrão Notion: `source_of` 7. **README.md completo** — 585",
-      "recallCount": 3,
+      "recallCount": 5,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 5,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-14T12:59:54.258Z",
-      "lastRecalledAt": "2026-07-31T12:04:07.334Z",
+      "lastRecalledAt": "2026-09-28T12:49:26.472Z",
       "queryHashes": [
         "d09a3d905b6f",
         "239c05a450c4",
-        "797e5a298e32"
+        "797e5a298e32",
+        "1a2c4f9726f6",
+        "e9b8827cda2f"
       ],
       "recallDays": [
         "2026-07-14",
         "2026-07-22",
-        "2026-07-31"
+        "2026-07-31",
+        "2026-08-25",
+        "2026-09-28"
       ],
       "conceptTags": [
         "source-of",
@@ -412,22 +428,24 @@
       "endLine": 59,
       "source": "memory",
       "snippet": "- GitHub: https://github.com/Eroscv/Flora-Agente/blob/main/CONVERSAS.md - Privacidade: telefones mascarados (5514****3327) no GitHub - Inclui: resumo geral, atividade diária, top clientes, perfis enriquecidos, handoffs, blacklist, todas as mensagens na íntegra ## Infraestrutura / Caminhos importantes - Agente Performance: `/home/ubuntu/.openclaw/workspace/agente-performance/` - Flora: `/home/ubuntu/.openclaw/workspace/Flora-Agente-repo/` - Flora DB: `Flora-Agente-repo/flora.db` - Agente Performance DB: `agente-performance/data/performance.db` (ou similar) - Logs Performance: `agente-performance/data/logs.db` - Scripts Flora: `Flora-Agente-repo/scripts/` - Scripts Performance: `agente-perfor",
-      "recallCount": 3,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-22T13:30:13.347Z",
-      "lastRecalledAt": "2026-08-17T15:32:27.399Z",
+      "lastRecalledAt": "2026-10-01T13:22:28.500Z",
       "queryHashes": [
         "137494fd710e",
         "7b71f84b7a6c",
-        "a1489de516bc"
+        "a1489de516bc",
+        "0f0ab927ca1a"
       ],
       "recallDays": [
         "2026-07-22",
         "2026-07-31",
-        "2026-08-17"
+        "2026-08-17",
+        "2026-10-01"
       ],
       "conceptTags": [
         "home/ubuntu",
@@ -480,22 +498,30 @@
       "endLine": 25,
       "source": "memory",
       "snippet": "# Memória — 2026-07-01 ## Sessão de hoje ### Agente de Performance Guará - **Relatórios via Notion** (não mais via docs): `relatorio/builder.py` já usava Notion via `notion/historico.py`. Criada função `gerar_relatorio_mensal()` explícita em `builder.py` para mês passado completo. `cron_relatorio.py` e `gerar_relatorio.py` atualizados para usar a função correta. `/relatorio mes` no Slack corrigido para mês passado completo (antes usava mês atual incompleto). Texto do `/ajuda` atualizado. ### Flora-Agente #### Bug crítico corrigido — Flora estava offline - `agents/orchestrator.py` estava sem a declaração `class OrchestratorAgent:` — os métodos existiam soltos no arquivo. Python aceitava",
-      "recallCount": 3,
+      "recallCount": 8,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 8,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-22T13:30:13.348Z",
-      "lastRecalledAt": "2026-08-05T10:34:53.654Z",
+      "lastRecalledAt": "2026-09-22T12:20:48.110Z",
       "queryHashes": [
         "239c05a450c4",
         "655d29b557c6",
-        "77aa0c0c2c2e"
+        "77aa0c0c2c2e",
+        "f3c5aee98128",
+        "98fcbb582c12",
+        "87e15193f5e8",
+        "181dc1adbe8b",
+        "107005e9f50a"
       ],
       "recallDays": [
         "2026-07-22",
         "2026-07-31",
-        "2026-08-05"
+        "2026-08-05",
+        "2026-08-31",
+        "2026-09-01",
+        "2026-09-22"
       ],
       "conceptTags": [
         "relatorio/builder.py",
@@ -610,18 +636,22 @@
       "endLine": 32,
       "source": "memory",
       "snippet": "# Memória — 2026-07-21 ## Agente de Performance Guará — Sessão de Desenvolvimento ### Subagente de Relatoria — Alterações no Builder Trabalhamos extensivamente no pipeline do relatório semanal (`relatorio/builder.py`). Resumo das mudanças: #### Seções removidas (ambos os pipelines — semanal e mensal) - 📋 Desempenho por Campanha - 🏆 Top Campanhas por ROAS - 📊 Resumo Executivo - 🚨 Alertas Automáticos - 📅 Planejamento Q3 2026 — Meta Ads - 🎨 Planejamento Criativo - 📊 Tendência Últimas 4 Semanas (WoW) — substituída por Comparativo com Período Anterior #### Alterações nas tabelas existentes - **💰 Alocação Budget Canais:** adicionada coluna `% do Total` - **📊 Métricas de Site:** adici",
-      "recallCount": 1,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-22T13:59:40.842Z",
-      "lastRecalledAt": "2026-07-22T13:59:40.842Z",
+      "lastRecalledAt": "2026-09-22T12:20:50.872Z",
       "queryHashes": [
-        "ae33b377610f"
+        "ae33b377610f",
+        "d2b76a295736",
+        "fa930f206ed0"
       ],
       "recallDays": [
-        "2026-07-22"
+        "2026-07-22",
+        "2026-08-21",
+        "2026-09-22"
       ],
       "conceptTags": [
         "relatorio/builder.py",
@@ -674,20 +704,27 @@
       "endLine": 165,
       "source": "memory",
       "snippet": "- 740 pedidos Shopify · 19 SKUs · 23 estados · 235 recompras ### Credenciais Shopify (adicionadas ao .env do agente de performance) - Origem: copiadas do Flora-Agente - `SHOPIFY_STORE=source-of-brasil` - `SHOPIFY_TOKEN=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` --- ## POD Kombucha — Google Ads — Novo Cliente (2026-07-21) ### Integração - **Planilha:** `https://docs.google.com/spreadsheets/d/1Vj3Zt1ZPk5nH_bBbdm1gna0cMC85PGN-pBtCKr_UJ50/export?format=csv` - **Colunas:** Day, Clicks, Cost, Impr., Conv. value, Conversions, Campaign, Campaign ID, Campaign type - **Período dados:** 26/07/2025 → 20/07/2026 (1.159 linhas) - **Tabela banco:** `pod_gads_diario` (TOTALMENTE ISOLADA da Source Of) - **L",
-      "recallCount": 2,
+      "recallCount": 6,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 2,
+      "totalScore": 6,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-22T13:59:40.842Z",
-      "lastRecalledAt": "2026-08-17T15:32:23.445Z",
+      "lastRecalledAt": "2026-09-22T12:20:48.110Z",
       "queryHashes": [
         "ae33b377610f",
-        "a50d14614cbc"
+        "a50d14614cbc",
+        "f3c5aee98128",
+        "98fcbb582c12",
+        "87e15193f5e8",
+        "107005e9f50a"
       ],
       "recallDays": [
         "2026-07-22",
-        "2026-08-17"
+        "2026-08-17",
+        "2026-08-31",
+        "2026-09-01",
+        "2026-09-22"
       ],
       "conceptTags": [
         "flora-agente",
@@ -707,18 +744,20 @@
       "endLine": 67,
       "source": "memory",
       "snippet": "- Limiar 200 evita falso positivo em classificadores (max_tokens=20 é comportamento normal) #### 8. Links enviados em mensagem separada - **Arquivo:** `channels/whatsapp.py` — `_split_message()` - Removida regra \"link sozinho → mensagem própria\" - Adicionada regra: se bloco é só URL, cola no bloco anterior - **Todos os 7 prompts:** instrução \"links sempre inline na mesma frase, nunca em parágrafo separado\" - Referência: conversa do Eros (5519995994481) como padrão de envio correto #### 9. Resposta passiva para mensagens vagas (\"Olá! Posso ter mais informações?\") - **Arquivo:** `prompt/prompts.py` — `GERAL_PROMPT` - Removido exemplo fixo `\"Olá! Que bom que você veio 🤎\"` (modelo ancorativa",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-28T18:39:33.305Z",
-      "lastRecalledAt": "2026-07-28T18:39:33.305Z",
+      "lastRecalledAt": "2026-09-22T19:36:10.686Z",
       "queryHashes": [
-        "45e4baf90404"
+        "45e4baf90404",
+        "6ab63dc2a749"
       ],
       "recallDays": [
-        "2026-07-28"
+        "2026-07-28",
+        "2026-09-22"
       ],
       "conceptTags": [
         "max-tokens",
@@ -738,18 +777,20 @@
       "endLine": 48,
       "source": "memory",
       "snippet": "- **Arquivo:** `memory/shared_memory.py` — novo método `greeted_today(phone)` - Consulta SQLite: mensagens `role='assistant'` das últimas 24h, regex `bom dia|boa tarde|boa noite|olá|oi` - Injetado em `_get_system_prompt()`: se já saudou hoje → instrução explícita para não repetir #### 5. Limite de emojis — 3 por conversa - **Arquivos:** todos os 7 prompts em `prompt/prompts.py` - **Arquivo:** `memory/shared_memory.py` — novo método `count_emojis_sent(phone)` - **Arquivo:** `agents/base.py` — injeta dinamicamente no prompt quantos emojis restam - Se `emoji_remaining == 0` → instrução \"NÃO use nenhum emoji nesta resposta\" #### 6. Mensagens cortadas — MAX_TOKENS na resposta (caso (17) 99609-5",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-28T18:39:33.305Z",
-      "lastRecalledAt": "2026-07-28T18:39:33.305Z",
+      "lastRecalledAt": "2026-09-22T19:36:10.686Z",
       "queryHashes": [
-        "45e4baf90404"
+        "45e4baf90404",
+        "6ab63dc2a749"
       ],
       "recallDays": [
-        "2026-07-28"
+        "2026-07-28",
+        "2026-09-22"
       ],
       "conceptTags": [
         "memory/shared-memory.py",
@@ -769,18 +810,29 @@
       "endLine": 196,
       "source": "memory",
       "snippet": "| `be_mushin` | Relatórios — BE MUSHIN | `37a8a727-a8ff-81a3-88e2-000bb475bc39` | | `bazar_precatorio` | Relatórios — Bazar do Precatório | `37a8a727-a8ff-81aa-800d-000b5bb61eb4` | | `torre_controle` | Torre de Controle — Regras | `37a8a727-a8ff-81e7-a038-000bf73a3e79` | | `clientes` | Clientes | `30ecc6df-d8ec-4e56-8377-1cce7b0d6c83` | ### Pendências do usuário (Slack app) - Configurar no painel api.slack.com: - Event Subscriptions URL: `https://44.204.251.251/guara/slack/events` - Bot events: `app_mention`, `message.im` - OAuth Scopes: `chat:write`, `reactions:write`, `reactions:read`, `app_mentions:read`, `im:history`, `files:write` - Cadastrar todos os 11 slash commands → mesma",
-      "recallCount": 1,
+      "recallCount": 7,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 7,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T12:04:07.334Z",
-      "lastRecalledAt": "2026-07-31T12:04:07.334Z",
+      "lastRecalledAt": "2026-09-22T19:37:14.414Z",
       "queryHashes": [
-        "797e5a298e32"
+        "797e5a298e32",
+        "1a2c4f9726f6",
+        "4bcedf6dc45e",
+        "39dda023cb66",
+        "c3567ce9436d",
+        "2fbd4fd55425",
+        "5ff2eddb4a55"
       ],
       "recallDays": [
-        "2026-07-31"
+        "2026-07-31",
+        "2026-08-25",
+        "2026-09-02",
+        "2026-09-03",
+        "2026-09-10",
+        "2026-09-22"
       ],
       "conceptTags": [
         "be-mushin",
@@ -800,18 +852,25 @@
       "endLine": 185,
       "source": "memory",
       "snippet": "### Slack — Âncora + Thread (2026-07-21) - **Módulo:** `slack/poster.py` - **Fluxo:** mensagem âncora no canal → relatório DETALHADO como reply na thread - **Canal:** `performance` (ID: `C05SFND7R1D`) — configurado via `SLACK_CHANNEL=performance` no `.env` - **Âncora:** `📊 Relatório Semanal · Source OF · Meta Ads\\n_período_` - **Thread:** tabelas alinhadas com KPIs, funil, métricas avançadas, campanhas, link Notion - **Bot Token:** `SLACK_BOT_TOKEN` no `.env` (API Web, não webhook) - **Fallback:** `postar_webhook_fallback()` via `SLACK_WEBHOOK_URL` se bot API falhar - Erro anterior resolvido: `FLORA_SLACK_CHANNEL=#performance-flora` estava sendo lido com `#`, canal correto é `performance`",
-      "recallCount": 1,
+      "recallCount": 5,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 5,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T12:04:07.334Z",
-      "lastRecalledAt": "2026-07-31T12:04:07.334Z",
+      "lastRecalledAt": "2026-09-22T12:20:48.110Z",
       "queryHashes": [
-        "797e5a298e32"
+        "797e5a298e32",
+        "f3c5aee98128",
+        "98fcbb582c12",
+        "87e15193f5e8",
+        "107005e9f50a"
       ],
       "recallDays": [
-        "2026-07-31"
+        "2026-07-31",
+        "2026-08-31",
+        "2026-09-01",
+        "2026-09-22"
       ],
       "conceptTags": [
         "slack/poster.py",
@@ -862,18 +921,20 @@
       "endLine": 51,
       "source": "memory",
       "snippet": "- **📈 Comparativo com Período Anterior:** adicionadas métricas Invest. Total (Meta+imposto+Google), Receita Shopify, MER - **📅 Evolução Mensal Jan/2026:** tabela com todos os meses desde janeiro, colunas Invest. Meta / Invest.+Imposto / Receita Meta / Receita Shopify / MER / ROAS / Compras ### Módulo Shopify (`shopify/client.py`) — CRIADO Integração completa com a API Shopify da Source Of Brasil: - **Store:** `source-of-brasil` - **Token:** em `.env` como `SHOPIFY_TOKEN` - **Funções:** - `pedidos_por_sku(data_inicio, data_fim)` → lista {sku, pedidos, receita} - `pedidos_por_estado(data_inicio, data_fim)` → lista {estado, pedidos, receita} - `recompras_por_sku(data_inicio, data_fim)",
-      "recallCount": 1,
+      "recallCount": 2,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 2,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T12:04:07.334Z",
-      "lastRecalledAt": "2026-07-31T12:04:07.334Z",
+      "lastRecalledAt": "2026-08-20T17:37:41.188Z",
       "queryHashes": [
-        "797e5a298e32"
+        "797e5a298e32",
+        "5d70712efd86"
       ],
       "recallDays": [
-        "2026-07-31"
+        "2026-07-31",
+        "2026-08-20"
       ],
       "conceptTags": [
         "jan/2026",
@@ -893,18 +954,27 @@
       "endLine": 77,
       "source": "memory",
       "snippet": "- Endpoints: `/api-cards-get`, `/api-cards-create`, `/api-cards-update`, `/api-cards-move` - Card atualizado a cada etapa do fluxo (descrição + campos específicos) - Stage emprego: `be979158-7b03-455b-881f-ec493ef4e79f` ### Google Sheets — Pendente de configuração - `app/sheets_client.py` criado — envia POST para Apps Script webhook - Config: `SHEETS_WEBHOOK_URL` no `.env` - Colunas: Número | Nome | Ciclo | Empresa | CNPJ | Localidade | Tipo de Serviço | Melhor Forma de Envio - Ciclo = 0-7 mapeando o estado atual do lead - **Usuário precisa**: criar Apps Script na planilha, implantar como Web App, adicionar URL no `.env` - Planilha: https://docs.google.com/spreadsheets/d/1qsg_dXp9Xrvyym-_aW",
-      "recallCount": 1,
+      "recallCount": 6,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 6,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T12:04:12.114Z",
-      "lastRecalledAt": "2026-07-31T12:04:12.114Z",
+      "lastRecalledAt": "2026-09-22T19:37:14.414Z",
       "queryHashes": [
-        "655d29b557c6"
+        "655d29b557c6",
+        "4bcedf6dc45e",
+        "39dda023cb66",
+        "c3567ce9436d",
+        "2fbd4fd55425",
+        "5ff2eddb4a55"
       ],
       "recallDays": [
-        "2026-07-31"
+        "2026-07-31",
+        "2026-09-02",
+        "2026-09-03",
+        "2026-09-10",
+        "2026-09-22"
       ],
       "conceptTags": [
         "api-cards-get",
@@ -924,18 +994,22 @@
       "endLine": 34,
       "source": "memory",
       "snippet": "# Memória Diária — 2026-07-30 ## Flora-Agente-repo ### compliance_guard.py - Criado `agents/compliance_guard.py` com 10 regras de obediência ao prompt - Integrado no `agents/base.py` como Camada 3 (após hallucination_guard) - Regras: `empty_response`, `prompt_leak`, `invalid_promise`, `invalid_url`, `markdown_link`, `banned_expression`, `banned_opener`, `wrong_language`, `boleto_mentioned`, `aroma_term` - `_MIN_RESPONSE_LEN = 15` chars — textos menores disparam `empty_response` e retornam early ### Testes - `tests/test_guards_quick.py` — 235 testes (5+5 por categoria), 100% passando - `tests/README.md` — documentação completa das 3 camadas de defesa - Suite de estresse (15 casos por categ",
-      "recallCount": 1,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T12:04:12.114Z",
-      "lastRecalledAt": "2026-07-31T12:04:12.114Z",
+      "lastRecalledAt": "2026-09-22T12:20:43.774Z",
       "queryHashes": [
-        "655d29b557c6"
+        "655d29b557c6",
+        "1a2c4f9726f6",
+        "d1a81b7f8df5"
       ],
       "recallDays": [
-        "2026-07-31"
+        "2026-07-31",
+        "2026-08-25",
+        "2026-09-22"
       ],
       "conceptTags": [
         "flora-agente-repo",
@@ -955,18 +1029,27 @@
       "endLine": 57,
       "source": "memory",
       "snippet": "└── Boas-vindas (Quero contratar / Quero um emprego) ├── Emprego → link trabalhe-conosco + move card stage be979158-7b03-455b-881f-ec493ef4e79f └── Contratar → \"Você é PJ?\" (Sim/Não) ├── Não → encerramento \"Só atendemos PJ...\" └── Sim → menu: Limpeza/Portaria/Recepção/Copa/Vigilância desarmada └── cidade/bairro (texto livre) └── CNPJ (texto livre) └── \"Prefere receber por WhatsApp ou e-mail?\" ├── WhatsApp → concluído ✅ └── E-mail → aguarda e-mail → concluído ✅ ```",
-      "recallCount": 1,
+      "recallCount": 6,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 6,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T12:04:12.114Z",
-      "lastRecalledAt": "2026-07-31T12:04:12.114Z",
+      "lastRecalledAt": "2026-09-22T19:37:14.414Z",
       "queryHashes": [
-        "655d29b557c6"
+        "655d29b557c6",
+        "4bcedf6dc45e",
+        "39dda023cb66",
+        "c3567ce9436d",
+        "2fbd4fd55425",
+        "5ff2eddb4a55"
       ],
       "recallDays": [
-        "2026-07-31"
+        "2026-07-31",
+        "2026-09-02",
+        "2026-09-03",
+        "2026-09-10",
+        "2026-09-22"
       ],
       "conceptTags": [
         "boas-vindas",
@@ -986,20 +1069,30 @@
       "endLine": 45,
       "source": "memory",
       "snippet": "- `api/app.py` com 4 novos endpoints: `/shopify/status`, `/shopify/sync`, `/shopify/receita`, `/shopify/diario` - Cron `shopify-sync-diario` configurado: todo dia 6h UTC, últimos 8 dias - Carga histórica executada: erro no exec (code 124 = timeout após 2min), mas sync parcial OK - ROAS Real calculado e funcionando ### Flora-Agente — Correções de Nomes - Problema identificado: webhook ignorava campo `contacts[].profile.name` do payload Meta/Reportana - Fix em `webhook.py`: agora lê nome do WhatsApp antes de processar a mensagem - Prioridade: WhatsApp → Shopify (Shopify sobrescreve) - Script criado: `scripts/backfill_names.py` — backfill dos 557 perfis sem nome via Shopify - Backfill rodou em",
-      "recallCount": 2,
+      "recallCount": 9,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 2,
+      "totalScore": 9,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T12:04:12.114Z",
-      "lastRecalledAt": "2026-08-05T10:34:53.654Z",
+      "lastRecalledAt": "2026-09-22T19:37:14.414Z",
       "queryHashes": [
         "655d29b557c6",
-        "77aa0c0c2c2e"
+        "77aa0c0c2c2e",
+        "17b8e8e475c8",
+        "c3567ce9436d",
+        "6f60de20d27d",
+        "2fbd4fd55425",
+        "e7b4f87c8bd4",
+        "6ab63dc2a749",
+        "5ff2eddb4a55"
       ],
       "recallDays": [
         "2026-07-31",
-        "2026-08-05"
+        "2026-08-05",
+        "2026-08-19",
+        "2026-09-10",
+        "2026-09-22"
       ],
       "conceptTags": [
         "api/app.py",
@@ -1019,20 +1112,24 @@
       "endLine": 96,
       "source": "memory",
       "snippet": "### Flora-Agente — Lista de Melhorias Levantadas 12 melhorias mapeadas baseadas no código real: - 🔴 Alta: Ativar INJECT_ORDERS (LogisticaAgent/PagamentoAgent pausados), Rastreio em tempo real, Survey em handoffs/inactivity - 🟡 Média: Memória de sessão >72h, Upsell no VendasAgent, Detecção abandono checkout, Whisper melhorado - 🟢 Baixa: Jana Trigger com histórico, Dashboard SQLite, Notificação pedido entregue, Blacklist automático, Multi-idioma ### Repositório Flora — Estado - Branch: main, up to date - `data/.notion_flora_ids.json` tinha modificação não commitada (não alterado por nós) - Serviço flora-agente.service: intocável (regra absoluta) --- ## Sessão da tarde (14:30 → 18:55 UTC)",
-      "recallCount": 2,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 2,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T16:01:49.882Z",
-      "lastRecalledAt": "2026-08-05T10:34:53.654Z",
+      "lastRecalledAt": "2026-10-01T13:22:28.500Z",
       "queryHashes": [
         "7b71f84b7a6c",
-        "77aa0c0c2c2e"
+        "77aa0c0c2c2e",
+        "181dc1adbe8b",
+        "0f0ab927ca1a"
       ],
       "recallDays": [
         "2026-07-31",
-        "2026-08-05"
+        "2026-08-05",
+        "2026-09-01",
+        "2026-10-01"
       ],
       "conceptTags": [
         "flora-agente",
@@ -1052,18 +1149,26 @@
       "endLine": 69,
       "source": "memory",
       "snippet": "4. Pedido para falar com humano (18 casos) 5. Assinatura (16 casos) 6. Checkout / pagamento / negociação (24 casos) 7. Ameaças / escalada legal (14 casos) 8. Endereço errado / alteração de endereço (28 casos — adicionado no final da sessão) ### Totais de testes - `jana_trigger.py`: 224/224 ✅ - `_REENVIO_RE`: 24/24 ✅ - `_UNCERTAIN_RESPONSE_RE`: 13/13 ✅ - Deduplicação: 3/3 ✅ - Horário comercial: 6/6 ✅ - Deploys/restarts: 5/5 ✅ - **TOTAL GERAL: 275/275 ✅** ### Commits publicados no GitHub - Repositório: https://github.com/Eroscv/Flora-Agente (privado, owner: Eroscv) - Todos os arquivos acima commitados e pushed na branch main ### Contexto geral - Flora-Agente usa webhook Reportana 150856",
-      "recallCount": 1,
+      "recallCount": 7,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 7,
       "maxScore": 1,
       "firstRecalledAt": "2026-08-05T10:34:53.654Z",
-      "lastRecalledAt": "2026-08-05T10:34:53.654Z",
+      "lastRecalledAt": "2026-09-22T19:37:14.414Z",
       "queryHashes": [
-        "77aa0c0c2c2e"
+        "77aa0c0c2c2e",
+        "c3567ce9436d",
+        "6f60de20d27d",
+        "2fbd4fd55425",
+        "e7b4f87c8bd4",
+        "6ab63dc2a749",
+        "5ff2eddb4a55"
       ],
       "recallDays": [
-        "2026-08-05"
+        "2026-08-05",
+        "2026-09-10",
+        "2026-09-22"
       ],
       "conceptTags": [
         "jana-trigger.py",
@@ -1083,18 +1188,22 @@
       "endLine": 76,
       "source": "memory",
       "snippet": "- **Semanal:** pedidos_por_sku, pedidos_por_estado, recompras_por_sku, assiduidade_clientes, metricas_site integrados - **Mensal:** mesmo conjunto integrado (bug corrigido — antes só estava no semanal) - Métricas de Site: Ticket Médio, Novos Clientes, CAC, % Desconto, Pedidos >R$300, Receita Total Shopify populados com dados reais ### Sincronização Automática da Planilha - `loader_sheets.py` agora expõe `carregar_sheets()` chamável programaticamente - `gerar_relatorio_semanal()` e `gerar_relatorio_mensal()` chamam `carregar_sheets()` automaticamente antes de processar - Dados atualizados até **20/07/2026** na tabela `campanhas` - Correção: dados da planilha (ads_diario) sincronizados para t",
-      "recallCount": 1,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-08-17T15:32:23.445Z",
-      "lastRecalledAt": "2026-08-17T15:32:23.445Z",
+      "lastRecalledAt": "2026-08-31T21:03:45.166Z",
       "queryHashes": [
-        "a50d14614cbc"
+        "a50d14614cbc",
+        "d2b76a295736",
+        "98fcbb582c12"
       ],
       "recallDays": [
-        "2026-08-17"
+        "2026-08-17",
+        "2026-08-21",
+        "2026-08-31"
       ],
       "conceptTags": [
         "pedidos-por-sku",
@@ -1114,18 +1223,22 @@
       "endLine": 59,
       "source": "memory",
       "snippet": "- 🟢 Baixa: Jana Trigger com histórico, Dashboard SQLite, Notificação pedido entregue, Blacklist automático, Multi-idioma ### Repositório Flora — Estado - Branch: main, up to date - `data/.notion_flora_ids.json` tinha modificação não commitada (não alterado por nós) - Serviço flora-agente.service: intocável (regra absoluta) # Memória — 2026-07-22 ## Sessão da tarde (13:30 → 14:20 UTC) ### Documentação Agente de Performance Guará - README completo gerado e publicado em `agente-performance/README.md` - Commit: `docs: documentação completa do sistema + roadmap de melhorias` - Página Notion criada: https://app.notion.com/p/Agente-de-Performance-Documenta-o-T-cnica-3a58a727a8ff81e4bf4ad39ec8d6",
-      "recallCount": 1,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 1,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-08-17T15:32:27.399Z",
-      "lastRecalledAt": "2026-08-17T15:32:27.399Z",
+      "lastRecalledAt": "2026-09-22T12:20:50.872Z",
       "queryHashes": [
-        "a1489de516bc"
+        "a1489de516bc",
+        "5d70712efd86",
+        "fa930f206ed0"
       ],
       "recallDays": [
-        "2026-08-17"
+        "2026-08-17",
+        "2026-08-20",
+        "2026-09-22"
       ],
       "conceptTags": [
         "multi-idioma",
@@ -1136,6 +1249,989 @@
         "jana",
         "trigger",
         "com"
+      ]
+    },
+    "memory:memory/2026-07-06.md:1:28": {
+      "key": "memory:memory/2026-07-06.md:1:28",
+      "path": "memory/2026-07-06.md",
+      "startLine": 1,
+      "endLine": 28,
+      "source": "memory",
+      "snippet": "# Memória do dia — 2026-07-06 ## Sessão de trabalho — Flora Agente (Guará Marketing) ### Correções implementadas hoje #### 1. Classificador de intenção — respostas inválidas (`V`, `GER`, `PRO`, etc.) - **Arquivo:** `agents/orchestrator.py` - **Causa:** `.upper()` sem sanitização — `\"VENDAS\\n\"`, `\"VENDAS.\"` não passavam na validação `in VALID_INTENTS` - **Fix:** `re.sub(r'[^A-Z]', '', raw.upper().strip().split()[0])` — pega só a primeira palavra, remove não-letras - Histórico do classificador: 5 trocas → 3, truncadas a 200 chars; contexto do cliente truncado a 300 chars - `max_tokens` do classificador: 10 → 20 #### 2. Gemini caindo para Claude (MAX_TOKENS em classificações) - Prompt do cl",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-19T04:01:18.241Z",
+      "lastRecalledAt": "2026-08-19T04:01:18.241Z",
+      "queryHashes": [
+        "17b8e8e475c8"
+      ],
+      "recallDays": [
+        "2026-08-19"
+      ],
+      "conceptTags": [
+        "agents/orchestrator.py",
+        "valid-intents",
+        "re.sub",
+        "a-z",
+        "raw.upper",
+        "não-letras",
+        "max-tokens",
+        "memória"
+      ]
+    },
+    "memory:memory/2026-07-22.md:1:24": {
+      "key": "memory:memory/2026-07-22.md:1:24",
+      "path": "memory/2026-07-22.md",
+      "startLine": 1,
+      "endLine": 24,
+      "source": "memory",
+      "snippet": "# Memória — 2026-07-22 ## Sessão da tarde (13:30 → 14:20 UTC) ### Documentação Agente de Performance Guará - README completo gerado e publicado em `agente-performance/README.md` - Commit: `docs: documentação completa do sistema + roadmap de melhorias` - Página Notion criada: https://app.notion.com/p/Agente-de-Performance-Documenta-o-T-cnica-3a58a727a8ff81e4bf4ad39ec8d6db4c - Seção \"Como Utilizar\" adicionada (commit: `docs: adiciona seção Como Utilizar`) - Seção \"Subagente de Relatoria\" adicionada (commit: `docs: adiciona seção Subagente de Relatoria`) - Total de 5 commits feitos e pushed hoje no repo Agente Performance ### Integração Shopify em Tempo Real — Agente de Performance - Arquivo",
+      "recallCount": 3,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 3,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-19T04:01:18.241Z",
+      "lastRecalledAt": "2026-09-22T12:20:50.872Z",
+      "queryHashes": [
+        "17b8e8e475c8",
+        "5d70712efd86",
+        "fa930f206ed0"
+      ],
+      "recallDays": [
+        "2026-08-19",
+        "2026-08-20",
+        "2026-09-22"
+      ],
+      "conceptTags": [
+        "agente-performance/readme.md",
+        "memória",
+        "sessão",
+        "tarde",
+        "utc",
+        "documentação",
+        "agente",
+        "performance"
+      ]
+    },
+    "memory:memory/2026-08-11.md:1:36": {
+      "key": "memory:memory/2026-08-11.md:1:36",
+      "path": "memory/2026-08-11.md",
+      "startLine": 1,
+      "endLine": 36,
+      "source": "memory",
+      "snippet": "# Memória — 2026-08-11 ## Flora-Agente — Correções e Melhorias ### Gemini deprecado - `gemini-2.5-flash` retornava 404 em todas as chamadas - Corrigido para `gemini-2.0-flash` em `config/settings.py` e `.env` - Commit: `16c4e98` — serviço reiniciado ### Prompt — Regiane → Jana - Prompts `_vendas.py` e `_pagamento.py` tinham referência a \"Regiane\" (nome antigo) - Corrigido para \"Jana\" em ambos - Commit realizado e serviço reiniciado ### Anti-repetição de conteúdo - Problema: Flora repetia respostas para mensagens repetidas além da janela de 2h (caso Lene — 26h de repetição) - Loop detector: janela ampliada de `hours=2` para `hours=24` - Regra anti-repetição adicionada nos prompts: `_venda",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-19T04:01:18.241Z",
+      "lastRecalledAt": "2026-08-19T04:01:18.241Z",
+      "queryHashes": [
+        "17b8e8e475c8"
+      ],
+      "recallDays": [
+        "2026-08-19"
+      ],
+      "conceptTags": [
+        "flora-agente",
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "config/settings.py",
+        "vendas.py",
+        "pagamento.py",
+        "anti-repetição",
+        "memória"
+      ]
+    },
+    "memory:memory/2026-07-22.md:56:76": {
+      "key": "memory:memory/2026-07-22.md:56:76",
+      "path": "memory/2026-07-22.md",
+      "startLine": 56,
+      "endLine": 76,
+      "source": "memory",
+      "snippet": "- Arquivo criado: `scripts/cron_shopify_sync.py` — cron com carga inicial automática de 90d se tabela vazia - `agent/queries.py` atualizado com: `receita_shopify_periodo()`, `metricas_shopify_diario()`, `status_shopify_sync()` - `agent/engine.py` enriquece resultados com dados Shopify reais quando sincronizados - `agent/claude_client.py` prioriza ROAS Real (Shopify) sobre ROAS Meta no prompt - `api/app.py` com 4 novos endpoints: `/shopify/status`, `/shopify/sync`, `/shopify/receita`, `/shopify/diario` - Cron `shopify-sync-diario` configurado: todo dia 6h UTC, últimos 8 dias - Carga histórica executada: erro no exec (code 124 = timeout após 2min), mas sync parcial OK - ROAS Real calculado e f",
+      "recallCount": 8,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 8,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-19T04:01:18.241Z",
+      "lastRecalledAt": "2026-09-22T19:37:14.414Z",
+      "queryHashes": [
+        "17b8e8e475c8",
+        "5d70712efd86",
+        "c3567ce9436d",
+        "6f60de20d27d",
+        "2fbd4fd55425",
+        "e7b4f87c8bd4",
+        "6ab63dc2a749",
+        "5ff2eddb4a55"
+      ],
+      "recallDays": [
+        "2026-08-19",
+        "2026-08-20",
+        "2026-09-10",
+        "2026-09-22"
+      ],
+      "conceptTags": [
+        "scripts/cron-shopify-sync.py",
+        "agent/queries.py",
+        "receita-shopify-periodo",
+        "metricas-shopify-diario",
+        "status-shopify-sync",
+        "agent/engine.py",
+        "agent/claude-client.py",
+        "api/app.py"
+      ]
+    },
+    "memory:memory/2026-08-03.md:41:51": {
+      "key": "memory:memory/2026-08-03.md:41:51",
+      "path": "memory/2026-08-03.md",
+      "startLine": 41,
+      "endLine": 51,
+      "source": "memory",
+      "snippet": "- `memory/shared_memory.py` (removida ref a `notes` no SELECT) - `agents/compliance_guard.py` (guard politica + falso positivo status_pedido) - `prompt/_logistica.py` (removida autorização de prazos) - `prompt/_pagamento.py` (idem) ### Pendentes para próxima sessão - **#3:** Ignorar mensagens automáticas de sistema (notificações de pedido formatadas) - **#6:** Verificar se BEMVINDA é citado quando intent = PAGAMENTO e cliente pergunta sobre promoção - **#7:** Imagens após handoff — ignorar ou encaminhar sem processar - Avaliação da lista de melhorias estruturais (God Object orchestrator.py, webhook.py, etc.)",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-19T04:01:18.241Z",
+      "lastRecalledAt": "2026-08-19T04:01:18.241Z",
+      "queryHashes": [
+        "17b8e8e475c8"
+      ],
+      "recallDays": [
+        "2026-08-19"
+      ],
+      "conceptTags": [
+        "memory/shared-memory.py",
+        "agents/compliance-guard.py",
+        "status-pedido",
+        "logistica.py",
+        "pagamento.py",
+        "orchestrator.py",
+        "webhook.py",
+        "shared-memory.py"
+      ]
+    },
+    "memory:memory/2026-08-10.md:71:99": {
+      "key": "memory:memory/2026-08-10.md:71:99",
+      "path": "memory/2026-08-10.md",
+      "startLine": 71,
+      "endLine": 99,
+      "source": "memory",
+      "snippet": "- OSError fd limit: 437 ocorrências — corrigido --- ## Pasta `alteracoes/` criada Regra estabelecida: **todo commit + push no Flora-Agente gera arquivo de alteração** em `alteracoes/YYYY-MM-DD_<slug>.md` com: data, commit hash, arquivos alterados, o que foi alterado, impacto. Arquivos criados hoje: - `alteracoes/README.md` - `alteracoes/2026-08-10_fix-gemini-quota-skip-e-compact-history.md` - `alteracoes/2026-08-10_fix-image-agent-fallback-quota.md` - `alteracoes/2026-08-10_feat-melhoria-classificador-intent.md` - `alteracoes/2026-08-10_feat-pedido-duplicado-transfere-jana.md` - `alteracoes/2026-08-10_fix-cupom-bemvinda-apenas-primeira-compra.md` - `alteracoes/2026-08-10_feat-5-melhorias-",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-21T04:03:18.453Z",
+      "lastRecalledAt": "2026-08-21T04:03:18.453Z",
+      "queryHashes": [
+        "d2b76a295736"
+      ],
+      "recallDays": [
+        "2026-08-21"
+      ],
+      "conceptTags": [
+        "flora-agente",
+        "alteracoes/yyyy-mm-dd",
+        "alteracoes/readme.md",
+        "oserror",
+        "limit",
+        "ocorrências",
+        "corrigido",
+        "pasta"
+      ]
+    },
+    "memory:memory/2026-08-10.md:53:79": {
+      "key": "memory:memory/2026-08-10.md:53:79",
+      "path": "memory/2026-08-10.md",
+      "startLine": 53,
+      "endLine": 79,
+      "source": "memory",
+      "snippet": "- **Quota Gemini persiste entre restarts:** salvo em `/tmp/gemini_quota_skip.txt` (volátil — ver ponto de atenção abaixo) - **Anti-loop em tempo real:** 2ª repetição idêntica nas últimas 2h → escala para Jana com motivo `LOOP_DETECTADO` - **Jana triggers limpos:** parcelamento, frete, assinatura-info removidos dos triggers — Flora resolve ela mesma ### 8. Robustez — 3 fixes críticos (commit `4b8d245`) - **LimitNOFILE=65536 no systemd:** eliminação dos 437 erros `OSError: Too many open files` (limite era 1024) - **Circuit breaker no orchestrator:** pipeline inteiro do `handle()` protegido; 10 `except+pass` → `logger.warning`; fallback retorna mensagem amigável ao cliente - **Webhook /test co",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-21T04:03:18.453Z",
+      "lastRecalledAt": "2026-08-21T04:03:18.453Z",
+      "queryHashes": [
+        "d2b76a295736"
+      ],
+      "recallDays": [
+        "2026-08-21"
+      ],
+      "conceptTags": [
+        "tmp/gemini-quota-skip.txt",
+        "anti-loop",
+        "loop-detectado",
+        "assinatura-info",
+        "logger.warning",
+        "quota",
+        "gemini",
+        "persiste"
+      ]
+    },
+    "memory:memory/2026-07-21.md:67:97": {
+      "key": "memory:memory/2026-07-21.md:67:97",
+      "path": "memory/2026-07-21.md",
+      "startLine": 67,
+      "endLine": 97,
+      "source": "memory",
+      "snippet": "- `SHOPIFY_STORE=source-of-brasil` - `SHOPIFY_TOKEN=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` # Memória — 2026-07-21 ## Agente de Performance Guará — Sessão de Desenvolvimento ### Subagente de Relatoria — Alterações no Builder Trabalhamos extensivamente no pipeline do relatório semanal (`relatorio/builder.py`). Resumo das mudanças: #### Seções removidas (ambos os pipelines — semanal e mensal) - 📋 Desempenho por Campanha - 🏆 Top Campanhas por ROAS - 📊 Resumo Executivo - 🚨 Alertas Automáticos - 📅 Planejamento Q3 2026 — Meta Ads - 🎨 Planejamento Criativo - 📊 Tendência Últimas 4 Semanas (WoW) — substituída por Comparativo com Período Anterior #### Alterações nas tabelas existentes - **",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-21T04:03:18.453Z",
+      "lastRecalledAt": "2026-09-22T12:20:50.872Z",
+      "queryHashes": [
+        "d2b76a295736",
+        "fa930f206ed0"
+      ],
+      "recallDays": [
+        "2026-08-21",
+        "2026-09-22"
+      ],
+      "conceptTags": [
+        "shopify-store",
+        "source-of-brasil",
+        "shopify-token",
+        "relatorio/builder.py",
+        "source",
+        "brasil",
+        "memória",
+        "agente"
+      ]
+    },
+    "memory:memory/2026-07-02.md:1:24": {
+      "key": "memory:memory/2026-07-02.md:1:24",
+      "path": "memory/2026-07-02.md",
+      "startLine": 1,
+      "endLine": 24,
+      "source": "memory",
+      "snippet": "# Memória — 02 de julho de 2026 ## Sessão de desenvolvimento — Flora-Agente ### Alterações realizadas em `agents/orchestrator.py` 1. **Detecção de reenvio (`_REENVIO_RE`)** — regex pré-LLM disparando handoff imediato para Jana (webhook 150856) com `reason=\"REENVIO\"`. Cobre: reenvio explícito, produto não chegou, extravio, produto com defeito/errado, troca/devolução/reembolso/estorno. 2. **Fallback fora de escopo (`_UNCERTAIN_RESPONSE_RE`)** — intercepta respostas incertas/vagas da LLM em qualquer agente (step 5b no pipeline). Frases como \"não tenho essa informação\", \"fora do meu escopo\" etc. acionam handoff com `reason=\"FORA_ESCOPO\"`. 3. **`GeralAgent` atualizado** — mesma detecção de r",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-21T04:03:18.453Z",
+      "lastRecalledAt": "2026-08-21T04:03:18.453Z",
+      "queryHashes": [
+        "d2b76a295736"
+      ],
+      "recallDays": [
+        "2026-08-21"
+      ],
+      "conceptTags": [
+        "flora-agente",
+        "agents/orchestrator.py",
+        "reenvio-re",
+        "pré-llm",
+        "defeito/errado",
+        "uncertain-response-re",
+        "incertas/vagas",
+        "fora-escopo"
+      ]
+    },
+    "memory:memory/2026-08-10.md:29:56": {
+      "key": "memory:memory/2026-08-10.md:29:56",
+      "path": "memory/2026-08-10.md",
+      "startLine": 29,
+      "endLine": 56,
+      "source": "memory",
+      "snippet": "### 4. Cupom BEMVINDA sendo oferecido a clientes recorrentes - **Problema:** todos os agentes tinham instrução \"SEMPRE mencionar — independente de ser novo ou recorrente\" - **Fix:** corrigido em `_vendas.py`, `_produto.py`, `_geral.py`, `_logistica.py`, `_pagamento.py` — cupom só para novos clientes - **Commit:** `50c4b62` --- ## Melhorias implementadas ### 5. Classificador de intent — GERAL de 45% para ~15% - Novas regras em `fast_classifier.py`: \"Já paguei\" → PAGAMENTO, cancelar assinatura composta → ASSINATURA, \"não consigo comprar\" → VENDAS, alterar endereço → LOGISTICA - Prompt do LLM reforçado: GERAL é última opção explícita - 13/13 casos testados antes do deploy - **Commit:** `98c7",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-25T18:53:48.079Z",
+      "lastRecalledAt": "2026-08-25T18:53:48.079Z",
+      "queryHashes": [
+        "1a2c4f9726f6"
+      ],
+      "recallDays": [
+        "2026-08-25"
+      ],
+      "conceptTags": [
+        "vendas.py",
+        "produto.py",
+        "geral.py",
+        "logistica.py",
+        "pagamento.py",
+        "fast-classifier.py",
+        "13/13",
+        "cupom"
+      ]
+    },
+    "memory:memory/2026-08-18.md:93:124": {
+      "key": "memory:memory/2026-08-18.md:93:124",
+      "path": "memory/2026-08-18.md",
+      "startLine": 93,
+      "endLine": 124,
+      "source": "memory",
+      "snippet": "- **Cliente:** source_of (customer_id=4311260590) - **Período sincronizado:** 2026-08-16 → 2026-08-17 - **Linhas salvas:** 8 → tabela `source_of_gads_diario` - **Erros:** 0 - **Obs:** pod_kombucha pulado (google_ads inativo) --- ## Refactor: Estrutura por cliente (18:00–19:00 UTC) ### Concluído - **Estrutura de pastas por cliente criada:** - `clientes/pod/` — config.json, prompts.py, relatorio/{diario,semanal,mensal}.py - `clientes/source_of/` — config.json, prompts.py, relatorio/{diario,semanal,mensal}.py - **`agent/claude_client.py`** atualizado: prompts importados das pastas dos clientes em vez de inline - **Validação:** todos os 9 arquivos novos passaram em `py_compile` + teste de",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-31T17:48:54.471Z",
+      "lastRecalledAt": "2026-09-01T15:07:14.645Z",
+      "queryHashes": [
+        "f3c5aee98128",
+        "87e15193f5e8"
+      ],
+      "recallDays": [
+        "2026-08-31",
+        "2026-09-01"
+      ],
+      "conceptTags": [
+        "source-of",
+        "customer-id",
+        "source-of-gads-diario",
+        "pod-kombucha",
+        "google-ads",
+        "clientes/pod",
+        "config.json",
+        "prompts.py"
+      ]
+    },
+    "memory:memory/2026-07-22.md:93:115": {
+      "key": "memory:memory/2026-07-22.md:93:115",
+      "path": "memory/2026-07-22.md",
+      "startLine": 93,
+      "endLine": 115,
+      "source": "memory",
+      "snippet": "- `e767054` — `--data-inicio` e `--data-fim` adicionados ao `cron_todos_relatorios.py` - `8ce7c8a` — `data/.notion_historico_ids.json` commitado (relatório diário Source OF 20/07) - `e671a40` — preços hardcoded removidos de todos os prompts da Flora (31 ocorrências) - `ce86de1` — `build_product_catalog()` corrigido: sem `R$ {price}` no catálogo dinâmico - `808412d` — `_sanitize_response()` adicionado ao orchestrator.py (regex bloqueia R$ XX,XX) - `458d8db` — exceção R$ 300 no filtro de preços (frete grátis não é cortado) - `9461ae0` — +55 41 8712-9444 adicionado à lista de autorizados para relatório sob demanda ### Flora-Agente — Filtro de Preços (3 camadas) 1. `prompt/prompts.py` — sem tab",
+      "recallCount": 4,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 4,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-31T17:48:54.471Z",
+      "lastRecalledAt": "2026-09-22T12:20:48.110Z",
+      "queryHashes": [
+        "f3c5aee98128",
+        "98fcbb582c12",
+        "87e15193f5e8",
+        "107005e9f50a"
+      ],
+      "recallDays": [
+        "2026-08-31",
+        "2026-09-01",
+        "2026-09-22"
+      ],
+      "conceptTags": [
+        "data-inicio",
+        "data-fim",
+        "cron-todos-relatorios.py",
+        "notion-historico-ids.json",
+        "20/07",
+        "build-product-catalog",
+        "sanitize-response",
+        "orchestrator.py"
+      ]
+    },
+    "memory:memory/2026-08-18.md:1:38": {
+      "key": "memory:memory/2026-08-18.md:1:38",
+      "path": "memory/2026-08-18.md",
+      "startLine": 1,
+      "endLine": 38,
+      "source": "memory",
+      "snippet": "# 2026-08-18 ## Cron: gads-sync-horario (16:02 UTC) - **Status:** ✅ Sucesso - **Cliente:** source_of (customer_id=4311260590) - **Período sincronizado:** 2026-08-16 → 2026-08-17 - **Linhas salvas:** 8 → tabela `source_of_gads_diario` - **Erros:** 0 - **Obs:** pod_kombucha pulado (google_ads inativo) # 2026-08-18 ## Cron: gads-sync-horario (16:02 UTC) - **Status:** ✅ Sucesso - **Cliente:** source_of (customer_id=4311260590) - **Período sincronizado:** 2026-08-16 → 2026-08-17 - **Linhas salvas:** 8 → tabela `source_of_gads_diario` - **Erros:** 0 - **Obs:** pod_kombucha pulado (google_ads inativo) --- ## Refactor: Estrutura por cliente (18:00–19:00 UTC) ### Concluído - **Estrutura de pasta",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-31T17:48:54.471Z",
+      "lastRecalledAt": "2026-09-01T15:07:14.645Z",
+      "queryHashes": [
+        "f3c5aee98128",
+        "87e15193f5e8"
+      ],
+      "recallDays": [
+        "2026-08-31",
+        "2026-09-01"
+      ],
+      "conceptTags": [
+        "gads-sync-horario",
+        "source-of",
+        "customer-id",
+        "source-of-gads-diario",
+        "pod-kombucha",
+        "google-ads",
+        "cron",
+        "gads"
+      ]
+    },
+    "memory:memory/2026-07-22.md:110:133": {
+      "key": "memory:memory/2026-07-22.md:110:133",
+      "path": "memory/2026-07-22.md",
+      "startLine": 110,
+      "endLine": 133,
+      "source": "memory",
+      "snippet": "- `_REPORT_RE` agora aceita \"relatoria\" (com *a*), \"relatorio\" (sem acento), além de \"relatório\" - `_MES_ATUAL_RE` agora detecta nomes de meses (\"mês de julho\", \"relatório de agosto\") - Números autorizados: `5519995994481`, `554187129444`, `554196413130` - Relatório de julho (01/07–22/07) gerado e enviado manualmente para Eros após bug detectado ### Flora-Agente — Página Notion tutorial criada - Título: \"📊 Como Solicitar Relatórios da Flora via WhatsApp\" - Parent: `3908a727-a8ff-8196-881b-e762f151c5c3` - Contém: números autorizados, comandos semanal/mensal, exemplos práticos, fluxo de entrega ### Flora-Agente — Compartilhamento Notion - Páginas de relatório retornam `public_url: None` — p",
+      "recallCount": 3,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 3,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-31T21:03:45.166Z",
+      "lastRecalledAt": "2026-09-28T12:49:26.472Z",
+      "queryHashes": [
+        "98fcbb582c12",
+        "107005e9f50a",
+        "e9b8827cda2f"
+      ],
+      "recallDays": [
+        "2026-08-31",
+        "2026-09-22",
+        "2026-09-28"
+      ],
+      "conceptTags": [
+        "report-re",
+        "mes-atual-re",
+        "01/07",
+        "22/07",
+        "flora-agente",
+        "semanal/mensal",
+        "public-url",
+        "agora"
+      ]
+    },
+    "memory:memory/2026-08-31.md:52:84": {
+      "key": "memory:memory/2026-08-31.md:52:84",
+      "path": "memory/2026-08-31.md",
+      "startLine": 52,
+      "endLine": 84,
+      "source": "memory",
+      "snippet": "| Flora Ago Critério Oficial | `3cd8a727-a8ff-8122-a4cc-df902d07a690` | Agosto 24–31/08 classificado por LLM | **Página anual ativa:** `https://notion.so/3cd8a727a8ff8142b35cc6f732e106f9` ### Totais Agosto 2026 (critério oficial, +50 ajuste) | Classificação | Qtd | |---|---| | ✅ Resolvido pela Flora | 131 | | 🔁 Atendimento Redirecionado | 117 | | 💬 Interação Casual (excluída) | 181 | | **Reais** | **248** | | **Total** | **429** | | **Taxa de resolução** | **53%** | ### Critério oficial de classificação (confirmado pelo usuário) 1. **Resolvido pela Flora** — esclareceu dúvida, enviou link/procedimento, ou cliente não voltou com novas dúvidas após resposta 2. **Interação Casual** — respo",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-08-31T21:07:25.436Z",
+      "lastRecalledAt": "2026-08-31T21:07:25.436Z",
+      "queryHashes": [
+        "1f0bf9b48929"
+      ],
+      "recallDays": [
+        "2026-08-31"
+      ],
+      "conceptTags": [
+        "31/08",
+        "link/procedimento",
+        "flora",
+        "ago",
+        "critério",
+        "oficial",
+        "3cd8a727",
+        "a8ff"
+      ]
+    },
+    "memory:memory/2026-08-17.md:58:70": {
+      "key": "memory:memory/2026-08-17.md:58:70",
+      "path": "memory/2026-08-17.md",
+      "startLine": 58,
+      "endLine": 70,
+      "source": "memory",
+      "snippet": "- **`test_cobertura_periodo`**: granularidade ad/dia gera N×30 linhas, não 23 — corrigido para validar `dias distintos` - **`test_hierarquia_funil`**: `checkout_iniciado` é NULL na view unificada (não rastreado), condicional adicionada ### Teste de mutação (3 mutações confirmadas): - ROAS AVG→SUM: detectado ✅ - `views_conteudo` reinserida: detectado ✅ - CPA sem FATOR: detectado ✅ ### Notas arquiteturais identificadas: - `campanhas_unificada` é a view central de referência — testes devem sempre usar ela, nunca as tabelas brutas - `checkout_iniciado` e `adicoes_carrinho` são NULL na view unificada (API Meta não entrega via endpoint de insights padrão para Source OF) - `alcance` pode ser NULL",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-02T18:06:00.925Z",
+      "lastRecalledAt": "2026-09-03T17:42:21.929Z",
+      "queryHashes": [
+        "4bcedf6dc45e",
+        "39dda023cb66"
+      ],
+      "recallDays": [
+        "2026-09-02",
+        "2026-09-03"
+      ],
+      "conceptTags": [
+        "test-cobertura-periodo",
+        "ad/dia",
+        "test-hierarquia-funil",
+        "checkout-iniciado",
+        "views-conteudo",
+        "campanhas-unificada",
+        "adicoes-carrinho",
+        "granularidade"
+      ]
+    },
+    "memory:memory/2026-08-11.md:29:52": {
+      "key": "memory:memory/2026-08-11.md:29:52",
+      "path": "memory/2026-08-11.md",
+      "startLine": 29,
+      "endLine": 52,
+      "source": "memory",
+      "snippet": "- Novo campo `wamid` — dedup automático de mensagens duplicadas do Meta - `get_history` usa `created_at_ts` (epoch) em vez de string datetime - Índice composto `(phone, created_at_ts)` + índice único `wamid` - `session_id` propagado em 17 chamadas `add_message` do orchestrator ## Relatório Semanal Flora — Notion ### Script: `scripts/weekly_report.py` - Adicionada seção de suportes atendidos por semana e mês - Filtro de interações reais (exclui carrinhos abandonados/disparos automáticos) - Métrica: interações totais, reais, contatos atendidos, sucessos, erros ### Estrutura atual do relatório Notion - 2 grupos: ✅ Atendidos/Resolvidos pela Flora (72) + 🔁 Redirecionados para Jana (50) - \"Sem",
+      "recallCount": 2,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 2,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-02T18:06:00.925Z",
+      "lastRecalledAt": "2026-09-03T17:42:21.929Z",
+      "queryHashes": [
+        "4bcedf6dc45e",
+        "39dda023cb66"
+      ],
+      "recallDays": [
+        "2026-09-02",
+        "2026-09-03"
+      ],
+      "conceptTags": [
+        "get-history",
+        "created-at-ts",
+        "session-id",
+        "add-message",
+        "scripts/weekly-report.py",
+        "abandonados/disparos",
+        "atendidos/resolvidos",
+        "novo"
+      ]
+    },
+    "memory:memory/2026-07-31.md:28:61": {
+      "key": "memory:memory/2026-07-31.md:28:61",
+      "path": "memory/2026-07-31.md",
+      "startLine": 28,
+      "endLine": 61,
+      "source": "memory",
+      "snippet": "3. **Validação de CNPJ** — validação real com dígitos verificadores; texto inválido pede retry 4. **Verificação de stage do CRM** — removida para leads `concluido` (elimina chamada desnecessária) 5. **Buffer** — aumentado de 1.5s para 2.0s 6. **Rotação de logs** — journald limitado: 500MB, 30 dias, rotação semanal 7. **Mensagem de encerramento** — bot envia \"Registrado! Muito obrigado! 🙏...\" ao concluir 8. **Description do CRM** — campo `description` enviado fora do objeto `fields` (fix da API Supabase) 9. **Description formatada** — nome, telefone, serviço, cidade, CNPJ, canal acumulados a cada etapa ### Formato real da Whapi (botões) ```json { \"type\": \"reply\", \"reply\": { \"type\":",
+      "recallCount": 3,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 3,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-02T18:06:00.925Z",
+      "lastRecalledAt": "2026-09-10T19:52:49.153Z",
+      "queryHashes": [
+        "4bcedf6dc45e",
+        "39dda023cb66",
+        "6f60de20d27d"
+      ],
+      "recallDays": [
+        "2026-09-02",
+        "2026-09-03",
+        "2026-09-10"
+      ],
+      "conceptTags": [
+        "1.5s",
+        "2.0s",
+        "validação",
+        "cnpj",
+        "real",
+        "com",
+        "dígitos",
+        "verificadores"
+      ]
+    },
+    "memory:memory/2026-07-31.md:1:32": {
+      "key": "memory:memory/2026-07-31.md:1:32",
+      "path": "memory/2026-07-31.md",
+      "startLine": 1,
+      "endLine": 32,
+      "source": "memory",
+      "snippet": "# Memória Diária — 2026-07-31 ## chatbot_maximo ### Projeto - Diretório: `/home/ubuntu/.openclaw/workspace/chatbot_maximo/` - Stack: FastAPI + SQLite + Whapi + Supabase CRM - Serviço: `chatbot-maximo.service` porta 8003 - Fluxo: qualificação de leads B2B em 7 etapas via WhatsApp ### Bugs corrigidos hoje **Bug principal — botão não avançava o fluxo:** - A Whapi envia cliques em botão com `{\"type\": \"reply\", \"reply\": {\"type\": \"buttons_reply\", \"buttons_reply\": {\"id\": \"ButtonsV3:id1\", ...}}}` - O parser (`webhook_parser.py`) não reconhecia esse formato → `kind=other` - Com `kind=other` e `state=welcome` → bot reenviava boas-vindas infinitamente - Correção: adicionado suporte ao formato `type=",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-10T19:52:49.153Z",
+      "lastRecalledAt": "2026-09-10T19:52:49.153Z",
+      "queryHashes": [
+        "6f60de20d27d"
+      ],
+      "recallDays": [
+        "2026-09-10"
+      ],
+      "conceptTags": [
+        "chatbot-maximo",
+        "home/ubuntu",
+        "chatbot-maximo.service",
+        "buttons-reply",
+        "webhook-parser.py",
+        "boas-vindas",
+        "memória",
+        "diária"
+      ]
+    },
+    "memory:memory/2026-08-19.md:141:163": {
+      "key": "memory:memory/2026-08-19.md:141:163",
+      "path": "memory/2026-08-19.md",
+      "startLine": 141,
+      "endLine": 163,
+      "source": "memory",
+      "snippet": "Concluído com sucesso na mesma sessão (via python3 -c com heredoc, contornando bug da ferramenta write): - ✅ Etapa 2: `scripts/etl_warehouse.py` criado + carga histórica completa executada (perf=4893, ads=10887, shopify=414, dim_camp=66) — commit `47f6306` - ✅ Etapa 3: `db/duck.py` views `dw_*` lendo Parquet — 225/225 testes passando — commit `1ae0ef5` - ✅ Etapa 4: Pausada por decisão do usuário (endpoints /dashboard/* não implementados) - ✅ Etapa 5: Cron `etl-warehouse-incremental` criado (ID `95d6b31f-f8ab-4cf7-99dc-31b4f9234828`), schedule `30 10 * * *` UTC (07:30 BRT) — commit vazio `386d29a` **ETL state:** `ultimo_dia_processado: 2026-08-18` | Investimento total source_of/meta: R$3.21",
+      "recallCount": 3,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 3,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-22T12:20:43.774Z",
+      "lastRecalledAt": "2026-10-06T11:57:49.087Z",
+      "queryHashes": [
+        "d1a81b7f8df5",
+        "e1ef71978c2b",
+        "0c9a946a1a8e"
+      ],
+      "recallDays": [
+        "2026-09-22",
+        "2026-10-06"
+      ],
+      "conceptTags": [
+        "scripts/etl-warehouse.py",
+        "dim-camp",
+        "db/duck.py",
+        "225/225",
+        "etl-warehouse-incremental",
+        "ultimo-dia-processado",
+        "source-of/meta",
+        "3.21"
+      ]
+    },
+    "memory:memory/2026-07-28.md:24:48": {
+      "key": "memory:memory/2026-07-28.md:24:48",
+      "path": "memory/2026-07-28.md",
+      "startLine": 24,
+      "endLine": 48,
+      "source": "memory",
+      "snippet": "**#7 `bot_errors`** — tabela de erros estruturada; `log_error()` chamado nos fallbacks do `base.py` e URL corrections do `_sanitize_response`. **#8 ResponseCache** — cache em duas camadas: LRU em memória (500 entradas) + SQLite. TTL inteligente por intent. LOGISTICA e PAGAMENTO nunca cacheados. Não armazena respostas com dados pessoais. **#9 FastClassifier** — classificação regex sem chamar Gemini. ~40 padrões, 7 intents. Fast path no `classify()`. **Dashboard** — `/dashboard` + `/api/metrics` no webhook.py. HTML em `static/dashboard.html`. KPIs, timeline 24h, intents, sessions, cache, erros, circuit breaker. Atualização a cada 15s. **#22 Sessions no orchestrator** — integração completa:",
+      "recallCount": 3,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 3,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-22T12:20:43.774Z",
+      "lastRecalledAt": "2026-10-06T11:57:49.087Z",
+      "queryHashes": [
+        "d1a81b7f8df5",
+        "e1ef71978c2b",
+        "0c9a946a1a8e"
+      ],
+      "recallDays": [
+        "2026-09-22",
+        "2026-10-06"
+      ],
+      "conceptTags": [
+        "bot-errors",
+        "log-error",
+        "base.py",
+        "sanitize-response",
+        "api/metrics",
+        "webhook.py",
+        "static/dashboard.html",
+        "tabela"
+      ]
+    },
+    "memory:memory/2026-09-21.md:65:88": {
+      "key": "memory:memory/2026-09-21.md:65:88",
+      "path": "memory/2026-09-21.md",
+      "startLine": 65,
+      "endLine": 88,
+      "source": "memory",
+      "snippet": "- **Meta Ads:** token `EAAS0rdcyghYBSUg8cMsSIkXYImuE7dsopKDiIuY3WBJF33OcdmWJXgobixNnQBUDOZABvlYwbnS5ZCvZB5Ex8R32iZAPZArZA8Xfi0BmIYxbO1E191gcv3Qj3oPR3aWC7N4B84XPiLtaiRaNQCNmhZCE0f2W0VMcLRlK8YOhoC5zAcstL9hqlfcNKTOFbeX` | conta `act_1059884611898142` - **Google Ads:** credenciais do agente-performance (.env) | customer_id `4311260590` - **Notion:** token `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` (workspace Guará Media) — integração `Relatoria` - **Slack Webhook:** `https://hooks.slack.com/services/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` - **Slack Bot Token:** `xoxb-5651931611700-12114817346518-h7iJ2aZVwdiZpacGlFRapoJd` - **Slack User Token:** `xoxp-5651931611700-94381608514",
+      "recallCount": 3,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 3,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-22T12:20:48.110Z",
+      "lastRecalledAt": "2026-09-22T19:34:29.374Z",
+      "queryHashes": [
+        "107005e9f50a",
+        "fa930f206ed0",
+        "e7b4f87c8bd4"
+      ],
+      "recallDays": [
+        "2026-09-22"
+      ],
+      "conceptTags": [
+        "act-1059884611898142",
+        "agente-performance",
+        "customer-id",
+        "xoxp-5651931611700-94381608514",
+        "meta",
+        "ads",
+        "token",
+        "conta"
+      ]
+    },
+    "memory:memory/2026-09-21.md:41:68": {
+      "key": "memory:memory/2026-09-21.md:41:68",
+      "path": "memory/2026-09-21.md",
+      "startLine": 41,
+      "endLine": 68,
+      "source": "memory",
+      "snippet": "**Período:** 2026-09-19 → 2026-09-20 (2 dias) **Contas:** - `source_of` (act_1059884611898142): 118 linhas → `source_of_meta_ads_diario` - `pod_kombucha` (act_324906945710366): 129 linhas → `pod_kombucha_meta_ads_diario` **Total:** 247 linhas | BQ espelhado | Cache limpo | 0 erros ## Cron: sync_meta_diario (20:15 UTC) - Período: 2026-09-19 → 2026-09-20 - source_of (act_1059884611898142): 118 linhas ✅ - pod_kombucha (act_324906945710366): 129 linhas ✅ - Total: 247 linhas | Erros: 0 --- ## Projeto Relatoria — Source OF (sessão ~18:42–20:59 UTC) ### O que foi construído - Repositório GitHub `Eroscv/relatoria` clonado em `/home/ubuntu/.openclaw/workspace/relatoria/` - Script de relatório",
+      "recallCount": 6,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 6,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-22T12:20:50.872Z",
+      "lastRecalledAt": "2026-10-06T11:57:49.087Z",
+      "queryHashes": [
+        "fa930f206ed0",
+        "e7b4f87c8bd4",
+        "5e3559814150",
+        "a1ae6c3d4f15",
+        "e1ef71978c2b",
+        "0c9a946a1a8e"
+      ],
+      "recallDays": [
+        "2026-09-22",
+        "2026-09-23",
+        "2026-09-29",
+        "2026-10-06"
+      ],
+      "conceptTags": [
+        "source-of",
+        "act-1059884611898142",
+        "source-of-meta-ads-diario",
+        "pod-kombucha",
+        "act-324906945710366",
+        "pod-kombucha-meta-ads-diario",
+        "sync-meta-diario",
+        "eroscv/relatoria"
+      ]
+    },
+    "memory:memory/2026-08-03.md:25:47": {
+      "key": "memory:memory/2026-08-03.md:25:47",
+      "path": "memory/2026-08-03.md",
+      "startLine": 25,
+      "endLine": 47,
+      "source": "memory",
+      "snippet": "### Fix #5 — Guard de política de devolução (19:34–19:56 UTC) **Causa raiz:** prompts `_logistica.py` e `_pagamento.py` tinham `✓ Informar prazos (30 dias troca/defeito, 7 dias arrependimento)` — o LLM interpretava como dado autorizado e informava detalhadamente, em contradição com a regra anti-alucinação do topo. **3 camadas de correção aplicadas:** 1. **Prompt** — Removida autorização de informar prazos. Flora orienta para link oficial: `sourceof.com.br/policies/refund-policy` 2. **Guard (detecção)** — 7 novos padrões: bullet lists de prazo (`até 30 dias corridos`, `até 2 faturas`, `X dias úteis após análise`, etc.) 3. **Guard (sanitização)** — `replace_response=True` adicionado à regra `",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-22T19:36:10.686Z",
+      "lastRecalledAt": "2026-09-22T19:36:10.686Z",
+      "queryHashes": [
+        "6ab63dc2a749"
+      ],
+      "recallDays": [
+        "2026-09-22"
+      ],
+      "conceptTags": [
+        "logistica.py",
+        "pagamento.py",
+        "troca/defeito",
+        "anti-alucinação",
+        "replace-response",
+        "fix",
+        "guard",
+        "política"
+      ]
+    },
+    "memory:memory/2026-09-14.md:1:20": {
+      "key": "memory:memory/2026-09-14.md:1:20",
+      "path": "memory/2026-09-14.md",
+      "startLine": 1,
+      "endLine": 20,
+      "source": "memory",
+      "snippet": "# 2026-09-14 ## Cron: gads-sync-horario (20:01 UTC) - **Script:** `sync_gads_diario.py --dias 8` - **Período buscado:** 2026-09-06 → 2026-09-13 - **Linhas retornadas/salvas:** 33 - **BigQuery:** ✅ 33 linhas espelhadas (source_of/google) - **Cache limpo:** 0 entradas removidas - **Resultado:** 1 sucesso, 0 erros - **Pod Kombucha:** google_ads inativo — pulado ## 21:02 UTC — Cron: gads-sync-horario - **Status:** ✅ Sucesso - **Período buscado:** 2026-09-06 → 2026-09-13 (8 dias) - **Linhas salvas:** 33 (source_of_gads_diario) - **BigQuery espelhado:** source_of/google — 33 linhas - **Erros:** 0 - **Obs:** pod_kombucha pulado (google_ads inativo)",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-28T12:53:11.236Z",
+      "lastRecalledAt": "2026-09-28T12:53:11.236Z",
+      "queryHashes": [
+        "ccd09017e84c"
+      ],
+      "recallDays": [
+        "2026-09-28"
+      ],
+      "conceptTags": [
+        "gads-sync-horario",
+        "sync-gads-diario.py",
+        "retornadas/salvas",
+        "source-of/google",
+        "google-ads",
+        "source-of-gads-diario",
+        "pod-kombucha",
+        "cron"
+      ]
+    },
+    "memory:memory/2026-09-20.md:1:13": {
+      "key": "memory:memory/2026-09-20.md:1:13",
+      "path": "memory/2026-09-20.md",
+      "startLine": 1,
+      "endLine": 13,
+      "source": "memory",
+      "snippet": "# 2026-09-20 ## Cron: gads-sync-horario (21:01 UTC) - **Status:** ✅ Sucesso - **Linhas sincronizadas:** 38 - **Período buscado:** 2026-09-12 → 2026-09-19 (8 dias) - **Tabela:** source_of_gads_diario - **BigQuery:** 38 linhas espelhadas em source_of/google - **Cache:** limpo (0 entradas removidas) - **Erros:** nenhum - **Clientes:** source_of ✅ | pod_kombucha ⏭ (google_ads inativo)",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-28T12:53:11.236Z",
+      "lastRecalledAt": "2026-09-28T12:53:11.236Z",
+      "queryHashes": [
+        "ccd09017e84c"
+      ],
+      "recallDays": [
+        "2026-09-28"
+      ],
+      "conceptTags": [
+        "gads-sync-horario",
+        "source-of-gads-diario",
+        "source-of/google",
+        "source-of",
+        "pod-kombucha",
+        "google-ads",
+        "cron",
+        "gads"
+      ]
+    },
+    "memory:memory/2026-08-25.md:1:44": {
+      "key": "memory:memory/2026-08-25.md:1:44",
+      "path": "memory/2026-08-25.md",
+      "startLine": 1,
+      "endLine": 44,
+      "source": "memory",
+      "snippet": "# 2026-08-25 ## Cron: gads-sync-horario (19:02 UTC) - **Script:** `sync_gads_diario.py --dias 8` - **Cliente:** source_of (customer_id=4311260590) - **Período buscado:** 2026-08-17 → 2026-08-24 - **Linhas retornadas/salvas:** 32 - **BigQuery espelhado:** ✅ source_of/google — 32 linhas - **pod_kombucha:** google_ads inativo — pulado - **Resultado:** 1 sucesso, 0 erros ## Cron: gads-sync-horario — 2026-08-25 20:02 UTC - Script: sync_gads_diario.py --dias 8 - Customer: source_of (4311260590) - Linhas salvas: 32 (source_of_gads_diario + BQ mirror) - Período dos dados: 2026-08-17 → 2026-08-24 - pod_kombucha: google_ads inativo — pulado - Resultado: 1 sucesso, 0 erros ## Cron: gads-sync-horari",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-28T12:53:11.236Z",
+      "lastRecalledAt": "2026-09-28T12:53:11.236Z",
+      "queryHashes": [
+        "ccd09017e84c"
+      ],
+      "recallDays": [
+        "2026-09-28"
+      ],
+      "conceptTags": [
+        "gads-sync-horario",
+        "sync-gads-diario.py",
+        "source-of",
+        "customer-id",
+        "retornadas/salvas",
+        "source-of/google",
+        "pod-kombucha",
+        "google-ads"
+      ]
+    },
+    "memory:memory/2026-09-18.md:1:21": {
+      "key": "memory:memory/2026-09-18.md:1:21",
+      "path": "memory/2026-09-18.md",
+      "startLine": 1,
+      "endLine": 21,
+      "source": "memory",
+      "snippet": "# 2026-09-18 ## Cron: gads-sync-horario (21:01 UTC) - **Status:** ✅ Sucesso - **Cliente:** source_of (customer_id=4311260590) - **Linhas sincronizadas:** 36 - **Período consultado:** 2026-09-10 → 2026-09-17 (8 dias) - **Tabela:** source_of_gads_diario - **BigQuery:** 36 linhas espelhadas - **Erros:** nenhum - **Nota:** pod_kombucha pulado (google_ads inativo) ## [22:02 UTC] Cron: gads-sync-horario - **Status:** ✅ Sucesso - **Período sincronizado:** 2026-09-10 → 2026-09-17 (8 dias) - **Linhas salvas:** 36 (source_of_gads_diario) - **BQ mirror:** 36 linhas espelhadas (source_of/google) - **Erros:** nenhum - **Nota:** pod_kombucha com google_ads inativo — pulado",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-28T12:53:11.236Z",
+      "lastRecalledAt": "2026-09-28T12:53:11.236Z",
+      "queryHashes": [
+        "ccd09017e84c"
+      ],
+      "recallDays": [
+        "2026-09-28"
+      ],
+      "conceptTags": [
+        "gads-sync-horario",
+        "source-of",
+        "customer-id",
+        "source-of-gads-diario",
+        "pod-kombucha",
+        "google-ads",
+        "source-of/google",
+        "cron"
+      ]
+    },
+    "memory:memory/2026-08-30.md:1:20": {
+      "key": "memory:memory/2026-08-30.md:1:20",
+      "path": "memory/2026-08-30.md",
+      "startLine": 1,
+      "endLine": 20,
+      "source": "memory",
+      "snippet": "# 2026-08-30 ## Cron: gads-sync-horario (22:01 UTC) - **Resultado:** ✅ 32 linhas salvas - **Período buscado:** 2026-08-22 → 2026-08-29 (8 dias) - **Tabela:** `source_of_gads_diario` - **BQ espelhado:** source_of/google — 32 linhas - **Sucessos:** 1 | **Erros:** 0 - **Obs:** pod_kombucha (google_ads inativo) — pulado normalmente ## [23:02 UTC] Cron: gads-sync-horário - Script: sync_gads_diario.py --dias 8 - Cliente ativo: source_of (customer_id=4311260590) - Linhas salvas: 32 em source_of_gads_diario - Período buscado: 2026-08-22 → 2026-08-29 - BigQuery: ✅ espelhado (source_of/google) - pod_kombucha: google_ads inativo — pulado - Resultado: 1 sucesso, 0 erros",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-28T12:53:11.236Z",
+      "lastRecalledAt": "2026-09-28T12:53:11.236Z",
+      "queryHashes": [
+        "ccd09017e84c"
+      ],
+      "recallDays": [
+        "2026-09-28"
+      ],
+      "conceptTags": [
+        "gads-sync-horario",
+        "source-of-gads-diario",
+        "source-of/google",
+        "pod-kombucha",
+        "google-ads",
+        "gads-sync-horário",
+        "sync-gads-diario.py",
+        "source-of"
+      ]
+    },
+    "memory:memory/2026-09-08.md:1:20": {
+      "key": "memory:memory/2026-09-08.md:1:20",
+      "path": "memory/2026-09-08.md",
+      "startLine": 1,
+      "endLine": 20,
+      "source": "memory",
+      "snippet": "# 2026-09-08 ## Cron: gads-sync-horario (20:02 UTC) - **Status:** ✅ Sucesso - **Cliente ativo:** source_of (customer_id: 4311260590) - **Linhas retornadas/salvas:** 32 - **Período consultado:** 2026-08-31 → 2026-09-07 (8 dias) - **BigQuery mirror:** ✅ 32 linhas espelhadas (source_of/google) - **Cache:** 0 entradas removidas - **pod_kombucha:** google_ads inativo — pulado - **Erros:** 0 ## Cron: sync_meta_diario — 22:15 UTC - **Período sincronizado:** 2026-09-06 → 2026-09-07 - **source_of** (act_1059884611898142): 118 linhas (56 + 62) → `source_of_meta_ads_diario` + BQ ✅ - **pod_kombucha** (act_324906945710366): 130 linhas (63 + 67) → `pod_kombucha_meta_ads_diario` + BQ ✅ - **Total:** 248",
+      "recallCount": 1,
+      "dailyCount": 0,
+      "groundedCount": 0,
+      "totalScore": 1,
+      "maxScore": 1,
+      "firstRecalledAt": "2026-09-28T12:53:11.236Z",
+      "lastRecalledAt": "2026-09-28T12:53:11.236Z",
+      "queryHashes": [
+        "ccd09017e84c"
+      ],
+      "recallDays": [
+        "2026-09-28"
+      ],
+      "conceptTags": [
+        "gads-sync-horario",
+        "source-of",
+        "customer-id",
+        "retornadas/salvas",
+        "source-of/google",
+        "pod-kombucha",
+        "google-ads",
+        "sync-meta-diario"
       ]
     }
   }

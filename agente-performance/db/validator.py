@@ -92,7 +92,7 @@ def _check_duplicatas(report: ValidationReport) -> None:
     """Campanhas com mais de uma linha por dia — dobra métricas em SUM()."""
     rows = query("""
         SELECT campanha, data_inicio, COUNT(*) AS n
-        FROM campanhas
+        FROM campanhas_unificada
         GROUP BY campanha, data_inicio
         HAVING COUNT(*) > 1
         ORDER BY n DESC
@@ -100,7 +100,7 @@ def _check_duplicatas(report: ValidationReport) -> None:
     """)
     total = query_one("""
         SELECT COUNT(*) AS n FROM (
-            SELECT campanha, data_inicio FROM campanhas
+            SELECT campanha, data_inicio FROM campanhas_unificada
             GROUP BY campanha, data_inicio HAVING COUNT(*) > 1
         )
     """) or {}
@@ -122,13 +122,13 @@ def _check_investimento_zero_com_conversao(report: ValidationReport) -> None:
     """Investimento = 0 mas há compras ou receita — atribuição sem custo."""
     rows = query("""
         SELECT campanha, data_inicio, investimento, compras, valor_compras
-        FROM campanhas
+        FROM campanhas_unificada
         WHERE investimento = 0
           AND (compras > 0 OR valor_compras > 0)
         LIMIT 5
     """)
     total = query_one("""
-        SELECT COUNT(*) AS n FROM campanhas
+        SELECT COUNT(*) AS n FROM campanhas_unificada
         WHERE investimento = 0 AND (compras > 0 OR valor_compras > 0)
     """) or {}
     count = int(total.get("n") or 0)
@@ -148,7 +148,7 @@ def _check_investimento_zero_com_conversao(report: ValidationReport) -> None:
 def _check_roas_ausente_com_receita(report: ValidationReport) -> None:
     """valor_compras > 0 mas roas_compras NULL — ROAS não reportado pelo Meta."""
     total = query_one("""
-        SELECT COUNT(*) AS n FROM campanhas
+        SELECT COUNT(*) AS n FROM campanhas_unificada
         WHERE valor_compras > 0 AND roas_compras IS NULL
     """) or {}
     count = int(total.get("n") or 0)
@@ -169,7 +169,7 @@ def _check_valores_negativos(report: ValidationReport) -> None:
     campos = ["investimento", "compras", "valor_compras", "impressoes", "cliques_link", "alcance"]
     negatives = []
     for col in campos:
-        r = query_one(f"SELECT COUNT(*) AS n FROM campanhas WHERE {col} < 0") or {}
+        r = query_one(f"SELECT COUNT(*) AS n FROM campanhas_unificada WHERE {col} < 0") or {}
         n = int(r.get("n") or 0)
         if n > 0:
             negatives.append(f"{col}:{n}")
@@ -188,10 +188,10 @@ def _check_valores_negativos(report: ValidationReport) -> None:
 def _check_datas_invalidas(report: ValidationReport) -> None:
     """data_fim < data_inicio ou datas nulas em linhas com investimento."""
     fora_ordem = query_one(
-        "SELECT COUNT(*) AS n FROM campanhas WHERE data_fim < data_inicio"
+        "SELECT COUNT(*) AS n FROM campanhas_unificada WHERE data_fim < data_inicio"
     ) or {}
     nulas = query_one(
-        "SELECT COUNT(*) AS n FROM campanhas WHERE (data_inicio IS NULL OR data_fim IS NULL) AND investimento > 0"
+        "SELECT COUNT(*) AS n FROM campanhas_unificada WHERE (data_inicio IS NULL OR data_fim IS NULL) AND investimento > 0"
     ) or {}
 
     issues_found = False
@@ -224,7 +224,7 @@ def _check_cobertura(report: ValidationReport) -> None:
             COUNT(DISTINCT data_inicio) AS dias_unicos,
             MIN(data_inicio) AS data_min,
             MAX(data_fim)    AS data_max
-        FROM campanhas
+        FROM campanhas_unificada
         WHERE investimento > 0
     """) or {}
 
@@ -265,7 +265,7 @@ def _check_consistencia_roas(report: ValidationReport) -> None:
                 ABS(roas_compras - valor_compras / NULLIF(investimento, 0))
                 / roas_compras * 100,
             2) AS diff_pct
-        FROM campanhas
+        FROM campanhas_unificada
         WHERE roas_compras IS NOT NULL
           AND roas_compras > 0
           AND investimento > 0
@@ -276,7 +276,7 @@ def _check_consistencia_roas(report: ValidationReport) -> None:
         LIMIT 5
     """)
     total = query_one("""
-        SELECT COUNT(*) AS n FROM campanhas
+        SELECT COUNT(*) AS n FROM campanhas_unificada
         WHERE roas_compras IS NOT NULL AND roas_compras > 0
           AND investimento > 0 AND valor_compras > 0
           AND ABS(roas_compras - valor_compras / NULLIF(investimento, 0))

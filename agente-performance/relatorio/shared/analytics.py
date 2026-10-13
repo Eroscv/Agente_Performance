@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 from relatorio.shared.constants import DB_PATH, _SQLITE_TIMEOUT, _com_timeout
 from relatorio.shared.formatters import _fmt_brl, _fmt_x, _fmt_pct, _fmt_n, _fmt_data_pt
+from relatorio.regras import spend_com_imposto, calcular_cpa
 
 def _resumo_geral(campanhas: list[dict]) -> dict:
     """Agrega métricas totais da conta no período."""
@@ -96,6 +97,11 @@ def _resumo_geral(campanhas: list[dict]) -> dict:
         "conv_rate":        conv_rate,
         "frequencia_media": frequencia_media,
         "num_campanhas":    len(campanhas),
+        # aliases de normalização para compatibilidade com validadores e cron
+        "investimento":     total_invest,
+        "invest":           total_invest,
+        "receita":          total_receita,
+        "compras":          total_compras,
     }
 
 
@@ -121,6 +127,7 @@ def _buscar_campanhas(
     data_fim: date,
     db_path: Path = DB_PATH,
     incluir_atribuicao: bool = True,
+    cliente_key: str = None,
 ) -> list[dict]:
     """
     Retorna campanhas agregadas por nome no período.
@@ -128,8 +135,58 @@ def _buscar_campanhas(
     incluir_atribuicao=True  → inclui todas as campanhas (mesmo investimento=0),
                                capturando receita de atribuição cross-campaign.
     incluir_atribuicao=False → filtra AND investimento > 0, apenas campanhas ativas.
+
+    Quando cliente_key for fornecido, usa DuckDB + campanhas_unificada (dados atuais).
+    Caso contrário, faz fallback para a tabela SQLite legada `campanhas`.
     """
     filtro_atrib = "AND investimento > 0" if not incluir_atribuicao else ""
+
+    # ── DuckDB (campanhas_unificada) ─────────────────────────────────────────
+    if cliente_key:
+        try:
+            from db.duck import query_duck as _qd
+            filtro_cliente = "AND cliente_key = ?" if cliente_key else ""
+            params = (
+                (data_inicio.isoformat(), data_fim.isoformat(), cliente_key)
+                if cliente_key
+                else (data_inicio.isoformat(), data_fim.isoformat())
+            )
+            sql_duck = f"""
+                SELECT
+                    campanha,
+                    SUM(investimento)                         AS investimento,
+                    SUM(COALESCE(compras, 0))                 AS compras,
+                    SUM(COALESCE(impressoes, 0))              AS impressoes,
+                    SUM(COALESCE(cliques_link, 0))            AS cliques_link,
+                    SUM(COALESCE(cliques_todos, 0))           AS cliques_todos,
+                    ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link,0)),0), 2)    AS cpc_link,
+                    ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(impressoes,0)),0)*1000, 2) AS cpm,
+                    SUM(COALESCE(valor_compras, 0))           AS valor_compras,
+                    SUM(COALESCE(adicoes_carrinho, 0))        AS adicoes_carrinho,
+                    SUM(COALESCE(checkout_iniciado, 0))       AS checkout_iniciado,
+                    SUM(COALESCE(alcance, 0))                 AS alcance,
+                    ROUND(CAST(SUM(COALESCE(cliques_link,0)) AS DOUBLE)
+                          / NULLIF(SUM(COALESCE(impressoes,0)),0)*100, 4)   AS ctr_link,
+                    ROUND(CAST(SUM(COALESCE(impressoes,0)) AS DOUBLE)
+                          / NULLIF(SUM(COALESCE(alcance,0)),0), 2)          AS frequencia,
+                    SUM(COALESCE(custo_por_compra, 0))        AS custo_por_compra_meta,
+                    ROUND(SUM(COALESCE(valor_compras,0)) / NULLIF(SUM(investimento),0), 4) AS roas_compras
+                FROM campanhas_unificada
+                WHERE data_inicio >= ?
+                  AND data_fim    <= ?
+                  {filtro_cliente}
+                  {filtro_atrib}
+                GROUP BY campanha
+                ORDER BY investimento DESC
+            """
+            return _qd(sql_duck, list(params))
+        except Exception as _e:
+            import logging as _log
+            _log.getLogger(__name__).warning(
+                "[_buscar_campanhas] DuckDB falhou, fallback SQLite: %s", _e
+            )
+
+    # ── SQLite legado ────────────────────────────────────────────────────────
     sql = f"""
         SELECT
             campanha,

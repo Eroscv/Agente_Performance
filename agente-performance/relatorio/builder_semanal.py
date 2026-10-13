@@ -148,7 +148,7 @@ def gerar_relatorio_semanal(
         val_report = None
 
     # ── Dados ─────────────────────────────────────────────────────────────
-    campanhas = _buscar_campanhas(data_inicio, data_fim, db_path)
+    campanhas = _buscar_campanhas(data_inicio, data_fim, db_path, cliente_key=cliente)
     if not campanhas:
         logger.warning("[Builder] Nenhuma campanha encontrada no período %s", periodo_str)
         return {"erro": "Nenhuma campanha encontrada", "periodo": periodo_str}
@@ -177,7 +177,7 @@ def gerar_relatorio_semanal(
         _receita_shopify_ant = None
 
     # ── Dados período anterior ─────────────────────────────────────────────
-    campanhas_anterior = _buscar_campanhas(ant_inicio, ant_fim, db_path)
+    campanhas_anterior = _buscar_campanhas(ant_inicio, ant_fim, db_path, cliente_key=cliente)
     resumo_anterior    = _resumo_geral(campanhas_anterior) if campanhas_anterior else {}
     resumo_anterior["receita_shopify"] = _receita_shopify_ant
 
@@ -414,11 +414,14 @@ def gerar_relatorio_semanal(
     return {
         "titulo":        titulo,
         "periodo":       periodo_str,
+        "data_inicio":   str(data_inicio),
+        "data":          str(data_fim),
         "page_id":       resultado.get("page_id"),
         "url":           resultado.get("url"),
         "resumo":        resumo,
         "alertas":       alertas,
         "num_campanhas": len(campanhas),
+        "blocos":        blocos,
     }
 
 

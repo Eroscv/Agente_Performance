@@ -18,6 +18,14 @@ from notion.blocks import h2, h3, paragrafo, divider, callout, bullet, toggle, c
 logger = logging.getLogger(__name__)
 
 from relatorio.shared.formatters import _fmt_brl, _fmt_x, _fmt_pct, _fmt_n, _fmt_data_pt
+from relatorio.shared.blocos import (
+    _mk_table_notion,
+    _RECOMPRAS_HISTORICO,
+    _RECOMPRAS_ESTADOS,
+    _DADOS_HISTORICO,
+    _MESES_PT_ABR,
+)
+from relatorio.shared.constants import _SQLITE_TIMEOUT
 
 def _blocos_pedidos_sku(
     dados_sku: list[dict] = None,

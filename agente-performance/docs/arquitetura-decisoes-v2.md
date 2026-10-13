@@ -12,6 +12,7 @@ Um único processo Python (`main.py`) na VPS `44.204.251.251`, porta 8001, geren
 **Clientes ativos:**
 - Source OF — Meta Ads + Google Ads + Shopify
 - POD Kombucha — Meta Ads + Google Ads (ativado em 06/10) + Shopify + Dooki
+- Botica Ouro Preto — Meta Ads + Shopify
 
 **Plataformas de dados:**
 - SQLite local (múltiplos bancos federados via DuckDB)

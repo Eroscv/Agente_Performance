@@ -1,0 +1,13 @@
+2026-09-26 15:35 UTC | sync_gads_diario | 10 linhas | 2026-09-24→2026-09-25 | 1 sucesso, 0 erros
+2026-09-28 04:20 UTC | sync_gads_diario --dias 2 | 10 linhas | 2026-09-26 → 2026-09-27 | 1 sucesso, 0 erros
+2026-09-28 18:05 UTC | sync_gads_diario | source_of: 10 linhas | período: 2026-09-26→2026-09-27 | BQ espelhado ✅ | 1 sucesso, 0 erros
+2026-09-28 20:20 UTC | sync_gads_diario | dias=2 | linhas=10 | periodo=2026-09-26→2026-09-27 | status=OK
+2026-09-28 21:35 UTC — sync_gads_diario --dias 2: 10 linhas | 2026-09-26→2026-09-27 | 1 sucesso, 0 erros
+[2026-10-01T01:20:20Z] sync_gads_diario | dias=2 | linhas=9 | periodo=2026-09-29/2026-09-30 | erros=0
+2026-10-01 03:20 UTC | sync_gads_diario --dias 2 | 9 linhas | 2026-09-29→2026-09-30 | 1 sucesso, 0 erros
+2026-10-01 10:50 | gads-sync-horario | source_of: 9 linhas (2026-09-29→2026-09-30) | pod_kombucha: inativo (pulado) | erros: 0
+2026-10-06 16:35 UTC | gads-sync | source_of: 10 linhas (2026-10-04→05) ✅ | pod_kombucha: 10 linhas (2026-10-04→05) ✅ | botica: inativo | erros: 0
+2026-10-06 23:50 UTC | gads-sync | source_of: 10 linhas (2026-10-04→05) | pod_kombucha: 10 linhas (2026-10-04→05) | botica: inativo | erros: 0
+2026-10-07 08:50 UTC | sync_gads_diario --dias 2 | source_of: 10 linhas (OK) | pod_kombucha: 10 linhas (OK) | botica: inativo | erros: 0
+2026-10-07 19:20 UTC | Google Ads sync | source_of: 10 linhas, pod_kombucha: 10 linhas | período: 2026-10-05→2026-10-06 | erros: 0
+2026-10-10 21:05 UTC | gads-sync | source_of: 10 linhas (2026-10-08→09) ✅ | pod_kombucha: 10 linhas (2026-10-08→09) ✅ | botica: inativo | erros: 0

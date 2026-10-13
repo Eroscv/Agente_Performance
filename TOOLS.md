@@ -41,7 +41,7 @@ Add whatever helps you do your job. This is your cheat sheet.
 
 ### GitHub
 
-- Token (fine-grained, contents R/W): `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`
+- Token (fine-grained, contents R/W): `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`
 - Criado em: 2026-07-13
 
 ### Repositórios GitHub

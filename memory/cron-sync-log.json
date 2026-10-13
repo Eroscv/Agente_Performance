@@ -1,0 +1,14 @@
+{
+  "last_gads_sync": {
+    "timestamp": "2026-10-12T14:20:26Z",
+    "periodo": "2026-10-10 → 2026-10-11",
+    "clientes": [
+      { "nome": "source_of", "customer_id": "4311260590", "linhas": 10, "status": "ok" },
+      { "nome": "pod_kombucha", "customer_id": "6123672195", "linhas": 10, "status": "ok" },
+      { "nome": "botica", "status": "inativo_pulado" }
+    ],
+    "total_linhas": 20,
+    "sucessos": 2,
+    "erros": 0
+  }
+}

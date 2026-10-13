@@ -38,7 +38,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).parent.parent.parent  # db/legacy/ → db/ → project root
 DB_PATH  = BASE_DIR / "data" / "campanhas.db"
 
 SHEETS_URL = (

@@ -1,0 +1,1 @@
+2026-10-03T08:05:15Z [cron:gads-sync] sucesso | 10 linhas | 2026-10-01→2026-10-02 | 1 cliente ativo (source_of) | 2 inativos pulados (pod_kombucha, botica)

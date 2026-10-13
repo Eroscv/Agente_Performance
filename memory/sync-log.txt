@@ -1,0 +1,12 @@
+2026-09-05 00:02 UTC | cron gads-sync-horario | 32 linhas | 2026-08-28→2026-09-04 | 1 sucesso, 0 erros
+2026-09-14 14:02 UTC | gads-sync-horario | OK | 33 linhas | 2026-09-06→2026-09-13 | 1 sucesso, 0 erros
+2026-09-26 14:50 UTC | gads-sync | source_of: 10 linhas | 2026-09-24→2026-09-25 | BQ espelhado | 0 erros
+2026-09-28 03:50 UTC | gads-sync | 10 linhas | 2026-09-26→2026-09-27 | 1 sucesso, 0 erros
+2026-09-28 13:05 UTC | gads-sync | 10 linhas | 2026-09-26→2026-09-27 | 1 sucesso, 0 erros
+2026-09-28 23:35 UTC | sync_gads_diario --dias 2 | 10 linhas | 2026-09-26→2026-09-27 | 1 sucesso, 0 erros
+2026-10-01 09:50 UTC | gads-sync | 9 linhas | 2026-09-29 → 2026-09-30 | 1 sucesso, 0 erros
+2026-10-07 14:20 UTC | gads-sync | source_of: 10 linhas (05-06/10) ✅ | pod_kombucha: 10 linhas (05-06/10) ✅ | botica: inativo | erros: 0
+2026-10-08 03:05 UTC | gads-sync | source_of: 10 linhas (2026-10-06→07) ✅ | pod_kombucha: 10 linhas (2026-10-06→07) ✅ | botica: inativo | erros: 0
+2026-10-08 20:35 UTC | gads-sync-horario | 2 contas | 20 linhas | 2026-10-06→2026-10-07 | OK
+2026-10-09 21:00 UTC | Meta Ads sync OK | source_of: 134 linhas | pod_kombucha: 244 linhas | botica: 12 linhas | total: 390 linhas | período: 2026-10-07 → 2026-10-08 | erros: 0
+2026-10-13 10:05 UTC | gads-sync | source_of: 10 linhas (2026-10-11→12) ✅ | pod_kombucha: 10 linhas (2026-10-11→12) ✅ | botica: inativo | erros: 0

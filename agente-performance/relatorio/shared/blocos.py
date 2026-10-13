@@ -18,6 +18,7 @@ from notion.blocks import h2, h3, paragrafo, divider, callout, bullet, toggle, c
 logger = logging.getLogger(__name__)
 
 from relatorio.shared.formatters import _fmt_brl, _fmt_x, _fmt_pct, _fmt_n, _fmt_data_pt
+from relatorio.shared.constants import _SQLITE_TIMEOUT
 
 def _blocos_resumo(resumo: dict, periodo_str: str) -> list[dict]:
     """Bloco de resumo executivo — 3 seções distintas: KPIs, Investimento, Alcance, Conversão."""
@@ -385,6 +386,44 @@ def _blocos_comparativo(resumo_atual: dict, resumo_anterior: dict, periodo_anter
     """
     # Métricas onde uma queda é POSITIVA (menor = melhor)
     MENOR_MELHOR = {"CPA", "CPC", "CPM"}
+
+    def _delta(atual, ant, menor_melhor=False):
+        try:
+            a, b = float(atual or 0), float(ant or 0)
+            if b == 0: return ""
+            pct = (a - b) / abs(b) * 100
+            up = pct > 0
+            ok = (up and not menor_melhor) or (not up and menor_melhor)
+            seta = "↑" if up else "↓"
+            emoji = "✅" if ok else "⚠️"
+            return f"{seta} {abs(pct):.1f}% {emoji}"
+        except: return ""
+
+    metricas = [
+        ("Invest.",  resumo_atual.get("investimento"),   resumo_anterior.get("investimento"),  True),
+        ("Receita",  resumo_atual.get("total_receita"),   resumo_anterior.get("total_receita"),  False),
+        ("ROAS",     resumo_atual.get("roas"),            resumo_anterior.get("roas"),           False),
+        ("CPA",      resumo_atual.get("cpa_ajustado"),    resumo_anterior.get("cpa_ajustado"),   True),
+        ("Compras",  resumo_atual.get("total_compras"),   resumo_anterior.get("total_compras"),  False),
+    ]
+
+    from notion.blocks import h2, paragrafo, tabela, divider
+    header = ["Métrica", "Atual", periodo_anterior_str or "Anterior", "Variação"]
+    rows = []
+    for nome, atual, ant, menor_melhor in metricas:
+        if atual is None and ant is None: continue
+        atual_str = _fmt_brl(atual) if "invest" in nome.lower() or nome in ("Receita", "CPA") else (_fmt_x(atual) if nome == "ROAS" else str(int(atual or 0)))
+        ant_str   = _fmt_brl(ant)   if "invest" in nome.lower() or nome in ("Receita", "CPA") else (_fmt_x(ant)   if nome == "ROAS" else str(int(ant or 0)))
+        rows.append([nome, atual_str, ant_str, _delta(atual, ant, menor_melhor)])
+
+    if not rows:
+        return []
+
+    return [
+        h2("🔄 Comparativo vs Período Anterior"),
+        _mk_table_notion(header, rows),
+        divider(),
+    ]
 
 
 def _blocos_funil(resumo: dict) -> list[dict]:

@@ -71,16 +71,34 @@ def get_builder(cliente_key: str, tipo: str = "semanal") -> Callable:
         raise ValueError(f"Builder '{tipo}' não configurado para '{cliente_key}'")
 
     # Resolve módulo por tipo
+    # Prioridade: modulo_map padrão por tipo → fallback para cfg["builder"] (módulo custom do cliente)
     modulo_map = {
         "semanal": "relatorio.builder_semanal",
         "mensal":  "relatorio.builder_mensal",
         "diario":  "relatorio.builder_diario",
     }
-    modulo_path = modulo_map.get(tipo) or cfg.get("builder")
+    modulo_path = modulo_map.get(tipo)
+    if not modulo_path:
+        modulo_path = cfg.get("builder")
     if not modulo_path:
         raise ValueError(f"Módulo builder não resolvido para tipo '{tipo}' em '{cliente_key}'")
 
     modulo = import_module(modulo_path)
+    if not hasattr(modulo, fn_name):
+        # Função não encontrada no módulo padrão — tenta módulo custom do cliente
+        alt_path = cfg.get("builder")
+        if alt_path and alt_path != modulo_path:
+            modulo_alt = import_module(alt_path)
+            if hasattr(modulo_alt, fn_name):
+                logger.debug(
+                    "[Registry] Builder '%s' encontrado no módulo alternativo '%s'",
+                    fn_name, alt_path,
+                )
+                return getattr(modulo_alt, fn_name)
+        raise AttributeError(
+            f"Função '{fn_name}' não encontrada em '{modulo_path}'"
+            + (f" nem em '{alt_path}'" if alt_path and alt_path != modulo_path else "")
+        )
     return getattr(modulo, fn_name)
 
 

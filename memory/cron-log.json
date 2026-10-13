@@ -1,0 +1,11 @@
+{
+  "gads-sync-horario": {
+    "last_run": "2026-09-11T03:02:10Z",
+    "status": "success",
+    "linhas": 32,
+    "periodo": "2026-09-03 → 2026-09-10",
+    "sucessos": 1,
+    "erros": 0,
+    "detalhes": "source_of/google espelhado no BQ. pod_kombucha pulado (google_ads inativo)."
+  }
+}
