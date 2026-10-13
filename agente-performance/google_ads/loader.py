@@ -127,7 +127,7 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
                     "impressoes":          float(m.impressions),
                     "cliques":             float(m.clicks),
                     "investimento":        _micros_to_brl(m.cost_micros),
-                    "conversoes":          round(m.conversions, 4),
+                    "conversoes":          int(round(m.conversions, 0)),  # API retorna float com modelagem; arredonda para int
                     "valor_conversao":     round(m.conversions_value, 2),
                     "ctr":                 round(m.ctr * 100, 4),  # %
                     "cpc_medio":           _micros_to_brl(m.average_cpc),

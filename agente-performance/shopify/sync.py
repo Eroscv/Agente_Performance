@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS shopify_receita_diaria (
     pedidos_outros    INTEGER NOT NULL DEFAULT 0,
     receita_outros    REAL    NOT NULL DEFAULT 0,
     novos_outros      INTEGER NOT NULL DEFAULT 0,
+    gross_sales       REAL    NOT NULL DEFAULT 0,
     atualizado_em   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 """
@@ -77,8 +78,9 @@ INSERT INTO shopify_receita_diaria
      pedidos_meta, receita_meta, novos_meta,
      pedidos_google, receita_google, novos_google,
      pedidos_outros, receita_outros, novos_outros,
+     gross_sales,
      atualizado_em)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
 ON CONFLICT(data) DO UPDATE SET
     receita           = excluded.receita,
     frete             = excluded.frete,
@@ -99,6 +101,7 @@ ON CONFLICT(data) DO UPDATE SET
     pedidos_outros    = excluded.pedidos_outros,
     receita_outros    = excluded.receita_outros,
     novos_outros      = excluded.novos_outros,
+    gross_sales       = excluded.gross_sales,
     atualizado_em     = datetime('now')
 ;
 """
@@ -171,6 +174,7 @@ def sincronizar(
     utm_pedidos = {"meta": defaultdict(int), "google": defaultdict(int), "outros": defaultdict(int)}
     utm_receita = {"meta": defaultdict(float), "google": defaultdict(float), "outros": defaultdict(float)}
     utm_novos   = {"meta": defaultdict(int), "google": defaultdict(int), "outros": defaultdict(int)}
+    gross_sales_por_dia: dict[str, float] = defaultdict(float)
 
     def _classificar_utm(pedido):
         notes = {n["name"].lower(): (n.get("value") or "").lower()
@@ -200,12 +204,14 @@ def sincronizar(
         desconto = float(pedido.get("total_discounts") or 0)
         # receita = subtotal_price (produtos após desconto, sem frete)
         # frete   = total_price - subtotal_price
+        # gross_sales = subtotal + desconto total do pedido (antes de desconto)
         receita  = sub_p
         frete    = round(total_p - sub_p, 2)
 
         receita_por_dia[criado_em]  += receita
         frete_por_dia[criado_em]    += frete
         pedidos_por_dia[criado_em]  += 1
+        gross_sales_por_dia[criado_em] += receita + float(pedido.get("total_discounts") or 0)
         desconto_por_dia[criado_em] += desconto
         if total_p > 300:
             ped_300_por_dia[criado_em] += 1
@@ -295,11 +301,13 @@ def sincronizar(
         ped_outros  = utm_pedidos["outros"][dia_str]
         rec_outros  = round(utm_receita["outros"][dia_str], 2)
         nov_outros  = utm_novos["outros"][dia_str]
+        gross_sales = round(gross_sales_por_dia[dia_str], 2)
         rows.append((dia_str, receita, frete, pedidos, novos, recomp, ticket, desconto, p300,
                      receita_criada, pedidos_criados,
                      ped_meta, rec_meta, nov_meta,
                      ped_google, rec_google, nov_google,
-                     ped_outros, rec_outros, nov_outros))
+                     ped_outros, rec_outros, nov_outros,
+                     gross_sales))
 
     if dry_run:
         logger.info("[ShopifySync/%s] DRY RUN — %d linhas seriam gravadas", cliente_key, len(rows))
@@ -346,6 +354,7 @@ def sincronizar(
                     "pedidos_outros":    r[17],
                     "receita_outros":    r[18],
                     "novos_outros":      r[19],
+                    "gross_sales":       r[20],
                 }
                 for r in rows
             ]
