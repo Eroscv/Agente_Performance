@@ -188,8 +188,17 @@ def salvar(rows: list[dict], append: bool = False,
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_camp ON {tabela}(campanha)")
 
     if not append and rows:
-        conn.execute(f"DELETE FROM {tabela}")
-        logger.info("[%s] Tabela %s limpa (modo replace)", rows[0].get('customer_id','?'), tabela)
+        # Limpa apenas o período dos dados recebidos (não a tabela inteira)
+        # Garante que histórico além da janela de sync não seja apagado
+        datas = [r['data'] for r in rows if r.get('data')]
+        if datas:
+            data_min, data_max = min(datas), max(datas)
+            conn.execute(
+                f"DELETE FROM {tabela} WHERE data BETWEEN ? AND ?",
+                (data_min, data_max)
+            )
+            logger.info("[%s] Período %s→%s limpo em %s (replace)",
+                        rows[0].get('customer_id','?'), data_min, data_max, tabela)
 
     cols = [
         "data", "campaign_id", "campanha", "tipo_campanha",

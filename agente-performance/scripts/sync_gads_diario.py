@@ -84,7 +84,7 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool:
         linhas, periodo = carregar_gads(
             customer_id=customer_id,
             dias=dias,
-            append=True,
+            append=False,  # usa DELETE por período antes de inserir (permite atualização retroativa)
             tabela=tabela,
             db_path=db_path,
             cliente_key=cliente_key,
