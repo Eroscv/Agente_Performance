@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS shopify_receita_diaria (
     receita_outros    REAL    NOT NULL DEFAULT 0,
     novos_outros      INTEGER NOT NULL DEFAULT 0,
     gross_sales       REAL    NOT NULL DEFAULT 0,
+    pedidos_gt300     INTEGER NOT NULL DEFAULT 0,
     atualizado_em   TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 """
@@ -78,9 +79,9 @@ INSERT INTO shopify_receita_diaria
      pedidos_meta, receita_meta, novos_meta,
      pedidos_google, receita_google, novos_google,
      pedidos_outros, receita_outros, novos_outros,
-     gross_sales,
+     gross_sales, pedidos_gt300,
      atualizado_em)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
 ON CONFLICT(data) DO UPDATE SET
     receita           = excluded.receita,
     frete             = excluded.frete,
@@ -102,6 +103,7 @@ ON CONFLICT(data) DO UPDATE SET
     receita_outros    = excluded.receita_outros,
     novos_outros      = excluded.novos_outros,
     gross_sales       = excluded.gross_sales,
+    pedidos_gt300     = excluded.pedidos_gt300,
     atualizado_em     = datetime('now')
 ;
 """
@@ -111,6 +113,15 @@ ON CONFLICT(data) DO UPDATE SET
 
 def _garantir_tabela(conn: sqlite3.Connection) -> None:
     conn.execute(_CREATE_TABLE)
+    # Migrações incrementais — adiciona colunas novas em tabelas existentes
+    _migracoes = [
+        "ALTER TABLE shopify_receita_diaria ADD COLUMN pedidos_gt300 INTEGER NOT NULL DEFAULT 0",
+    ]
+    for sql in _migracoes:
+        try:
+            conn.execute(sql)
+        except Exception:
+            pass  # coluna já existe
     conn.commit()
 
 
@@ -166,6 +177,7 @@ def sincronizar(
     pedidos_por_dia: dict[str, int]     = defaultdict(int)
     desconto_por_dia: dict[str, float]  = defaultdict(float)
     ped_300_por_dia: dict[str, int]     = defaultdict(int)
+    ped_gt300_por_dia: dict[str, int]   = defaultdict(int)  # subtotal_price > 300, paid+partial
     clientes_por_dia: dict[str, set]    = defaultdict(set)
     pedidos_buffer: list[dict]          = []
     customer_ids_global: set[int]       = set()
@@ -215,6 +227,8 @@ def sincronizar(
         desconto_por_dia[criado_em] += desconto
         if (sub_p - desconto) > 300:  # subtotal_price - total_discounts, igual ao Colab
             ped_300_por_dia[criado_em] += 1
+        if sub_p > 300:  # pedidos_gt300: subtotal_price > 300, sem subtrair desconto
+            ped_gt300_por_dia[criado_em] += 1
 
         cid = (pedido.get("customer") or {}).get("id")
         if cid:
@@ -228,6 +242,18 @@ def sincronizar(
         utm_receita[_origem][criado_em] += receita
 
     logger.info("[ShopifySync] %d pedidos pagos lidos", total_pedidos_lidos)
+
+    # 1a-ext. Partially_refunded + partially_paid — só para pedidos_gt300
+    # A API Shopify não aceita múltiplos financial_status — buscamos separadamente
+    _STATUS_PARTIAL = ["partially_refunded", "partially_paid"]
+    for _fs in _STATUS_PARTIAL:
+        for pedido in sh._paginar_pedidos(data_inicio, data_fim, status=_fs):
+            criado_em = pedido.get("created_at", "")[:10]
+            if not criado_em:
+                continue
+            sub_p = float(pedido.get("subtotal_price") or 0)
+            if sub_p > 300:
+                ped_gt300_por_dia[criado_em] += 1
 
     # 1b. Pedidos CRIADOS (todos os status) — receita_criada e pedidos_criados
     # Inclui pending, authorized, partially_paid, refunded, voided etc.
@@ -302,12 +328,13 @@ def sincronizar(
         rec_outros  = round(utm_receita["outros"][dia_str], 2)
         nov_outros  = utm_novos["outros"][dia_str]
         gross_sales = round(gross_sales_por_dia[dia_str], 2)
+        p_gt300     = ped_gt300_por_dia[dia_str]
         rows.append((dia_str, receita, frete, pedidos, novos, recomp, ticket, desconto, p300,
                      receita_criada, pedidos_criados,
                      ped_meta, rec_meta, nov_meta,
                      ped_google, rec_google, nov_google,
                      ped_outros, rec_outros, nov_outros,
-                     gross_sales))
+                     gross_sales, p_gt300))
 
     if dry_run:
         logger.info("[ShopifySync/%s] DRY RUN — %d linhas seriam gravadas", cliente_key, len(rows))
@@ -355,6 +382,7 @@ def sincronizar(
                     "receita_outros":    r[18],
                     "novos_outros":      r[19],
                     "gross_sales":       r[20],
+                    "pedidos_gt300":      r[21],
                 }
                 for r in rows
             ]
