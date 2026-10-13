@@ -1176,12 +1176,243 @@ ORDER BY campanha;
 
 ---
 
+---
+
+## 🗂️ Incidente 4 — Conversões revisadas retroativamente (lookback 30 dias) — 13/10/2026
+
+### O que aconteceu
+
+Meta Ads e Google Ads continuam revisando conversões por dias ou semanas após o clique. O sync estava rodando com `--dias 2`, capturando apenas hoje e ontem — deixando semanas inteiras congeladas com os números da primeira captura.
+
+**Sintoma observado:**
+- Semana 41 do Google: 21% abaixo do valor real (janela de atribuição ainda aberta)
+- Semana 40 do Google: ainda 4% abaixo (conversões tardias chegando)
+- Compras e receita dos dias recentes sempre subestimados no dashboard
+
+**Causa raiz:** `--dias 2` nos crons. O dado do dia 5, 10, 15 nunca era reprocessado — ficava com o valor da primeira captura para sempre, mesmo que a API tivesse números mais precisos disponíveis.
+
+---
+
+### O que eu fiz
+
+1. **Corrigi o `salvar()` do `google_ads/loader.py`** — de `DELETE FROM tabela` (limpava tudo) para `DELETE WHERE data BETWEEN min e max` (limpa apenas o período sendo regravado)
+2. **Mudei `append=True` → `append=False`** no `scripts/sync_gads_diario.py` — habilita o DELETE por período antes de reinserir
+3. **Atualizei os crons** `meta-sync-horario` e `gads-sync-horario` de `--dias 2` para `--dias 30`
+
+A partir do próximo ciclo (a cada 15 minutos), os últimos 30 dias são reprocessados e os números retroativos das APIs substituem os valores antigos.
+
+---
+
+### Como eu fiz
+
+#### Diagnóstico — entender onde o dado ficava congelado
+
+```python
+# scripts/sync_gads_diario.py — linha que impedia o replace:
+linhas, periodo = carregar_gads(
+    customer_id=customer_id,
+    dias=dias,
+    append=True,    # ← nunca deletava nada, só acumulava
+    ...
+)
+
+# google_ads/loader.py — a função salvar() com append=False apagava TUDO:
+if not append and rows:
+    conn.execute(f"DELETE FROM {tabela}")  # ← DELETE sem WHERE = apaga histórico inteiro
+```
+
+O problema em cadeia:
+- Cron usava `--dias 2` e `append=True` → nunca deletava → dado antigo nunca era atualizado
+- Se mudássemos só para `append=False`, o `DELETE FROM tabela` apagaria todo o histórico a cada sync
+
+#### Fix 1 — `google_ads/loader.py`: DELETE por período
+
+**Antes:**
+```python
+if not append and rows:
+    conn.execute(f"DELETE FROM {tabela}")
+    logger.info("[%s] Tabela %s limpa (modo replace)", ...)
+```
+
+**Depois:**
+```python
+if not append and rows:
+    # Limpa apenas o período dos dados recebidos
+    datas = [r['data'] for r in rows if r.get('data')]
+    if datas:
+        data_min, data_max = min(datas), max(datas)
+        conn.execute(
+            f"DELETE FROM {tabela} WHERE data BETWEEN ? AND ?",
+            (data_min, data_max)
+        )
+        logger.info("[%s] Período %s→%s limpo em %s (replace)", ...)
+```
+
+O Meta Ads já usava esse padrão desde o início (`DELETE WHERE data BETWEEN`). O Google passou a usar o mesmo.
+
+#### Fix 2 — `scripts/sync_gads_diario.py`: `append=True` → `append=False`
+
+```python
+# Antes
+linhas, periodo = carregar_gads(
+    ..., append=True,  # nunca deletava
+)
+
+# Depois
+linhas, periodo = carregar_gads(
+    ..., append=False,  # DELETE por período antes de reinserir
+)
+```
+
+#### Fix 3 — Crons: `--dias 2` → `--dias 30`
+
+```
+meta-sync-horario:  --dias 2  →  --dias 30  (timeout 300s → 600s)
+gads-sync-horario:  --dias 2  →  --dias 30  (timeout 180s → 600s)
+```
+
+#### Diagrama — Fluxo antes e depois do lookback
+
+```
+                ANTES (--dias 2, append=True)
+
+Timeline:  ... D-30  D-15  D-7   D-3   D-2   D-1   hoje
+                 ↓     ↓     ↓     ↓     ↓     ↓     ↓
+Captura:        ❌    ❌    ❌    ❌    ✅    ✅    ✅
+Dados:      congelados desde a primeira captura
+
+Semana 41:  API tem 100 conversões, banco tem 79  ← 21% a menos
+Semana 40:  API tem 100 conversões, banco tem 96  ← 4% a menos
+
+
+                DEPOIS (--dias 30, append=False)
+
+Timeline:  ... D-30  D-15  D-7   D-3   D-2   D-1   hoje
+                 ↓     ↓     ↓     ↓     ↓     ↓     ↓
+Captura:        ✅    ✅    ✅    ✅    ✅    ✅    ✅
+Dados:      DELETE período → INSERT com valores atuais da API
+
+Semana 41:  API tem 100, banco tem 100  ✅
+Semana 40:  API tem 100, banco tem 100  ✅
+
+
+                FLUXO POR EXECUÇÃO (a cada 15 minutos)
+
+  cron dispara sync --dias 30
+         |
+         ▼
+  API retorna D-30 até D-1
+         |
+         ▼
+  salvar() — modo replace:
+  ┌─────────────────────────────────────────────────┐
+  │  DELETE FROM tabela                             │
+  │  WHERE data BETWEEN '2026-09-13' AND '2026-10-12' │
+  │  → remove apenas o período retornado pela API  │
+  │  (histórico antes de D-30 preservado)          │
+  └─────────────────────────────────────────────────┘
+         |
+         ▼
+  INSERT OR REPLACE com valores atualizados
+         |
+         ▼
+  bq_writer._insert() → MERGE no BigQuery
+  → números revisados chegam ao dashboard
+```
+
+---
+
+### Por que fiz desse jeito
+
+**Por que `DELETE WHERE data BETWEEN` e não `ON CONFLICT DO UPDATE` ou `INSERT OR REPLACE` puro?**
+
+`INSERT OR REPLACE` no SQLite só substitui se houver conflito de chave primária. A tabela usa `id INTEGER PRIMARY KEY AUTOINCREMENT` — cada `INSERT` seria uma linha nova, nunca conflito. O DELETE por período garante que os dados antigos do período sejam removidos independente da chave.
+
+**Por que não usar `--dias 14` (mais conservador)?**
+
+A janela de atribuição do Google Ads pode ser configurada em até 30 dias por conta. O Meta tem janelas de 1, 7 ou 28 dias dependendo do tipo de evento. Com `--dias 30` garantimos cobertura total para qualquer configuração de janela ativa, sem precisar ajustar por cliente.
+
+**Por que não apagar e recriar a tabela inteira a cada sync?**
+
+O histórico vai além de 30 dias. A tabela `pod_kombucha_gads_diario` tem dados desde 2025-08-19. Recriar apagaria todo esse histórico. O `DELETE WHERE data BETWEEN` é cirúrgico: toca só o período que a API vai substituir.
+
+**Por que aumentar o timeout dos crons (300s → 600s)?**
+
+Com `--dias 2`, o sync de todas as contas levava ~37s (Google) e ~98s (Meta). Com `--dias 30`, a API retorna ~15× mais linhas e o MERGE no BigQuery processa mais dados — 600s é margem segura. Se ultrapassar, o cron registra erro e o próximo ciclo tenta de novo em 15 minutos.
+
+---
+
+### Consequências: custo, crescimento e monitoramento
+
+#### Custo por execução (após o fix)
+
+| Plataforma | Linhas/sync (est.) | Tempo/sync | BigQuery MERGE |
+|---|---|---|---|
+| Meta Ads | ~180 linhas × 3 contas × 30 dias ≈ 16.200 | ~3–5 min | ~500 KB processados |
+| Google Ads | ~10 linhas × 2 contas × 30 dias ≈ 600 | ~1–2 min | ~20 KB processados |
+| **Total/ciclo** | ~16.800 linhas | ~5–7 min | ~520 KB |
+
+**Custo BigQuery:** 4 ciclos/hora × 24h × 30 dias = 2.880 execuções/mês × ~520 KB = ~1,5 GB/mês processados. Dentro do free tier de 1 TB/mês — **custo zero**.
+
+**Custo de API (Meta/Google):** ambas as plataformas não cobram por chamada de API de relatórios. Custo zero.
+
+#### Custo se crescer
+
+| Cenário | Linhas/mês | BQ processado | Custo |
+|---|---|---|---|
+| Atual (3 contas) | ~2,4M | ~1,5 GB | R$ 0 (free tier) |
+| 10 contas | ~8M | ~5 GB | R$ 0 (free tier) |
+| 50 contas | ~40M | ~25 GB | ~R$ 3/mês |
+| 200 contas | ~160M | ~100 GB | ~R$ 25/mês |
+
+O gargalo antes de custo ser relevante é o tempo de sync: com 50 contas, cada ciclo levaria ~15–20 min — próximo ao intervalo de 15 min do cron. A solução nesses casos é aumentar o intervalo para 30 min ou paralelizar por conta.
+
+#### O que precisa ser acompanhado
+
+**🔴 Alertar imediatamente — cron ultrapassando timeout:**
+```bash
+# Se aparecer nos logs:
+# "Task timed out after 600s" → sync não concluiu
+journalctl -u agente-guara.service --since "1 hour ago" | grep -i "timeout\|timed out"
+# Ação: aumentar timeout do cron ou reduzir --dias
+```
+
+**🟡 Verificar semanalmente — convergência das semanas recentes:**
+```sql
+-- Comparar total de conversões por semana entre D-30 e D-7
+-- (D-7 já deve estar estabilizado; D-30 ainda pode variar)
+SELECT
+  FORMAT_DATE('%G-W%V', data) AS semana,
+  cliente,
+  ROUND(SUM(CAST(conversoes AS FLOAT64)), 1) AS conversoes,
+  ROUND(SUM(CAST(investimento AS FLOAT64)), 2) AS investimento
+FROM `guara-db.guara_performance.ads_diario`
+WHERE plataforma = 'google'
+  AND data >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+GROUP BY semana, cliente
+ORDER BY semana DESC, cliente;
+-- Monitorar se semanas antigas param de variar (sinal que janela fechou)
+```
+
+**🟢 Verificar mensalmente — tamanho das tabelas SQLite:**
+```bash
+# Tabelas crescem ~16.200 linhas/dia com lookback 30 dias
+# (mas DELETE por período mantém só 30 dias, não acumula infinitamente)
+for db in /home/ubuntu/.openclaw/workspace/agente-performance/data/performance/*/*.db; do
+  echo "$db: $(du -sh $db | cut -f1)"
+done
+# Esperado: cada tabela gads_diario ≈ 300–500 KB (30 dias de dados)
+```
+
+---
+
 ## Arquivos relacionados
 
 | Arquivo | Descrição |
 |---|---|
 | `db/bq_writer.py` | Módulo corrigido — função `_insert()` com MERGE e chave dinâmica |
-| `google_ads/loader.py` | Loader corrigido — guarda por `customer.id` + `customer.id` na GAQL |
+| `google_ads/loader.py` | Loader corrigido — guarda por `customer.id` + DELETE por período |
+| `scripts/sync_gads_diario.py` | Script corrigido — `append=False` (habilita replace por período) |
 | `alteracoes/2026-10-09_bigquery-deduplicacao.md` | Registro do primeiro incidente e fix |
 | `alteracoes/2026-10-13_bigquery-dedup-fix-merge-chave-plataforma.md` | Registro do segundo fix |
 | `alteracoes/2026-10-13_gads-campanhas-source-of-gravadas-como-pod.md` | Registro do terceiro fix |
