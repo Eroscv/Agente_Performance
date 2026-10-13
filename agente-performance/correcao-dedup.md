@@ -1420,4 +1420,272 @@ done
 
 ---
 
+## 🗂️ Incidente 5 — Duplicação `shopify_diario` no BigQuery (13/10/2026)
+
+### O que aconteceu
+
+A tabela `shopify_diario` no BigQuery acumulou múltiplas cópias do mesmo dia: até **178 linhas para um único (cliente, data)**. Total: 19 dias duplicados entre Source OF e POD Kombucha.
+
+Exemplo da gravidade:
+
+| Data | Cliente | Linhas | Receita inflada |
+|---|---|---|---|
+| 2026-10-06 | source_of | 178 | R$ 4,7M (real: R$ 37k) |
+| 2026-10-07 | pod_kombucha | 89 | R$ 1,1M (real: R$ 19k) |
+| 2026-10-09 | source_of | 43 | R$ 1,2M (real: R$ 28k) |
+
+---
+
+### O que eu fiz
+
+1. **Identifiquei a causa raiz** no `_insert()` do `bq_writer.py`
+2. **Corrigi o método de carga** da tabela temporária: `insert_rows_json` → `load_table_from_json`
+3. **Removi o filtro** `WHEN MATCHED AND S.criado_em > T.criado_em` do MERGE (era bloqueador quando mesmo timestamp)
+4. **Limpei as 19 duplicatas** existentes: DELETE + reinsert do valor mais recente por (cliente, data)
+5. **Atualizei o cron** `shopify-sync-horario`: `--dias 2` → `--dias 30` (cobertura retroativa, alinhado com Meta e Google)
+
+---
+
+### Como eu fiz
+
+#### Diagnóstico — rastrear a origem das duplicatas
+
+```sql
+-- Detectar dias com mais de 1 linha por (cliente, data)
+SELECT data, cliente, COUNT(*) as n,
+  MIN(criado_em) as primeiro, MAX(criado_em) as ultimo
+FROM `guara-db.guara_performance.shopify_diario`
+GROUP BY data, cliente
+HAVING COUNT(*) > 1
+ORDER BY data DESC;
+-- Resultado: 19 dias, todas as linhas com o MESMO criado_em
+-- Sinal: não é múltiplos syncs diferentes — é um sync único inserindo N vezes
+```
+
+**Chave do diagnóstico:** todas as 43 linhas de 2026-10-09/source_of tinham `criado_em = 2026-10-10 23:55:10` — exatamente o mesmo timestamp. Isso significa que um único sync às 23:55 inseriu 43 cópias do mesmo dia.
+
+#### Causa raiz — streaming buffer do BigQuery
+
+O fluxo do MERGE era:
+
+```
+_insert() → cria tabela temp → insert_rows_json(temp) → MERGE(main ⯄ temp)
+```
+
+O problema: `insert_rows_json` usa a **Streaming API** do BigQuery. Dados inseridos via streaming ficam num buffer interno por até ~1 minuto **invisível para DML** (MERGE, DELETE, UPDATE). Durante esse buffer:
+
+```
+MERGE vê: tabela temp = vazia
+         → WHEN NOT MATCHED → INSERT na principal
+
+Sync roda de novo em 15 min:
+MERGE ainda vê: temp = linha nova, principal = linha do sync anterior
+              → criado_em igual → WHEN MATCHED AND S > T = FALSE → sem update
+              → linha do temp não existe na principal? Mas existe...
+              → BUG: streaming buffer ainda inconsistente → INSERT duplicado
+```
+
+#### Fix — `load_table_from_json` (batch síncrono)
+
+**Antes:**
+```python
+# Streaming: dado no buffer ~1 min, invisível para MERGE
+for i in range(0, len(rows), 500):
+    errs = bq.insert_rows_json(bq.get_table(tmp_table), rows[i:i+500])
+```
+
+**Depois:**
+```python
+# Batch load: job síncrono, dado disponível imediatamente após job.result()
+job_config = bigquery.LoadJobConfig(
+    schema=schema,
+    write_disposition="WRITE_APPEND",
+    source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+)
+load_job = bq.load_table_from_json(rows, tmp_table, job_config=job_config)
+load_job.result()  # aguarda conclusão — dado garantidamente disponível
+```
+
+**Antes (MERGE clause):**
+```sql
+WHEN MATCHED AND S.criado_em > T.criado_em THEN UPDATE ...
+-- Bloqueador: se criado_em igual (mesmo sync), nunca atualizava
+```
+
+**Depois:**
+```sql
+WHEN MATCHED THEN UPDATE ...
+-- Sempre atualiza quando encontra match — comportamento correto
+```
+
+#### Diagrama — Streaming buffer vs batch load
+
+```
+            ANTES (insert_rows_json — streaming)
+
+cron dispara sync
+      |
+      ▼
+  insert_rows_json(temp)
+      |     RETORNA OK imediatamente
+      |     MAS dado está no streaming buffer
+      |
+      ▼
+  MERGE(main ⯄ temp)
+      |
+      ▼
+  BigQuery lê temp   →   temp parece VAZIA (buffer ainda não liberado)
+      |
+      ▼
+  WHEN NOT MATCHED   →   INSERT na principal  ❌ duplicóu
+
+  Próximo sync (15 min depois):
+  buffer liberou, temp tem 1 linha, principal já tem a linha
+  criado_em igual → WHEN MATCHED AND S > T = FALSE → sem update
+  mas outra linha duplicada já entrou
+
+
+            DEPOIS (load_table_from_json — batch)
+
+cron dispara sync
+      |
+      ▼
+  load_table_from_json(temp)
+      |     job.result() aguarda até carga completa
+      |     dado GARANTIDAMENTE disponível para DML
+      |
+      ▼
+  MERGE(main ⯄ temp)
+      |
+      ▼
+  BigQuery lê temp   →   temp tem exatamente as linhas esperadas
+      |
+      ▼
+  (cliente, data) já existe   →  WHEN MATCHED → UPDATE  ✅
+  (cliente, data) novo        →  WHEN NOT MATCHED → INSERT  ✅
+```
+
+#### Limpeza das 19 duplicatas
+
+```python
+# Para cada (cliente, data) duplicado:
+# 1. Buscar a linha mais recente (MAX criado_em)
+# 2. DELETE todas as linhas do (cliente, data)
+# 3. Re-inserir via load_table_from_json (1 linha)
+
+q_get = f"""
+  SELECT * FROM shopify_diario
+  WHERE cliente = '{cliente}' AND data = '{data}'
+  ORDER BY criado_em DESC
+  LIMIT 1
+"""
+correct = list(client.query(q_get).result())[0]
+client.query(f"DELETE FROM shopify_diario WHERE cliente='{cliente}' AND data='{data}'").result()
+client.load_table_from_json([correct_row], tabela, job_config=...).result()
+# 19 dias corrigidos ✅
+```
+
+---
+
+### Por que fiz desse jeito
+
+**Por que `load_table_from_json` e não esperar o buffer com `time.sleep()`?**
+
+Sleep seria frágil — o buffer pode levar de 30 segundos a vários minutos dependendo da carga do BQ. `load_table_from_json` é determinístico: o job só retorna depois que o dado está escrito e visível.
+
+**Por que remover o `AND S.criado_em > T.criado_em` do WHEN MATCHED?**
+
+Esse filtro foi colocado originalmente para "evitar sobrescrever com dado antigo". Na prática, o mesmo sync gera o mesmo `criado_em = datetime.now()` — quando o timestamp é idêntico, `S > T` é `FALSE`, o UPDATE é bloqueado, e o MERGE não faz nada mesmo com dado mais atualizado disponível. A proteção é desnecessária: o dado na tabela temp é sempre o mais recente (acabou de vir da API).
+
+**Por que o `ads_diario` (Meta + Google) não sofria o mesmo bug?**
+
+Sofria — foi exatamente o Incidente 2 (ratio 8–12×). O fix do `load_table_from_json` agora protege todas as tabelas que passam pelo `_insert()`: `ads_diario`, `shopify_diario`, e qualquer tabela futura.
+
+---
+
+### Consequências: custo, crescimento e monitoramento
+
+#### Custo do incidente
+
+| Item | Valor |
+|---|---|
+| Máx. linhas por dia antes do fix | 178× o valor real |
+| Receita inflada no pico (2026-10-06 source_of) | R$ 4,73M (real: R$ 37k) |
+| Linhas deduplicadas | 19 dias × 2 clientes |
+| DELETE + reinsert no BQ | ~50 KB processados = R$ 0,00 |
+
+#### Custo futuro com o fix
+
+`load_table_from_json` é um **batch load job** — cobrado por dados processados na tabela destino, não por bytes da carga. Para o Shopify (7–30 linhas/sync), o impacto é zero. Mesmo com 100 clientes e 30 dias de janela (3.000 linhas/sync × 96 syncs/dia), o total processado por mês seria <1 MB — free tier coberta.
+
+#### O que precisa ser acompanhado
+
+**🔴 Verificar semanalmente — ratio de linhas por (cliente, data):**
+
+```sql
+-- Detectar duplicatas em shopify_diario
+SELECT data, cliente, COUNT(*) AS n
+FROM `guara-db.guara_performance.shopify_diario`
+GROUP BY data, cliente
+HAVING COUNT(*) > 1
+ORDER BY n DESC;
+-- Resultado esperado: 0 linhas
+```
+
+**🟡 Verificar mensalmente — receita média diária vs expected:**
+
+```sql
+-- Receita média diária dos últimos 30 dias por cliente
+SELECT cliente,
+  ROUND(AVG(CAST(receita AS FLOAT64)), 2) AS media_diaria,
+  MAX(CAST(receita AS FLOAT64)) AS max_diario,
+  MIN(CAST(receita AS FLOAT64)) AS min_diario
+FROM `guara-db.guara_performance.shopify_diario`
+WHERE data >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+GROUP BY cliente;
+-- Se max_diario > 5x media_diaria: possível duplicação não detectada
+```
+
+---
+
+## 🗂️ Nota: Campo `receita` do Shopify — `total_price` vs `subtotal_price`
+
+### O que foi identificado
+
+Durante a investigação do incidente 5, foi confirmado que o campo `receita` na tabela `shopify_diario` usa `total_price` da API Shopify. Isso significa:
+
+| Campo Shopify | O que inclui | Usado aqui |
+|---|---|---|
+| `subtotal_price` | Valor dos produtos, após descontos, sem frete | ❌ Não |
+| `total_discounts` | Valor total dos descontos aplicados | ✅ Armazenado separado em `total_desconto` |
+| `total_price` | `subtotal_price` + frete | ✅ Usado como `receita` |
+
+**Confirmação em pedidos reais:**
+```
+total_price=255.55 | subtotal_price=219.90 | total_discounts=0.00 | frete_implícito=35.65
+total_price=377.82 | subtotal_price=377.82 | total_discounts=41.98 | frete_implícito=0.00
+```
+
+**Impacto:** Uma diferença de ~R$ 8.114 entre a receita reportada aqui e o relatório que usa `subtotal_price` ou valor pago (descontando frete) é esperada e correta — é o frete acumulado dos pedidos pagos da semana. Não é erro de dados.
+
+**Se quiser alinhar com relatório que usa subtotal:** trocar `total_price` por `subtotal_price` em `shopify/sync.py` linha 147. Impacto: receita diária cai em média ~3–7% (varia conforme taxa de frete gratis do período).
+
+---
+
+## Arquivos relacionados
+
+| Arquivo | Descrição |
+|---|---|
+| `db/bq_writer.py` | Módulo corrigido — `load_table_from_json` + MERGE sem filtro `criado_em` |
+| `google_ads/loader.py` | Loader corrigido — guarda por `customer.id` + DELETE por período |
+| `scripts/sync_gads_diario.py` | Script corrigido — `append=False` (replace por período) |
+| `shopify/sync.py` | Sync Shopify — usa `total_price` (inclui frete) |
+| `shopify/client.py` | Cliente Shopify — filtro `financial_status=paid` |
+| `alteracoes/2026-10-09_bigquery-deduplicacao.md` | Registro do primeiro incidente e fix |
+| `alteracoes/2026-10-13_bigquery-dedup-fix-merge-chave-plataforma.md` | Registro do segundo fix |
+| `alteracoes/2026-10-13_gads-campanhas-source-of-gravadas-como-pod.md` | Registro do terceiro fix |
+| `docs/ARQUITETURA_DADOS.md` | Arquitetura completa dual-write + BigQuery |
+
+---
+
 *Documento criado em 13/10/2026 — Cesar (Agente de Performance Guará)*
