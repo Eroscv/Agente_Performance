@@ -100,18 +100,28 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
         )
         bq.create_table(tmp_ref, exists_ok=True)
 
-        # Insere na temp
-        errors = []
-        for i in range(0, len(rows), 500):
-            errs = bq.insert_rows_json(bq.get_table(tmp_table), rows[i:i+500])
-            errors.extend(errs)
-        if errors:
-            logger.warning("[BQ] %s — erro ao popular temp: %s", desc, errors[:1])
+        # Insere na temp via load_table_from_json (batch load, não streaming)
+        # Streaming (insert_rows_json) tem buffer de ~1 min invisível para MERGE/DML
+        # load_table_from_json é síncrono: dado disponível imediatamente após o job
+        import json as _json
+        job_config = bigquery.LoadJobConfig(
+            schema=schema,
+            write_disposition="WRITE_APPEND",
+            source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+        )
+        ndjson = "\n".join(_json.dumps(r, default=str) for r in rows)
+        load_job = bq.load_table_from_json(
+            rows, tmp_table, job_config=job_config
+        )
+        load_job.result()  # aguarda conclusão
+        if load_job.errors:
+            logger.warning("[BQ] %s — erro ao popular temp: %s", desc, load_job.errors[:1])
             bq.delete_table(tmp_table, not_found_ok=True)
-            return len(errors)
+            return len(load_job.errors)
 
         # MERGE: atualiza se existe, insere se não existe
         # Usa (T.k IS NOT DISTINCT FROM S.k) para lidar corretamente com NULLs
+        # WHEN MATCHED: sempre atualiza (remove filtro criado_em para evitar stale data)
         on_clause = " AND ".join(f"(T.{k} IS NOT DISTINCT FROM S.{k})" for k in keys)
         all_cols = [f.name for f in schema]
         update_cols = [c for c in all_cols if c not in keys]
@@ -123,7 +133,7 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
         MERGE `{full_table}` T
         USING `{tmp_table}` S
         ON {on_clause}
-        WHEN MATCHED AND S.criado_em > T.criado_em THEN
+        WHEN MATCHED THEN
           UPDATE SET {update_clause}
         WHEN NOT MATCHED THEN
           INSERT ({insert_cols}) VALUES ({insert_vals})
