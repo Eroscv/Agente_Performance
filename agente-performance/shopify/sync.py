@@ -213,7 +213,7 @@ def sincronizar(
         pedidos_por_dia[criado_em]  += 1
         gross_sales_por_dia[criado_em] += receita + float(pedido.get("total_discounts") or 0)
         desconto_por_dia[criado_em] += desconto
-        if total_p > 300:  # total_price — aguardando confirmação do campo do Colab
+        if (sub_p - desconto) > 300:  # subtotal_price - total_discounts, igual ao Colab
             ped_300_por_dia[criado_em] += 1
 
         cid = (pedido.get("customer") or {}).get("id")
