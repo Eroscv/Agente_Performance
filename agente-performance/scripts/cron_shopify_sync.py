@@ -127,6 +127,17 @@ def main(dias: int = 8, full: bool = False, cliente: str = None) -> None:
             erros += 1
 
     logger.info("Sync Shopify concluído: %d sucesso(s), %d erro(s)", sucessos, erros)
+
+    # Sync de checkouts abandonados (30 dias, silencioso em falha)
+    try:
+        from shopify.abandoned_checkouts import carregar_abandoned
+        for cfg in clientes:
+            ck_key = cfg["key"]
+            res = carregar_abandoned(dias=30, cliente_key=ck_key)
+            logger.info("[abandoned/%s] ✅ %d checkouts | %s", ck_key, res["total"], res["periodo"])
+    except Exception as _ck_exc:
+        logger.warning("[abandoned] falha silenciosa: %s", _ck_exc)
+
     if erros > 0 and sucessos == 0:
         sys.exit(1)
 

@@ -72,7 +72,9 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
                 keys = ["cliente", "plataforma", "data", "campaign_id", "adset_id", "ad_id"]
         else:
             merge_keys = {
-                "shopify_diario": ["cliente", "data"],
+                "shopify_diario":             ["cliente", "data"],
+                "abandoned_checkout_detail":  ["checkout_id", "cliente"],
+                "abandoned_checkout_daily":   ["cliente", "data", "utm_source_norm"],
             }
             keys = merge_keys.get(table_id, [])
 
