@@ -16,6 +16,325 @@
 
 ---
 
+## 🗺️ Diagramas e Fluxos
+
+### Diagrama 1 — Arquitetura de dados (visão geral)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                        FONTES DE DADOS                              │
+│                                                                     │
+│  ┌──────────────┐   ┌───────────────┐   ┌──────────────────┐      │
+│  │  Meta Ads    │   │  Google Ads   │   │    Shopify       │      │
+│  │  API         │   │  API          │   │    API           │      │
+│  └──────┬───────┘   └──────┬────────┘   └────────┬─────────┘      │
+└─────────┼─────────────────┼────────────────────┼──────────────────┘
+          │                 │                    │
+          ▼                 ▼                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     CAMADA DE INGESTÃO                              │
+│                                                                     │
+│  meta_ads/loader.py   google_ads/loader.py   shopify/sync.py        │
+│        │                     │                    │                 │
+└────────┼─────────────────────┼────────────────────┼────────────────┘
+         │                     │                    │
+         ▼                     ▼                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    SQLITE (fonte primária)                          │
+│                                                                     │
+│  source_of_meta_ads_diario    source_of_gads_diario                 │
+│  pod_kombucha_meta_ads_diario pod_kombucha_gads_diario              │
+│  shopify_receita_diaria        ...                                  │
+└─────────────────────────┬───────────────────────────────────────────┘
+                          │  dual-write (silencioso, não bloqueia)
+                          ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                   db/bq_writer.py                                   │
+│                                                                     │
+│   ┌───────────────────────────────────────────────────────────┐    │
+│   │  MERGE via tabela temporária                              │    │
+│   │                                                           │    │
+│   │  1. CREATE TABLE _ads_diario_tmp_YYYYMMDD (TTL 1 dia)     │    │
+│   │  2. INSERT dados novos → temp                             │    │
+│   │  3. MERGE ads_diario USING temp ON chave_por_plataforma   │    │
+│   │     ├─ MATCHED + mais recente → UPDATE                    │    │
+│   │     └─ NOT MATCHED           → INSERT                     │    │
+│   │  4. DELETE TABLE temp                                     │    │
+│   └───────────────────────────────────────────────────────────┘    │
+│                          │                                          │
+└──────────────────────────┼──────────────────────────────────────────┘
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│           BIGQUERY  guara-db.guara_performance                      │
+│                                                                     │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │  ads_diario                                                  │  │
+│  │  PARTITION BY data | CLUSTER BY cliente, plataforma          │  │
+│  │  ~22.700 linhas | 7.96 MB                                    │  │
+│  └──────────────────────────────────────────────────────────────┘  │
+│                                                                     │
+│  ┌───────────────────┐   ┌────────────────────────────────────┐    │
+│  │  shopify_diario   │   │  v_ads_diario (view de segurança)  │    │
+│  │  ~1.577 linhas    │   │  sempre retorna 1 linha por chave  │    │
+│  └───────────────────┘   └────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+              ┌─────────────────────────┐
+              │   Looker Studio /       │
+              │   BigQuery Console /    │
+              │   Análises SQL          │
+              └─────────────────────────┘
+```
+
+---
+
+### Diagrama 2 — O que causava a duplicação (antes vs depois)
+
+#### ❌ ANTES — `insert_rows_json` (append puro)
+
+```
+Sync às 00:00  ──► insert_rows_json ──► ads_diario: 180 linhas  (1 cópia)
+Sync às 00:15  ──► insert_rows_json ──► ads_diario: 360 linhas  (2 cópias)
+Sync às 00:30  ──► insert_rows_json ──► ads_diario: 540 linhas  (3 cópias)
+      ...                                    ...
+Sync às 23:45  ──► insert_rows_json ──► ads_diario: 17.280 linhas (96 cópias)
+                                                              ↑
+                                                    MESMO DIA, MESMO ANÚNCIO
+                                                    ×96 no final do dia
+```
+
+#### ✅ DEPOIS — MERGE com tabela temporária
+
+```
+Sync às 00:00  ──► MERGE ──► ads_diario: 180 linhas (INSERT — não existia)
+Sync às 00:15  ──► MERGE ──► ads_diario: 180 linhas (UPDATE — já existe)
+Sync às 00:30  ──► MERGE ──► ads_diario: 180 linhas (UPDATE — já existe)
+      ...                          ...
+Sync às 23:45  ──► MERGE ──► ads_diario: 180 linhas (UPDATE — já existe)
+                                                  ↑
+                                        SEMPRE 1 linha por anúncio por dia
+```
+
+---
+
+### Diagrama 3 — Por que `NULL = NULL` quebrava o MERGE
+
+```
+╔══════════════════════════════════════════════════════════════════╗
+║  COMPORTAMENTO QUEBRADO: ON T.ad_id = S.ad_id                   ║
+╚══════════════════════════════════════════════════════════════════╝
+
+  ads_diario (T)               tabela temp (S)
+  ┌─────────────────────┐      ┌─────────────────────┐
+  │ cliente  │  ad_id   │      │ cliente  │  ad_id   │
+  │──────────┼──────────│      │──────────┼──────────│
+  │ pod_kombu│  NULL ◄──┼──────┼──► NULL  │ pod_kombu│
+  │          │  ↑ G.Ads │      │     ↑ G.Ads          │
+  └──────────┴──────────┘      └─────────────────────┘
+                    │
+                    ▼
+           NULL = NULL  →  NULL  →  FALSE
+                    │
+                    ▼
+        WHEN NOT MATCHED → INSERT   ← sempre cai aqui!
+        Nova linha criada em vez de atualizar a existente
+        Resultado: +1 linha a cada sync = 96 linhas/dia para o mesmo anúncio
+
+╔══════════════════════════════════════════════════════════════════╗
+║  COMPORTAMENTO CORRETO: ON (T.ad_id IS NOT DISTINCT FROM S.ad_id)║
+╚══════════════════════════════════════════════════════════════════╝
+
+  ads_diario (T)               tabela temp (S)
+  ┌─────────────────────┐      ┌─────────────────────┐
+  │ cliente  │  ad_id   │      │ cliente  │  ad_id   │
+  │──────────┼──────────│      │──────────┼──────────│
+  │ pod_kombu│  NULL ◄──┼──────┼──► NULL  │ pod_kombu│
+  └──────────┴──────────┘      └─────────────────────┘
+                    │
+                    ▼
+   NULL IS NOT DISTINCT FROM NULL  →  TRUE  ✅
+                    │
+                    ▼
+        WHEN MATCHED → UPDATE   ← faz match corretamente!
+        Linha existente atualizada com dados mais recentes
+```
+
+---
+
+### Diagrama 4 — Chave de MERGE dinâmica por plataforma
+
+```
+                rows chegam no bq_writer.py
+                         │
+                         ▼
+           plataforma = rows[0].get("plataforma")
+                         │
+            ┌────────────┴────────────┐
+            │                        │
+        "meta"                   "google"
+            │                        │
+            ▼                        ▼
+┌───────────────────────┐  ┌─────────────────────────┐
+│   CHAVE COMPLETA      │  │   CHAVE SIMPLIFICADA    │
+│                       │  │                         │
+│   • cliente           │  │   • cliente             │
+│   • plataforma        │  │   • plataforma          │
+│   • data              │  │   • data                │
+│   • campaign_id       │  │   • campaign_id         │
+│   • adset_id  ────────┼──┼── NULL (não existe)     │
+│   • ad_id     ────────┼──┼── NULL (não existe)     │
+│                       │  │                         │
+│  Granularidade:       │  │  Granularidade:         │
+│  ANÚNCIO INDIVIDUAL   │  │  CAMPANHA               │
+└───────────────────────┘  └─────────────────────────┘
+            │                        │
+            └────────────┬───────────┘
+                         ▼
+           ON clause com IS NOT DISTINCT FROM
+           para cada campo da chave escolhida
+```
+
+---
+
+### Diagrama 5 — Fluxo de sync a cada 15 minutos (schedule)
+
+```
+┌────────────────────────────────────────────────────────────────────┐
+│                      CRONS (OpenClaw)                              │
+│                                                                    │
+│  :00 :15 :30 :45  ──► meta-sync-horario    ──► Meta Ads API        │
+│  :05 :20 :35 :50  ──► gads-sync-horario    ──► Google Ads API      │
+│  :10 :25 :40 :55  ──► shopify-sync-horario ──► Shopify API         │
+│  :02 :17 :32 :47  ──► dashboard-ingest     ──► Dashboard pipeline  │
+│                                                                    │
+│  Offsets propositais — nenhum cron colide com outro               │
+└──────────────────────────────┬─────────────────────────────────────┘
+                               │
+                   Por cada cron de sync:
+                               │
+                               ▼
+                   ┌───────────────────────┐
+                   │  loader.py            │
+                   │  busca últimos 2 dias │
+                   │  nas APIs             │
+                   └──────────┬────────────┘
+                              │
+                   ┌──────────┴────────────┐
+                   │                       │
+                   ▼                       ▼
+          ┌────────────────┐    ┌───────────────────────┐
+          │  SQLite        │    │  bq_writer.py         │
+          │  (síncrono,    │    │  (assíncrono,         │
+          │   fonte real)  │    │   falha silenciosa)   │
+          └────────────────┘    └──────────┬────────────┘
+                                           │
+                                           ▼
+                                ┌───────────────────────┐
+                                │  BigQuery MERGE       │
+                                │  ~500 KB/chamada      │
+                                │  96 vezes/dia         │
+                                │  ~1.4 GB/mês total    │
+                                └───────────────────────┘
+```
+
+---
+
+### Diagrama 6 — Fluxo de limpeza de emergência (ratio > 1.2)
+
+```
+             RATIO > 1.2 DETECTADO
+                     │
+                     ▼
+      ┌──────────────────────────────┐
+      │  Identificar datas afetadas  │
+      │  SELECT DISTINCT data FROM   │
+      │  ads_diario                  │
+      │  WHERE data >= INTERVAL 14D  │
+      └──────────────┬───────────────┘
+                     │
+                     ▼
+           Para cada data afetada:
+                     │
+                     ▼
+      ┌──────────────────────────────────────────────────┐
+      │  DELETE linhas que NÃO são o MAX(criado_em)      │
+      │  por chave (cliente, plataforma, data,           │
+      │             campaign_id, adset_id, ad_id)        │
+      │                                                  │
+      │  Mantém: 1 linha mais recente por combinação     │
+      │  Remove: todas as cópias mais antigas            │
+      └──────────────────────────────────────────────────┘
+                     │
+                     ▼
+           Verificar ratio novamente
+                     │
+            ┌────────┴─────────┐
+            │                  │
+        ratio=1.0          ratio>1.0
+            │                  │
+            ▼                  ▼
+         ✅ OK         🔴 Investigar MERGE
+                       (credenciais GCP,
+                        schema mudou,
+                        novo campo NULL)
+```
+
+---
+
+### Diagrama 7 — Camadas de proteção contra duplicação (estado atual)
+
+```
+          Dado chega no bq_writer.py
+                    │
+                    ▼
+   ┌────────────────────────────────────┐
+   │  CAMADA 1: Chave dinâmica          │  ← escolhe a chave certa
+   │                                    │     por plataforma
+   │  google → (cliente, plataforma,    │
+   │            data, campaign_id)      │
+   │  meta   → (cliente, plataforma,    │
+   │            data, campaign_id,      │
+   │            adset_id, ad_id)        │
+   └──────────────────┬─────────────────┘
+                      │
+                      ▼
+   ┌────────────────────────────────────┐
+   │  CAMADA 2: IS NOT DISTINCT FROM    │  ← NULL-safe comparison
+   │                                    │     no ON clause do MERGE
+   │  NULL IS NOT DISTINCT FROM NULL    │
+   │               → TRUE ✅            │
+   └──────────────────┬─────────────────┘
+                      │
+                      ▼
+   ┌────────────────────────────────────┐
+   │  CAMADA 3: MERGE atômico           │  ← upsert via tabela temp
+   │                                    │
+   │  MATCHED + mais recente → UPDATE   │
+   │  NOT MATCHED            → INSERT   │
+   │                                    │
+   │  Tabela bruta: 1 linha por chave   │
+   └──────────────────┬─────────────────┘
+                      │
+                      ▼
+   ┌────────────────────────────────────┐
+   │  CAMADA 4: View v_ads_diario       │  ← circuit breaker final
+   │                                    │
+   │  ROW_NUMBER() OVER PARTITION BY    │
+   │  chave ORDER BY criado_em DESC     │
+   │  WHERE rn = 1                      │
+   │                                    │
+   │  Mesmo se a tabela bruta tiver     │
+   │  duplicatas, a view retorna 1      │
+   └──────────────────┬─────────────────┘
+                      │
+                      ▼
+            ✅ Dado limpo e único
+       para queries e dashboards
+```
+
+---
+
 ## 1. O que aconteceu
 
 ### Primeiro incidente — 09/10/2026: 192× duplicação
