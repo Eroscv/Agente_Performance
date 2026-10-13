@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS gads_campanhas_diario (
 # GAQL — Google Ads Query Language
 QUERY = """
     SELECT
+        customer.id,
         campaign.id,
         campaign.name,
         campaign.advertising_channel_type,
@@ -101,10 +102,21 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
     try:
         stream = service.search_stream(customer_id=customer_id, query=query)
         rows = []
+        skipped = 0
         for batch in stream:
             for row in batch.results:
                 m = row.metrics
                 c = row.campaign
+                # Guarda de segurança: rejeitar campanhas de contas diferentes
+                # do customer_id solicitado (pode ocorrer em contas MCC)
+                row_cid = str(row.customer.id) if row.customer.id else None
+                if row_cid and row_cid != str(customer_id):
+                    logger.warning(
+                        "[%s] campanha ignorada — pertence à conta %s, não %s: campaign_id=%s (%s)",
+                        customer_id, row_cid, customer_id, c.id, c.name
+                    )
+                    skipped += 1
+                    continue
                 rows.append({
                     "customer_id":         customer_id,
                     "data":                row.segments.date,
@@ -125,7 +137,7 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
                     "budget_diario":       _micros_to_brl(row.campaign_budget.amount_micros) if row.campaign_budget.amount_micros else None,
                 })
 
-        logger.info("[%s] %d linhas retornadas", customer_id, len(rows))
+        logger.info("[%s] %d linhas retornadas (ignoradas de outras contas: %d)", customer_id, len(rows), skipped)
         return rows
 
     except GoogleAdsException as ex:
