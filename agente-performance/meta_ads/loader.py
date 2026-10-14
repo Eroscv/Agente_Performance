@@ -339,6 +339,102 @@ def salvar(rows: list[dict], append: bool = False,
     return len(rows)
 
 
+# DDL para tabela de totais campaign-level (receita sem arredondamento de ad-level)
+_CREATE_CAMPAIGN_TOTALS_TPL = """
+CREATE TABLE IF NOT EXISTS {tabela} (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    data_inicio      TEXT NOT NULL,
+    data_fim         TEXT NOT NULL,
+    campanha         TEXT NOT NULL,
+    campaign_id      TEXT,
+    investimento     REAL DEFAULT 0,
+    compras          REAL DEFAULT 0,
+    valor_compras    REAL DEFAULT 0,
+    roas             REAL,
+    account_id       TEXT,
+    synced_at        TEXT DEFAULT (datetime('now')),
+    UNIQUE(data_inicio, data_fim, campanha)
+)
+"""
+
+
+def buscar_totais_campaign(account_id: str, date_start: date, date_end: date,
+                           token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
+    """
+    Busca totais consolidados no nível CAMPAIGN para o período.
+    Usa time_increment=all_days — sem arredondamento de ad-level.
+    Retorna lista de dicts com uma linha por campanha.
+    """
+    token = _get_token(token_env)
+    params = {
+        "access_token": token,
+        "level":        "campaign",
+        "fields":       "campaign_name,campaign_id,spend,actions,action_values,account_id",
+        "time_range":   f'{{"since":"{date_start}","until":"{date_end}"}}',
+        "time_increment": "all_days",
+        "limit":        200,
+        "action_attribution_windows": '["7d_click","1d_view"]',
+    }
+    url  = f"{API_BASE}/{account_id}/insights"
+    rows = []
+    page = 0
+    while url and page < 10:
+        resp = requests.get(url, params=params if page == 0 else {}, timeout=30)
+        data = resp.json()
+        if "error" in data:
+            raise RuntimeError(f"Meta API campaign totals error: {data['error'].get('message')}")
+        for row in data.get("data", []):
+            invest  = float(row.get("spend", 0))
+            compras = 0.0
+            receita = 0.0
+            for a in (row.get("actions") or []):
+                if a.get("action_type") == "offsite_conversion.fb_pixel_purchase":
+                    compras = float(a.get("7d_click", 0)) + float(a.get("1d_view", 0))
+            for av in (row.get("action_values") or []):
+                if av.get("action_type") == "offsite_conversion.fb_pixel_purchase":
+                    receita = float(av.get("7d_click", 0)) + float(av.get("1d_view", 0))
+            rows.append({
+                "data_inicio":   str(date_start),
+                "data_fim":      str(date_end),
+                "campanha":      row.get("campaign_name", ""),
+                "campaign_id":   row.get("campaign_id", ""),
+                "investimento":  invest,
+                "compras":       compras,
+                "valor_compras": receita,
+                "roas":          round(receita / invest, 4) if invest else None,
+                "account_id":    row.get("account_id", ""),
+            })
+        page += 1
+        url = data.get("paging", {}).get("next")
+        if url:
+            time.sleep(0.3)
+    return rows
+
+
+def salvar_totais_campaign(rows: list[dict], tabela: str,
+                           db_path: "Path | None" = None) -> int:
+    """Persiste totais campaign-level no SQLite."""
+    if not rows:
+        return 0
+    _db = Path(db_path) if db_path else DB_PATH
+    _db.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(_db))
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute(_CREATE_CAMPAIGN_TOTALS_TPL.format(tabela=tabela))
+    cols = ["data_inicio", "data_fim", "campanha", "campaign_id",
+            "investimento", "compras", "valor_compras", "roas", "account_id"]
+    sql = f"""
+        INSERT OR REPLACE INTO {tabela} ({', '.join(cols)})
+        VALUES ({', '.join(['?'] * len(cols))})
+    """
+    for r in rows:
+        conn.execute(sql, [r.get(c) for c in cols])
+    conn.commit()
+    conn.close()
+    logger.info("%d totais campaign-level salvos em %s", len(rows), tabela)
+    return len(rows)
+
+
 def resumo_banco(tabela: str = "source_of_meta_ads_diario", db_path: "Path | None" = None) -> dict:
     _db = Path(db_path) if db_path else DB_PATH
     conn = sqlite3.connect(str(_db))
@@ -398,6 +494,26 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
                 account_id, ignoradas, account_id
             )
         linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
+
+        # Totais campaign-level — receita sem arredondamento de ad-level
+        try:
+            tabela_totais = tabela.replace("_diario", "") + "_campaign_totals"
+            date_end_ct   = date.today() - timedelta(days=1)
+            date_start_ct = date_end_ct - timedelta(days=dias - 1)
+            totais = buscar_totais_campaign(
+                account_id=account_id,
+                date_start=date_start_ct,
+                date_end=date_end_ct,
+                token_env=token_env,
+            )
+            salvar_totais_campaign(totais, tabela=tabela_totais, db_path=db_path)
+            receita_total = sum(r["valor_compras"] for r in totais)
+            logger.info(
+                "[%s] Campaign totals: %d campanhas | receita R$ %.2f",
+                account_id, len(totais), receita_total,
+            )
+        except Exception as _ct_exc:
+            logger.warning("[%s] Falha ao buscar campaign totals (não crítico): %s", account_id, _ct_exc)
     except Exception as _sync_exc:
         try:
             from db.sync_alerts import registrar_resultado
