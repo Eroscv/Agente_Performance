@@ -222,6 +222,8 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
         "time_increment": 1,
         "limit":        500,
         "filtering":    '[{"field":"spend","operator":"GREATER_THAN","value":"0"}]',
+        # Janela de atribuição fixa: 7d clique + 1d visualização (padrão dos relatórios)
+        "action_attribution_windows": '["7d_click","1d_view"]',
     }
 
     url  = f"{API_BASE}/{account_id}/insights"
@@ -384,8 +386,11 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
         # Guarda: rejeitar linhas de contas diferentes da solicitada
         # (pode ocorrer em Business Managers com contas compartilhadas)
+        # Normaliza: Meta API retorna account_id sem o prefixo 'act_'
+        account_id_bare = account_id.removeprefix("act_")
         antes = len(rows)
-        rows = [r for r in rows if not r.get("account_id") or r["account_id"] == account_id]
+        rows = [r for r in rows if not r.get("account_id") or
+                r["account_id"] in (account_id, account_id_bare)]
         ignoradas = antes - len(rows)
         if ignoradas:
             logger.warning(
