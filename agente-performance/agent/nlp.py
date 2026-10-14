@@ -28,7 +28,6 @@ from agent.tz import hoje_brt
 from pathlib import Path
 from typing import Optional
 
-import anthropic
 from dotenv import load_dotenv
 from rapidfuzz import process as fuzz_process, fuzz
 
@@ -37,7 +36,6 @@ from agent.synonyms import normalizar_pergunta, PERIOD_SYNONYMS
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-_client: anthropic.Anthropic | None = None
 _client_lock = threading.Lock()
 
 # Cache simples em memória: pergunta_normalizada → resultado NLP
@@ -269,13 +267,10 @@ Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-08-17"
 }"""
 
 
-def get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        with _client_lock:
-            if _client is None:
-                _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    return _client
+def get_client():
+    """Compatibilidade — retorna cliente Gemini (via claude_client)."""
+    from agent.claude_client import get_client as _gc
+    return _gc()
 
 
 def fuzzy_match_campaign(fragmento: str, campanhas: list[str]) -> Optional[str]:
@@ -413,38 +408,45 @@ def _parse_claude_response(raw_text: str) -> dict:
 def _fallback_intencao_desconhecida(pergunta: str) -> str:
     """
     Retorna mensagem amigável quando a intent não é reconhecida.
-    Inclui sugestões contextuais baseadas em palavras-chave da pergunta.
+    Usa sugerir_intent_por_keywords para dar a melhor sugestão possível.
     """
+    sugestao = sugerir_intent_por_keywords(pergunta)
+
+    if sugestao:
+        intent_sug, cmd_sug = sugestao
+        return (
+            f"🤔 Não entendi exatamente, mas acho que você quer: *{cmd_sug}*\n\n"
+            f"Tente reformular assim ou use `/ajuda` para ver todos os comandos."
+        )
+
+    # Sugestões genéricas contextuais
     p = pergunta.lower()
-
-    # Detecta palavras-chave para sugerir comandos relevantes
-    sugestoes = []
-    if any(w in p for w in ["roas", "retorno", "efici"]):
-        sugestoes.append("`top roas`")
+    exemplos = []
+    if any(w in p for w in ["roas", "retorno", "roi"]):
+        exemplos.append("`/top roas`")
     if any(w in p for w in ["compra", "venda", "convers"]):
-        sugestoes.append("`top compras`")
+        exemplos.append("`/top compras`")
     if any(w in p for w in ["funil", "carrinho", "checkout"]):
-        sugestoes.append("`funil`")
-    if any(w in p for w in ["alerta", "ruim", "baixo", "problema"]):
-        sugestoes.append("`alertas`")
+        exemplos.append("`/funil`")
     if any(w in p for w in ["semana", "week"]):
-        sugestoes.append("`resumo da semana`")
+        exemplos.append("`/semana`")
     if any(w in p for w in ["mês", "mes", "month"]):
-        sugestoes.append("`resumo do mês`")
+        exemplos.append("`/mes`")
     if any(w in p for w in ["compar", "versus", " vs "]):
-        sugestoes.append("`compare ABO vs Advantage`")
-    if any(w in p for w in ["google", "gads", "pod"]):
-        sugestoes.append("`/pod` ou `/pod status`")
+        exemplos.append("`/compare ABO vs Advantage`")
+    if any(w in p for w in ["google", "gads"]):
+        exemplos.append("`/google`")
+    if any(w in p for w in ["pod", "kombucha"]):
+        exemplos.append("`/pod`")
 
-    if not sugestoes:
-        sugestoes = ["`resumo geral`", "`top roas`", "`alertas`", "`/ajuda`"]
+    if not exemplos:
+        exemplos = ["`/resumo`", "`/top roas`", "`/alertas`"]
 
-    sug_str = " · ".join(sugestoes[:4])
+    sug_str = " · ".join(exemplos[:4])
     return (
-        f"Não entendi exatamente o que você precisa. 🤔\n\n"
-        f"Tente ser mais específico ou use uma dessas opções:\n"
-        f"{sug_str}\n\n"
-        f"Para ver todos os comandos disponíveis, use `/ajuda`."
+        f"🤔 Não entendi o que você quis dizer.\n\n"
+        f"Sugestões baseadas na sua pergunta: {sug_str}\n\n"
+        f"Ou use `/ajuda` para ver todos os comandos disponíveis."
     )
 
 
@@ -586,17 +588,12 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
 
     for tentativa in range(1, 3):  # até 2 tentativas
         try:
-            client = get_client()
-            model  = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
-
-            response = client.messages.create(
-                model=model,
-                max_tokens=512,
-                system=system,
-                messages=messages,
+            from agent.claude_client import _call_llm
+            # Monta contexto completo num único user_content
+            user_content = "\n".join(
+                f"[{m['role'].upper()}]: {m['content']}" for m in messages
             )
-
-            raw_text = response.content[0].text.strip()
+            raw_text = _call_llm(system, user_content).strip()
             parsed   = _parse_claude_response(raw_text)
 
             # Valida intents — MELHORIA 4: fallback amigável se nenhuma intent válida
@@ -700,7 +697,7 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
             logger.warning("[NLP] tentativa %d: JSON inválido (%s) — %s", tentativa, e, raw_text[:120] if 'raw_text' in dir() else "N/A")
             if tentativa == 2:
                 logger.error("[NLP] Esgotadas %d tentativas, caindo no fallback regex", tentativa)
-        except anthropic.APIError as e:
+        except RuntimeError as e:
             logger.warning("[NLP] tentativa %d: APIError %s", tentativa, e)
             if tentativa == 2:
                 logger.error("[NLP] API falhou em todas as tentativas")
@@ -763,51 +760,59 @@ def _fallback_regex(pergunta: str, campanhas: list[str], contexto: str = "") -> 
 
 def sugerir_intent_por_keywords(pergunta: str) -> "tuple[str, str] | None":
     """
-    Analisa palavras-chave da pergunta e retorna (intent_sugerida, comando_slack).
+    Analisa palavras-chave da pergunta (com fuzzy match para erros de digitação)
+    e retorna (intent_sugerida, comando_slack).
     Retorna None se não houver sugestão confiante.
     """
     import unicodedata
     import re as _re
+    from rapidfuzz import fuzz as _fuzz
 
     def norm(s: str) -> str:
         return unicodedata.normalize('NFKD', s.lower()).encode('ascii', 'ignore').decode()
 
     p = norm(pergunta)
+    tokens = _re.split(r'\W+', p)
 
-    def _matches(kw: str, text: str) -> bool:
-        """Verifica match de palavra-chave no texto com limite de palavra."""
+    def _matches_fuzzy(kw: str, text: str, token_list: list) -> bool:
         kw_n = norm(kw)
-        # Multi-palavra: substring exata é suficiente (ex: 'sem conversao')
         if ' ' in kw_n:
             return kw_n in text
-        # Palavra única: usa limite de palavra para evitar 'campanha' em 'campanhas'
-        return bool(_re.search(r'\b' + _re.escape(kw_n) + r'\b', text))
+        if _re.search(r'\b' + _re.escape(kw_n) + r'\b', text):
+            return True
+        # Fuzzy por token — cobre erros de digitação (ex: "oras" → "roas")
+        for tok in token_list:
+            if len(tok) >= 3 and _fuzz.ratio(kw_n, tok) >= 82:
+                return True
+        return False
 
     MAPA = [
-        # (palavras_chave, intent, comando_sugerido)
-        (["roas", "retorno", "roi"],                       "top_roas",              "/top roas"),
-        (["compra", "conversao", "venda", "pedido"],        "top_compras",           "/top compras"),
+        (["roas", "retorno", "roi"],                        "top_roas",                  "/top roas"),
+        (["compra", "conversao", "venda", "pedido"],         "top_compras",               "/top compras"),
         (["sem conversao", "sem compra", "zero", "desperdicio", "gastando sem", "gastando", "sem retorno"], "sem_conversao", "/sem conversão"),
-        (["semana", "semanal", "essa semana", "ultimos 7"],  "resumo_geral",          "/semana"),
-        (["hoje", "ontem", "diario", "dia"],                "resumo_geral",          "/hoje"),
-        (["mes", "mensal", "esse mes", "ultimos 30"],       "resumo_geral",          "/mes"),
-        (["campanhas", "listar"],                           "listar_campanhas",      "/campanhas"),
-        (["funil", "carrinho", "checkout", "abandono"],     "funil",                 "/funil"),
-        (["frequencia", "fadiga", "saturacao"],             "saturacao_frequencia",  "/frequência"),
-        (["ctr", "clique", "engajamento"],                  "top_ctr",               "/top ctr"),
-        (["cpm", "impressao", "alcance"],                   "top_cpm",               "/top cpm"),
-        (["inativo", "pausad", "parada", "sem dados"],      "campanhas_inativas",    "/inativos"),
-        (["alerta", "problema", "critico", "ruim"],         "alertas_roas_baixo",    "/alertas"),
-        (["comparar", "comparativo", "versus", "vs"],       "comparar",              "/compare"),
-        (["historico", "meses anteriores"],                 "historico_mensal",      "/histórico"),
-        (["google", "gads", "search", "pmax"],              "resumo_geral",          "/google"),
-        (["pod", "kombucha"],                               "resumo_geral",          "/pod"),
-        (["shopify", "receita real", "ecommerce"],          "resumo_geral",          "/shopify"),
+        (["semana", "semanal", "essa semana", "ultimos 7"],  "resumo_geral",              "/semana"),
+        (["hoje", "ontem", "diario", "dia"],                 "resumo_geral",              "/hoje"),
+        (["mes", "mensal", "esse mes", "ultimos 30"],        "resumo_geral",              "/mes"),
+        (["campanhas", "listar"],                            "listar_campanhas",          "/campanhas"),
+        (["funil", "carrinho", "checkout", "abandono"],      "funil",                     "/funil"),
+        (["frequencia", "fadiga", "saturacao"],              "saturacao_frequencia",      "/frequência"),
+        (["ctr", "clique", "engajamento"],                   "top_ctr",                   "/top ctr"),
+        (["cpm", "impressao", "alcance"],                    "top_cpm",                   "/top cpm"),
+        (["inativo", "pausad", "parada", "sem dados"],       "campanhas_inativas",        "/inativos"),
+        (["alerta", "problema", "critico", "ruim"],          "alertas_roas_baixo",        "/alertas"),
+        (["comparar", "comparativo", "versus", "vs"],        "comparar",                  "/compare"),
+        (["historico", "meses anteriores"],                  "historico_mensal",          "/histórico"),
+        (["google", "gads", "search", "pmax"],               "resumo_geral",              "/google"),
+        (["pod", "kombucha"],                                "resumo_geral",              "/pod"),
+        (["shopify", "receita real", "ecommerce"],           "resumo_geral",              "/shopify"),
+        (["resumo", "geral", "overview", "visao geral"],     "resumo_geral",              "/resumo"),
+        (["video", "criativo", "hook", "thruplay"],          "metricas_video",            "/video"),
+        (["investimento", "orcamento", "budget", "gasto"],   "distribuicao_investimento", "/investimento"),
     ]
 
     scores = []
     for keywords, intent, comando in MAPA:
-        hits = sum(1 for kw in keywords if _matches(kw, p))
+        hits = sum(1 for kw in keywords if _matches_fuzzy(kw, p, tokens))
         if hits > 0:
             scores.append((hits, intent, comando))
 

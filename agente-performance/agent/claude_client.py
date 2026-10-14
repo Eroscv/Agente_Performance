@@ -1,8 +1,9 @@
 """
 agent/claude_client.py
 
-Cliente Anthropic para o Agente de Performance Guará.
-Recebe dados estruturados das queries e gera resposta conversacional em PT-BR.
+Cliente LLM para o Agente de Performance Guará.
+Primário: Google Gemini (chaves da Flora via GEMINI_API_KEY).
+Fallback: Anthropic Claude (ANTHROPIC_API_KEY, se disponível).
 """
 
 import json
@@ -11,7 +12,6 @@ import os
 import re
 from typing import Any
 
-import anthropic
 from dotenv import load_dotenv
 
 from relatorio.regras import FATOR_IMPOSTO
@@ -20,7 +20,126 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_client: anthropic.Anthropic | None = None
+# ── Clientes LLM (lazy init) ─────────────────────────────────────────────────
+_gemini_client = None
+_anthropic_client = None
+
+
+def _get_gemini():
+    """Retorna cliente Gemini inicializado (ou None se chave ausente)."""
+    global _gemini_client
+    if _gemini_client is not None:
+        return _gemini_client
+    api_key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not api_key:
+        return None
+    try:
+        from google import genai
+        _gemini_client = genai.Client(api_key=api_key)
+        logger.info("[LLM] Cliente Gemini inicializado.")
+        return _gemini_client
+    except Exception as e:
+        logger.warning("[LLM] Falha ao inicializar Gemini: %s", e)
+        return None
+
+
+def _get_anthropic():
+    """Retorna cliente Anthropic inicializado (ou None se chave ausente)."""
+    global _anthropic_client
+    if _anthropic_client is not None:
+        return _anthropic_client
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        return None
+    try:
+        import anthropic as _ant
+        _anthropic_client = _ant.Anthropic(api_key=api_key)
+        return _anthropic_client
+    except Exception as e:
+        logger.warning("[LLM] Falha ao inicializar Anthropic: %s", e)
+        return None
+
+
+def _call_gemini(system: str, user_message: str) -> str:
+    """Chama Gemini com system + user. Tenta chave principal e depois backup."""
+    from google import genai
+    from google.genai import types
+
+    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+    keys = [
+        os.getenv("GEMINI_API_KEY", "").strip(),
+        os.getenv("GEMINI_API_KEY_BACKUP", "").strip(),
+    ]
+
+    last_err = None
+    for key in keys:
+        if not key:
+            continue
+        try:
+            client = genai.Client(api_key=key)
+            response = client.models.generate_content(
+                model=model,
+                contents=user_message,
+                config=types.GenerateContentConfig(
+                    system_instruction=system,
+                    max_output_tokens=2048,
+                    temperature=0.3,
+                ),
+            )
+            return response.text
+        except Exception as e:
+            last_err = e
+            logger.warning("[LLM] Gemini key falhou (%s...) — %s", key[:12], e)
+            continue
+
+    raise RuntimeError(f"Gemini indisponível: {last_err}")
+
+
+def _call_anthropic(system: str, user_message: str) -> str:
+    """Chama Claude como fallback."""
+    import anthropic as _ant
+    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
+    if not api_key:
+        raise RuntimeError("ANTHROPIC_API_KEY não configurada")
+    client = _ant.Anthropic(api_key=api_key)
+    model = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
+    response = client.messages.create(
+        model=model,
+        max_tokens=2048,
+        system=system,
+        messages=[{"role": "user", "content": user_message}],
+    )
+    return response.content[0].text
+
+
+def _call_llm(system: str, user_message: str) -> str:
+    """
+    Chama o LLM com fallback automático: Gemini → Anthropic.
+    Lança exceção apenas se ambos falharem.
+    """
+    try:
+        text = _call_gemini(system, user_message)
+        logger.debug("[LLM] Gemini OK")
+        return text
+    except Exception as gemini_err:
+        logger.warning("[LLM] Gemini falhou, tentando Anthropic: %s", gemini_err)
+
+    try:
+        text = _call_anthropic(system, user_message)
+        logger.debug("[LLM] Anthropic OK (fallback)")
+        return text
+    except Exception as ant_err:
+        raise RuntimeError(
+            f"Todos os LLMs indisponíveis. Gemini: {gemini_err} | Anthropic: {ant_err}"
+        )
+
+
+def get_client():
+    """Compatibilidade — retorna cliente Gemini ou Anthropic."""
+    c = _get_gemini()
+    if c:
+        return c
+    return _get_anthropic()
 
 # ── Prompts por cliente — definidos nas pastas clientes/{cliente}/prompts.py ──
 from clientes.source_of.prompts import SYSTEM_PROMPT          # noqa: E402
@@ -143,13 +262,6 @@ Regra: cada valor em metricas_citadas deve ser rastreável aos dados fornecidos.
 """
 
 
-def get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    return _client
-
-
 def gerar_resposta(
     pergunta:    str,
     dados:       Any,
@@ -175,8 +287,6 @@ def gerar_resposta(
     Returns:
         Texto formatado para Slack
     """
-    client = get_client()
-
     # Monta contexto dos dados
     dados_str   = _formatar_dados(dados, intent)
     periodo_str = _formatar_periodo(meta)
@@ -364,14 +474,7 @@ Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.
         logger.info("[gerar_resposta] Modo structured output ativado")
 
     try:
-        model = os.getenv("CLAUDE_MODEL", "claude-3-5-sonnet-20241022")
-        response = client.messages.create(
-            model=model,
-            max_tokens=2048,
-            system=system,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        raw_text = response.content[0].text
+        raw_text = _call_llm(system, user_message)
 
         # Camada 2: tenta extrair JSON estruturado se ativado
         if _use_structured:
@@ -395,8 +498,8 @@ Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.
 
         return raw_text
 
-    except anthropic.APIError as e:
-        logger.error("Erro na API Anthropic: %s", e)
+    except Exception as e:
+        logger.error("Erro no LLM: %s", e)
         return f"⚠️ Erro ao gerar análise: {e}"
 
 
