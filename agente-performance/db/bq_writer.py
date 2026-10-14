@@ -75,6 +75,7 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
                 "shopify_diario":             ["cliente", "data"],
                 "abandoned_checkout_detail":  ["checkout_id", "cliente"],
                 "abandoned_checkout_daily":   ["cliente", "data", "utm_source_norm"],
+                "meta_campaign_totals":       ["cliente", "data_inicio", "data_fim", "campaign_id"],
             }
             keys = merge_keys.get(table_id, [])
 
@@ -237,7 +238,45 @@ def write_ads(
     _insert("ads_diario", bq_rows, f"{cliente}/{plataforma}")
 
 
-def create_views() -> None:
+def write_campaign_totals(
+    rows: list[dict],
+    cliente: str,
+) -> None:
+    """
+    Escreve totais campaign-level no BQ (meta_campaign_totals).
+    Chave de merge: (cliente, data_inicio, data_fim, campaign_id)
+
+    Args:
+        rows:    lista de dicts de buscar_totais_campaign()
+        cliente: 'source_of' | 'pod_kombucha' etc.
+    """
+    if not rows or not enabled():
+        return
+
+    agora = datetime.now(timezone.utc).isoformat()
+    bq_rows = []
+    for r in rows:
+        inv  = r.get("investimento") or 0
+        comp = r.get("compras") or 0
+        rec  = r.get("valor_compras") or 0
+        bq_rows.append({
+            "cliente":      cliente,
+            "data_inicio":  r.get("data_inicio"),
+            "data_fim":     r.get("data_fim"),
+            "campanha":     r.get("campanha"),
+            "campaign_id":  r.get("campaign_id"),
+            "account_id":   r.get("account_id"),
+            "investimento": str(round(inv, 2)),
+            "compras":      int(comp),
+            "receita":      str(round(rec, 2)),
+            "roas":         round(rec / inv, 4) if inv > 0 else None,
+            "criado_em":    agora,
+        })
+
+    bq_rows = [r for r in bq_rows if r.get("data_inicio") and r.get("data_fim")]
+    _insert("meta_campaign_totals", bq_rows, f"campaign_totals/{cliente}")
+
+
     """
     Cria ou recria as views analíticas no BigQuery.
 

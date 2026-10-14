@@ -496,21 +496,22 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
 
         # Totais campaign-level — receita sem arredondamento de ad-level
+        _totais_campaign: list[dict] = []
         try:
             tabela_totais = tabela.replace("_diario", "") + "_campaign_totals"
             date_end_ct   = date.today() - timedelta(days=1)
             date_start_ct = date_end_ct - timedelta(days=dias - 1)
-            totais = buscar_totais_campaign(
+            _totais_campaign = buscar_totais_campaign(
                 account_id=account_id,
                 date_start=date_start_ct,
                 date_end=date_end_ct,
                 token_env=token_env,
             )
-            salvar_totais_campaign(totais, tabela=tabela_totais, db_path=db_path)
-            receita_total = sum(r["valor_compras"] for r in totais)
+            salvar_totais_campaign(_totais_campaign, tabela=tabela_totais, db_path=db_path)
+            receita_total = sum(r["valor_compras"] for r in _totais_campaign)
             logger.info(
                 "[%s] Campaign totals: %d campanhas | receita R$ %.2f",
-                account_id, len(totais), receita_total,
+                account_id, len(_totais_campaign), receita_total,
             )
         except Exception as _ct_exc:
             logger.warning("[%s] Falha ao buscar campaign totals (não crítico): %s", account_id, _ct_exc)
@@ -524,9 +525,11 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
 
     # Dual-write: espelhar no BigQuery (silencioso em caso de falha)
     try:
-        from db.bq_writer import write_ads, enabled
+        from db.bq_writer import write_ads, write_campaign_totals, enabled
         if enabled():
             write_ads(rows, cliente=cliente_key, plataforma="meta")
+            if _totais_campaign:
+                write_campaign_totals(_totais_campaign, cliente=cliente_key)
     except Exception as _bq_exc:
         logger.warning("[BQ dual-write] falha silenciosa: %s", _bq_exc)
 
