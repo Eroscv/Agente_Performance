@@ -140,8 +140,24 @@ def _normalizar(row: dict) -> dict:
     actions       = row.get("actions", [])
     action_values = row.get("action_values", [])
 
-    compras       = _parse_action(actions, "purchase")
-    valor_compras = _parse_action_value(action_values, "purchase")
+    # offsite_conversion.fb_pixel_purchase com 7d_click+1d_view explícitos
+    # (mesma definição do campaign_totals e do relatório manual)
+    # Nota: ad-level retorna ~4 compras a menos que campaign-level por design da API
+    # (atribuições que não descem até ad individual) — isso é esperado.
+    def _pixel_qty(lista: list) -> float:
+        for a in (lista or []):
+            if a.get("action_type") == "offsite_conversion.fb_pixel_purchase":
+                return float(a.get("7d_click", 0) or 0) + float(a.get("1d_view", 0) or 0)
+        return 0.0
+
+    def _pixel_val(lista: list) -> float:
+        for a in (lista or []):
+            if a.get("action_type") == "offsite_conversion.fb_pixel_purchase":
+                return float(a.get("7d_click", 0) or 0) + float(a.get("1d_view", 0) or 0)
+        return 0.0
+
+    compras       = _pixel_qty(actions)
+    valor_compras = _pixel_val(action_values)
     investimento  = float(row.get("spend", 0) or 0)
     impressoes    = float(row.get("impressions", 0) or 0)
     cliques_link  = float(row.get("clicks", 0) or 0)
