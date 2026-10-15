@@ -468,6 +468,7 @@ def assiduidade_clientes(
 def metricas_site(
     data_inicio: date,
     data_fim: date,
+    cliente_key: str = "source_of",
 ) -> dict:
     """
     Métricas de site/loja para a tabela 'Métricas de Site' do relatório.
@@ -477,10 +478,9 @@ def metricas_site(
       - novos_clientes, recompradores, taxa_recompra_pct
       - pct_desconto (% da receita que veio com desconto)
       - pedidos_acima_300
-      - cac (calculado externamente: invest_meta / novos_clientes)
 
-    N. Usuários e % Conversão não estão disponíveis via REST API Shopify
-    (só via Analytics/GraphQL Admin com permissão read_analytics).
+    Sessões e funil via ShopifyQL (tabela shopify_sessoes):
+      - sessoes, sessoes_checkout, sessoes_compra, taxa_conversao
     """
     receita        = 0.0
     total_pedidos  = 0
@@ -515,9 +515,43 @@ def metricas_site(
     taxa_recompra    = round(recompradores / total_pedidos * 100, 2) if total_pedidos else None
     pct_desconto     = round(total_desconto / receita * 100, 2) if receita else None
 
+    # Sessões e funil: agrega da tabela shopify_sessoes (ShopifyQL)
+    sessoes = sessoes_checkout = sessoes_compra = taxa_conversao = None
+    try:
+        import sqlite3 as _s3
+        from pathlib import Path as _Path
+        _tabela = f"{cliente_key}_shopify_sessoes"
+        _db_map = {
+            "source_of":    "data/performance/source_of/shopify.db",
+            "pod_kombucha": "data/performance/pod_kombucha/shopify.db",
+        }
+        _base = _Path(__file__).parent.parent
+        _db = _base / _db_map.get(cliente_key, f"data/performance/{cliente_key}/shopify.db")
+        if _db.exists():
+            _conn = _s3.connect(str(_db))
+            _conn.row_factory = _s3.Row
+            row = _conn.execute(f"""
+                SELECT
+                    SUM(sessoes)          AS sessoes,
+                    SUM(sessoes_checkout) AS sessoes_checkout,
+                    SUM(sessoes_compra)   AS sessoes_compra,
+                    AVG(taxa_conversao)   AS taxa_conversao
+                FROM {_tabela}
+                WHERE data BETWEEN ? AND ?
+                  AND (is_bot_suspect = 0 OR is_bot_suspect IS NULL)
+            """, (str(data_inicio), str(data_fim))).fetchone()
+            _conn.close()
+            if row and row["sessoes"]:
+                sessoes          = int(row["sessoes"])
+                sessoes_checkout = int(row["sessoes_checkout"]) if row["sessoes_checkout"] else None
+                sessoes_compra   = int(row["sessoes_compra"])   if row["sessoes_compra"]   else None
+                taxa_conversao   = round(float(row["taxa_conversao"]), 6) if row["taxa_conversao"] else None
+    except Exception as _e:
+        logger.warning("[Shopify] Não foi possível buscar sessões de %s: %s", cliente_key, _e)
+
     logger.info(
-        "[Shopify] metricas_site: %d pedidos | receita R$%.2f | novos %d | recompra %.1f%%",
-        total_pedidos, receita, novos, taxa_recompra or 0,
+        "[Shopify] metricas_site: %d pedidos | receita R$%.2f | novos %d | recompra %.1f%% | sessões %s",
+        total_pedidos, receita, novos, taxa_recompra or 0, sessoes,
     )
     return {
         "receita_total":     round(receita, 2),
@@ -529,9 +563,11 @@ def metricas_site(
         "pct_desconto":      pct_desconto,
         "pedidos_acima_300": pedidos_300,
         "total_desconto":    round(total_desconto, 2),
-        # N. Usuários e % Conversão: indisponíveis via REST (requer read_analytics)
-        "usuarios":          None,
-        "pct_conversao":     None,
+        # Sessões e funil via ShopifyQL (sync_shopify_sessions.py)
+        "sessoes":           sessoes,
+        "sessoes_checkout":  sessoes_checkout,
+        "sessoes_compra":    sessoes_compra,
+        "taxa_conversao":    taxa_conversao,
     }
 
 

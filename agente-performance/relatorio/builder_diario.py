@@ -86,12 +86,37 @@ def _buscar_campanhas_dia(data: str, cliente_key: str, plataforma: str) -> list[
 
 
 def _buscar_shopify_dia(data: str) -> dict | None:
-    return query_one("""
+    """Busca dados do dia: pedidos (shopify_receita_diaria) + sessões (shopify_sessoes)."""
+    _raw = query_one("""
         SELECT receita, pedidos, novos_clientes, recompradores,
                ticket_medio, total_desconto, pedidos_acima_300
         FROM shopify_receita_diaria
         WHERE data = ?
     """, (data,))
+    pedidos = dict(_raw) if _raw else None
+    # Sessões via ShopifyQL (sync_shopify_sessions.py)
+    try:
+        from pathlib import Path
+        import sqlite3 as _sqlite3
+        _p = Path(__file__).parent.parent / "data/performance/source_of/shopify.db"
+        if _p.exists():
+            _conn = _sqlite3.connect(str(_p))
+            _conn.row_factory = _sqlite3.Row
+            _s = _conn.execute("""
+                SELECT sessoes, sessoes_com_carrinho, sessoes_checkout,
+                       sessoes_compra, taxa_conversao, is_bot_suspect
+                FROM source_of_shopify_sessoes WHERE data = ?
+            """, (data,)).fetchone()
+            _conn.close()
+            if _s:
+                sess = dict(_s)
+                if pedidos:
+                    pedidos.update(sess)
+                else:
+                    pedidos = sess
+    except Exception as _e:
+        logger.warning("[Shopify] Sessões indisponíveis para %s: %s", data, _e)
+    return pedidos
 
 
 def _buscar_dia_anterior(data: str, cliente_key: str, plataforma: str) -> dict | None:
@@ -280,15 +305,24 @@ def _blocos_campanhas(campanhas: list[dict]) -> list[dict]:
 def _blocos_shopify(shopify: dict) -> list[dict]:
     if not shopify:
         return []
+    conv_pct = shopify.get("taxa_conversao")
+    conv_fmt = f"{conv_pct * 100:.2f}%" if conv_pct is not None else "—"
+    bot_warn = " ⚠️ suspeito bot" if shopify.get("is_bot_suspect") else ""
     linhas = [
-        ["📦 Pedidos",           fmt_n(shopify.get("pedidos"))],
-        ["💰 Receita",           fmt_brl(shopify.get("receita"))],
-        ["🆕 Novos Clientes",    fmt_n(shopify.get("novos_clientes"))],
-        ["🔁 Recompradores",     fmt_n(shopify.get("recompradores"))],
-        ["🏷️ Ticket Médio",     fmt_brl(shopify.get("ticket_medio"))],
-        ["🎟️ Total Desconto",   fmt_brl(shopify.get("total_desconto"))],
-        ["🏅 Pedidos >R$300",    fmt_n(shopify.get("pedidos_acima_300"))],
+        ["📦 Pedidos",                fmt_n(shopify.get("pedidos"))],
+        ["💰 Receita",                fmt_brl(shopify.get("receita"))],
+        ["👁️ Sessões",               f"{fmt_n(shopify.get('sessoes'))}{bot_warn}" if shopify.get('sessoes') else "—"],
+        ["🛒 Sessões c/ Checkout",    fmt_n(shopify.get("sessoes_checkout"))],
+        ["✅ Sessões c/ Compra",      fmt_n(shopify.get("sessoes_compra"))],
+        ["📈 Taxa de Conversão",      conv_fmt],
+        ["🆕 Novos Clientes",         fmt_n(shopify.get("novos_clientes"))],
+        ["🔁 Recompradores",          fmt_n(shopify.get("recompradores"))],
+        ["🏷️ Ticket Médio",          fmt_brl(shopify.get("ticket_medio"))],
+        ["🎟️ Total Desconto",        fmt_brl(shopify.get("total_desconto"))],
+        ["🏅 Pedidos >R$300",         fmt_n(shopify.get("pedidos_acima_300"))],
     ]
+    # Remove linhas com valor None/vazio
+    linhas = [l for l in linhas if l[1] and l[1] != "—"]
     return [
         h2("🛒 Shopify — Dados da Loja"),
         tabela(["Métrica", "Valor"], linhas),

@@ -800,8 +800,8 @@ def _blocos_metricas_site_semanal(
         novos        = shopify.get("novos_clientes")
         pct_desc     = shopify.get("pct_desconto")
         ped_300      = shopify.get("pedidos_acima_300")
-        usuarios     = shopify.get("usuarios")        # None (requer read_analytics)
-        pct_conv     = shopify.get("pct_conversao")   # None (requer read_analytics)
+        usuarios     = shopify.get("sessoes")          # sessões reais via ShopifyQL
+        pct_conv     = shopify.get("taxa_conversao")    # taxa_conversao real via ShopifyQL
         # CAC = Invest. Meta ajustado / Novos Clientes
         from relatorio.regras import spend_com_imposto
         cac = round(spend_com_imposto(invest_meta) / novos, 2) if (invest_meta and novos) else None
@@ -830,7 +830,7 @@ def _blocos_metricas_site_semanal(
         }
 
     header = [
-        "Semana", "% Conversão", "Ticket Médio", "N. Usuários",
+        "Semana", "% Conversão", "Ticket Médio", "Sessões",
         "Novos Clientes", "CAC", "% Desconto", "Pedidos > R$300", "Receita Total Shopify",
     ]
 

@@ -35,15 +35,17 @@ DATA_STR = D1.strftime("%d/%m/%Y")
 
 MOCK = {
     "shopify": {
-        "receita":        18_450.75,
-        "pedidos":        87,
-        "ticket_medio":   212.08,
-        "sessoes":        3_210,
-        "novos_clientes": 54,
-        "pct_conversao":  0.0271,
-        "pct_desconto":   0.082,
-        "pedidos_gt300":  23,
-        "frete_cobrado":  1_230.50,
+        "receita":           18_450.75,
+        "pedidos":           87,
+        "ticket_medio":      212.08,
+        "sessoes":           3_210,
+        "sessoes_checkout":  198,
+        "sessoes_compra":    87,
+        "taxa_conversao":    0.0271,
+        "novos_clientes":    54,
+        "pct_desconto":      0.082,
+        "pedidos_gt300":     23,
+        "frete_cobrado":     1_230.50,
     },
     "meta": {
         "invest_imp":  3_196.28,
