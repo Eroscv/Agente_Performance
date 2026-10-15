@@ -304,6 +304,15 @@ def sync_cliente(
         return True
 
     salvas = salvar_sessoes(rows, tabela=tabela, db_path=db_path)
+
+    # Dual-write BigQuery (silencioso em falha)
+    try:
+        from db.bq_writer import write_shopify_sessoes, enabled as bq_enabled
+        if bq_enabled():
+            write_shopify_sessoes(rows, cliente=cliente_key)
+    except Exception as bq_exc:
+        logger.warning("[%s][BQ] falha silenciosa: %s", cliente_key, bq_exc)
+
     logger.info(
         "[%s] ✅ %d dias salvos | %s → %s",
         cliente_key, salvas, date_start, date_end,

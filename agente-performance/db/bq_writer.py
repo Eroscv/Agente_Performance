@@ -405,31 +405,124 @@ def write_shopify(rows: list[dict], cliente: str) -> None:
     bq_rows = []
     for r in rows:
         bq_rows.append({
-            "cliente":           cliente,
-            "data":              r.get("data"),
-            "receita":           str(round(r.get("receita") or 0, 2)),
-            "frete":             str(round(r.get("frete") or 0, 2)),
-            "pedidos":           int(r.get("pedidos") or 0),
-            "novos_clientes":    int(r.get("novos_clientes") or 0),
-            "recompradores":     int(r.get("recompradores") or 0),
-            "ticket_medio":      str(round(r.get("ticket_medio") or 0, 2)),
-            "total_desconto":    str(round(r.get("total_desconto") or 0, 2)),
-            "pedidos_acima_300": int(r.get("pedidos_acima_300") or 0),
-            "receita_criada":    str(round(r.get("receita_criada") or 0, 2)),
-            "pedidos_criados":   int(r.get("pedidos_criados") or 0),
-            "pedidos_meta":      int(r.get("pedidos_meta") or 0),
-            "receita_meta":      str(round(r.get("receita_meta") or 0, 2)),
-            "novos_meta":        int(r.get("novos_meta") or 0),
-            "pedidos_google":    int(r.get("pedidos_google") or 0),
-            "receita_google":    str(round(r.get("receita_google") or 0, 2)),
-            "novos_google":      int(r.get("novos_google") or 0),
-            "pedidos_outros":    int(r.get("pedidos_outros") or 0),
-            "receita_outros":    str(round(r.get("receita_outros") or 0, 2)),
-            "novos_outros":      int(r.get("novos_outros") or 0),
-            "gross_sales":       str(round(r.get("gross_sales") or 0, 2)),
-            "pedidos_gt300":      int(r.get("pedidos_gt300") or 0),
-            "criado_em":         agora,
+            "cliente":                cliente,
+            "data":                   r.get("data"),
+            "receita":                str(round(r.get("receita") or 0, 2)),
+            "frete":                  str(round(r.get("frete") or 0, 2)),
+            "pedidos":                int(r.get("pedidos") or 0),
+            "novos_clientes":         int(r.get("novos_clientes") or 0),
+            "recompradores":          int(r.get("recompradores") or 0),
+            "ticket_medio":           str(round(r.get("ticket_medio") or 0, 2)),
+            "total_desconto":         str(round(r.get("total_desconto") or 0, 2)),
+            "pedidos_acima_300":      int(r.get("pedidos_acima_300") or 0),
+            "receita_criada":         str(round(r.get("receita_criada") or 0, 2)),
+            "pedidos_criados":        int(r.get("pedidos_criados") or 0),
+            "pedidos_meta":           int(r.get("pedidos_meta") or 0),
+            "receita_meta":           str(round(r.get("receita_meta") or 0, 2)),
+            "novos_meta":             int(r.get("novos_meta") or 0),
+            "pedidos_google":         int(r.get("pedidos_google") or 0),
+            "receita_google":         str(round(r.get("receita_google") or 0, 2)),
+            "novos_google":           int(r.get("novos_google") or 0),
+            "pedidos_outros":         int(r.get("pedidos_outros") or 0),
+            "receita_outros":         str(round(r.get("receita_outros") or 0, 2)),
+            "novos_outros":           int(r.get("novos_outros") or 0),
+            "gross_sales":            str(round(r.get("gross_sales") or 0, 2)),
+            "pedidos_gt300":          int(r.get("pedidos_gt300") or 0),
+            # Sessões e funil (ShopifyQL) — pode ser None quando ausente
+            "sessoes":                int(r["sessoes"]) if r.get("sessoes") is not None else None,
+            "sessoes_com_carrinho":   int(r["sessoes_com_carrinho"]) if r.get("sessoes_com_carrinho") is not None else None,
+            "sessoes_checkout":       int(r["sessoes_checkout"]) if r.get("sessoes_checkout") is not None else None,
+            "sessoes_compra":         int(r["sessoes_compra"]) if r.get("sessoes_compra") is not None else None,
+            "taxa_conversao":         float(r["taxa_conversao"]) if r.get("taxa_conversao") is not None else None,
+            "is_bot_suspect":         int(r.get("is_bot_suspect") or 0),
+            "criado_em":              agora,
         })
 
     bq_rows = [r for r in bq_rows if r.get("data")]
     _insert("shopify_diario", bq_rows, f"shopify/{cliente}")
+
+
+def write_shopify_sessoes(rows: list[dict], cliente: str) -> None:
+    """
+    Faz MERGE somente das colunas de sessões no shopify_diario do BQ.
+    Usado pelo sync_shopify_sessions.py após gravar no SQLite.
+
+    Args:
+        rows: lista de dicts com schema de shopify_sessoes
+              (data, sessoes, sessoes_com_carrinho, sessoes_checkout,
+               sessoes_compra, taxa_conversao, is_bot_suspect)
+        cliente: 'source_of' | 'pod_kombucha'
+    """
+    if not rows or not enabled():
+        return
+
+    agora = datetime.now(timezone.utc).isoformat()
+    bq = _client()
+    project = os.environ.get("BQ_PROJECT", bq.project)
+    dataset = os.environ.get("BQ_DATASET", "guara_performance")
+    full_table = f"{project}.{dataset}.shopify_diario"
+
+    # MERGE direto por SQL: atualiza só colunas de sessões, preserva pedidos/receita
+    # Usa UNNEST de array de structs — mais eficiente que tabela temporária para poucas linhas
+    if not rows:
+        return
+
+    # Monta VALUES como literals SQL para UNNEST
+    valor_linhas = []
+    for r in rows:
+        data    = r.get("data", "")
+        sess    = r.get("sessoes")
+        carr    = r.get("sessoes_com_carrinho")
+        check   = r.get("sessoes_checkout")
+        comp    = r.get("sessoes_compra")
+        conv    = r.get("taxa_conversao")
+        bot     = int(r.get("is_bot_suspect") or 0)
+        if not data:
+            continue
+        valor_linhas.append(
+            f"('{cliente}', DATE '{data}', "
+            f"{sess if sess is not None else 'NULL'}, "
+            f"{carr if carr is not None else 'NULL'}, "
+            f"{check if check is not None else 'NULL'}, "
+            f"{comp if comp is not None else 'NULL'}, "
+            f"{conv if conv is not None else 'NULL'}, "
+            f"{bot})"
+        )
+
+    if not valor_linhas:
+        return
+
+    values_sql = ",\n    ".join(valor_linhas)
+    merge_sql = f"""
+    MERGE `{full_table}` T
+    USING (
+      SELECT cliente, data, sessoes, sessoes_com_carrinho,
+             sessoes_checkout, sessoes_compra, taxa_conversao, is_bot_suspect
+      FROM UNNEST([
+        STRUCT<cliente STRING, data DATE, sessoes INT64,
+               sessoes_com_carrinho INT64, sessoes_checkout INT64,
+               sessoes_compra INT64, taxa_conversao FLOAT64,
+               is_bot_suspect INT64>
+        {values_sql}
+      ])
+    ) S
+    ON T.cliente = S.cliente AND T.data = S.data
+    WHEN MATCHED THEN UPDATE SET
+      T.sessoes              = S.sessoes,
+      T.sessoes_com_carrinho = S.sessoes_com_carrinho,
+      T.sessoes_checkout     = S.sessoes_checkout,
+      T.sessoes_compra       = S.sessoes_compra,
+      T.taxa_conversao       = S.taxa_conversao,
+      T.is_bot_suspect       = S.is_bot_suspect
+    WHEN NOT MATCHED THEN INSERT
+      (cliente, data, sessoes, sessoes_com_carrinho, sessoes_checkout,
+       sessoes_compra, taxa_conversao, is_bot_suspect, criado_em)
+      VALUES
+      (S.cliente, S.data, S.sessoes, S.sessoes_com_carrinho, S.sessoes_checkout,
+       S.sessoes_compra, S.taxa_conversao, S.is_bot_suspect, CURRENT_TIMESTAMP())
+    """
+    try:
+        bq.query(merge_sql).result()
+        logger.info("[BQ] ✅ shopify_sessoes/%s — MERGE %d linhas OK", cliente, len(valor_linhas))
+    except Exception as exc:
+        logger.warning("[BQ] shopify_sessoes/%s — falha silenciosa: %s", cliente, exc)
