@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS {tabela} (
 """
 
 # Campos que vamos pedir à API
+# Janela de atribuição padrão — usada em ads_diario E campaign_totals
+# para garantir consistência de compras/receita entre os dois níveis.
+ATTRIBUTION_WINDOWS = '["7d_click","1d_view"]'
+
 FIELDS = ",".join([
     "campaign_name",
     "campaign_id",
@@ -239,7 +243,7 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
         "limit":        500,
         "filtering":    '[{"field":"spend","operator":"GREATER_THAN","value":"0"}]',
         # Janela de atribuição fixa: 7d clique + 1d visualização (padrão dos relatórios)
-        "action_attribution_windows": '["7d_click","1d_view"]',
+        "action_attribution_windows": ATTRIBUTION_WINDOWS,
     }
 
     url  = f"{API_BASE}/{account_id}/insights"
@@ -389,7 +393,7 @@ def buscar_totais_campaign(account_id: str, date_start: date, date_end: date,
         "time_range":   f'{{"since":"{date_start}","until":"{date_end}"}}',
         "time_increment": "all_days",
         "limit":        200,
-        "action_attribution_windows": '["7d_click","1d_view"]',
+        "action_attribution_windows": ATTRIBUTION_WINDOWS,
     }
     url  = f"{API_BASE}/{account_id}/insights"
     rows = []
