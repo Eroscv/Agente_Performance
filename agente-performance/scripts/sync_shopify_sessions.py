@@ -140,38 +140,38 @@ def buscar_sessoes(
     date_end: date,
 ) -> list[dict]:
     """
-    Busca sessões diárias via ShopifyQL.
+    Busca sessões diárias via ShopifyQL (TIMESERIES day).
 
-    Colunas ShopifyQL usadas (únicas disponíveis em 2025-01):
+    Colunas ShopifyQL:
       - sessions
-      - sessions_that_reached_checkout
-      - conversion_rate  (0.0–1.0)
+      - sessions_with_cart_additions   → sessoes_com_carrinho
+      - sessions_that_reached_checkout → sessoes_checkout
+      - sessions_that_completed_checkout → sessoes_compra (mais preciso que derivado)
+      - conversion_rate (0.0–1.0)
 
-    Derivado:
-      - sessoes_compra = round(sessions × conversion_rate)
-
-    Returns:
-        Lista de dicts com schema normalizado (data, sessoes, sessoes_checkout,
-        sessoes_compra, taxa_conversao). sessoes_com_carrinho sempre None.
+    Nota: TIMESERIES é obrigatório para expor as colunas de funil.
+          GROUP BY day não as retorna.
     """
     ql = (
         f"FROM sessions "
-        f"SHOW sessions, sessions_that_reached_checkout, conversion_rate "
-        f"SINCE {date_start} UNTIL {date_end} "
-        f"GROUP BY day "
-        f"ORDER BY day ASC"
+        f"SHOW sessions, sessions_with_cart_additions, "
+        f"sessions_that_reached_checkout, sessions_that_completed_checkout, "
+        f"conversion_rate "
+        f"TIMESERIES day "
+        f"SINCE {date_start} UNTIL {date_end}"
     )
     raw = _shopifyql(store, token, ql)
     rows = []
     for r in raw:
         sessoes   = int(r.get("sessions") or 0)
-        checkout  = int(r.get("sessions_that_reached_checkout") or 0)
+        carrinho  = int(r.get("sessions_with_cart_additions") or 0) or None
+        checkout  = int(r.get("sessions_that_reached_checkout") or 0) or None
+        compras   = int(r.get("sessions_that_completed_checkout") or 0) or None
         conv_rate = float(r.get("conversion_rate") or 0)
-        compras   = round(sessoes * conv_rate)
         rows.append({
             "data":                 r.get("day", "")[:10],
             "sessoes":              sessoes,
-            "sessoes_com_carrinho": None,          # não disponível via ShopifyQL
+            "sessoes_com_carrinho": carrinho,
             "sessoes_checkout":     checkout,
             "sessoes_compra":       compras,
             "taxa_conversao":       round(conv_rate, 6),
@@ -294,9 +294,12 @@ def sync_cliente(
         for r in rows:
             bot = " ⚠️ BOT?" if r.get("is_bot_suspect") else ""
             logger.info(
-                "  %s: sessoes=%d checkout=%d compras=%d conv=%.2f%%%s",
-                r["data"], r["sessoes"], r["sessoes_checkout"] or 0,
-                r["sessoes_compra"] or 0, (r["taxa_conversao"] or 0) * 100, bot,
+                "  %s: sessoes=%d carrinho=%s checkout=%s compras=%s conv=%.2f%%%s",
+                r["data"], r["sessoes"],
+                r["sessoes_com_carrinho"] or 0,
+                r["sessoes_checkout"] or 0,
+                r["sessoes_compra"] or 0,
+                (r["taxa_conversao"] or 0) * 100, bot,
             )
         return True
 
