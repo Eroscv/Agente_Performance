@@ -97,7 +97,13 @@ def metricas_shopify_diario(
                 recompradores,
                 ticket_medio,
                 total_desconto,
-                pedidos_acima_300
+                pedidos_acima_300,
+                sessoes,
+                sessoes_com_carrinho,
+                sessoes_checkout,
+                sessoes_compra,
+                taxa_conversao,
+                is_bot_suspect
             FROM shopify_receita_diaria
             WHERE data BETWEEN ? AND ?
             ORDER BY data ASC

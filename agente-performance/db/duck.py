@@ -43,12 +43,13 @@ DATA_DIR = BASE_DIR / "data"
 # ── Paths dos DBs SQLite (espelha PERFORMANCE_DBS de connections.py) ──────────
 
 _SQLITE_DBS = {
-    "sof_meta":    DATA_DIR / "performance/source_of/meta_ads.db",
-    "sof_gads":    DATA_DIR / "performance/source_of/google_ads.db",
-    "pod_meta":    DATA_DIR / "performance/pod_kombucha/meta_ads.db",
-    "pod_gads":    DATA_DIR / "performance/pod_kombucha/google_ads.db",
-    "shopify_src": DATA_DIR / "performance/source_of/shopify_receita.db",
-    "botica_meta": DATA_DIR / "performance/botica/meta_ads.db",
+    "sof_meta":        DATA_DIR / "performance/source_of/meta_ads.db",
+    "sof_gads":        DATA_DIR / "performance/source_of/google_ads.db",
+    "pod_meta":        DATA_DIR / "performance/pod_kombucha/meta_ads.db",
+    "pod_gads":        DATA_DIR / "performance/pod_kombucha/google_ads.db",
+    "shopify_src":     DATA_DIR / "performance/source_of/shopify_receita.db",
+    "shopify_sess_src": DATA_DIR / "performance/source_of/shopify.db",
+    "botica_meta":     DATA_DIR / "performance/botica/meta_ads.db",
 }
 
 # ── DDL das views (idêntico ao connections.py para garantir paridade) ─────────
@@ -185,15 +186,23 @@ WH_DIR = BASE_DIR / "data" / "warehouse"
 _SHOPIFY_DDL = """
 CREATE OR REPLACE VIEW shopify_receita_diaria AS
 SELECT
-    CAST(data AS VARCHAR)          AS data,
-    receita,
-    pedidos,
-    novos_clientes,
-    recompradores,
-    ticket_medio,
-    total_desconto,
-    pedidos_acima_300
-FROM shopify_src.shopify_receita_diaria
+    CAST(r.data AS VARCHAR)          AS data,
+    r.receita,
+    r.pedidos,
+    r.novos_clientes,
+    r.recompradores,
+    r.ticket_medio,
+    r.total_desconto,
+    r.pedidos_acima_300,
+    s.sessoes,
+    s.sessoes_com_carrinho,
+    s.sessoes_checkout,
+    s.sessoes_compra,
+    s.taxa_conversao,
+    s.is_bot_suspect
+FROM shopify_src.shopify_receita_diaria r
+LEFT JOIN shopify_sess_src.source_of_shopify_sessoes s
+    ON CAST(s.data AS VARCHAR) = CAST(r.data AS VARCHAR)
 """
 
 # ── Singleton DuckDB ──────────────────────────────────────────────────────────
