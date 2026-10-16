@@ -191,16 +191,44 @@ def sincronizar(
     def _classificar_utm(pedido):
         notes = {n["name"].lower(): (n.get("value") or "").lower()
                  for n in (pedido.get("note_attributes") or [])}
-        combined = " ".join([
-            notes.get("utm_source", ""),
-            notes.get("utm_medium", ""),
-            (pedido.get("landing_site") or "").lower(),
-            (pedido.get("referring_site") or "").lower(),
-        ])
-        if any(x in combined for x in ["facebook", "instagram", "fb", "meta", "ig"]):
+        src = notes.get("utm_source", "")
+        med = notes.get("utm_medium", "")
+        landing   = (pedido.get("landing_site") or "").lower()
+        referring = (pedido.get("referring_site") or "").lower()
+
+        # Critério primário: utm_source (mais confiável — definido pela plataforma de anúncios)
+        # Inclui variantes: 'facebook', 'facebook ads', 'fb', 'meta', 'instagram', 'ig'
+        # Exclui: manychat (tráfego orgânico de DM, não anúncio pago)
+        if src in ("manychat", "klaviyo", "email", "revi"):
+            return "outros"
+        if any(x in src for x in ["facebook", "instagram", "fb", "meta", "ig"]):
             return "meta"
-        if any(x in combined for x in ["google", "gclid", "cpc", "pmax"]):
+        if any(x in src for x in ["google", "gclid", "cpc", "pmax"]):
             return "google"
+        # utm_medium como segundo sinal (ex: utm_source vazio mas medium=cpc)
+        if any(x in med for x in ["facebook", "instagram", "fb", "meta", "ig"]):
+            return "meta"
+        if any(x in med for x in ["google", "cpc", "pmax"]):
+            return "google"
+        # Fallback: landing_site ou referring_site — só quando utm_source está vazio
+        # (evita classificar manychat/klaviyo/email como Meta por terem referring do Facebook)
+        if not src:
+            land_qs = ""
+            try:
+                import urllib.parse as _up
+                _p = _up.urlparse(landing)
+                _qs = _up.parse_qs(_p.query)
+                land_qs = " ".join([
+                    _qs.get("utm_source", [""])[0].lower(),
+                    _qs.get("utm_medium", [""])[0].lower(),
+                ])
+            except Exception:
+                pass
+            land_combined = " ".join([land_qs, referring])
+            if any(x in land_combined for x in ["facebook", "instagram", "fb", "meta", "ig"]):
+                return "meta"
+            if any(x in land_combined for x in ["google", "gclid", "cpc", "pmax"]):
+                return "google"
         return "outros"
 
     # 1a. Pedidos PAGOS — receita, frete, novos clientes
