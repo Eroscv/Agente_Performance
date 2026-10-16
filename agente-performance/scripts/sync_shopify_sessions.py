@@ -164,9 +164,9 @@ def buscar_sessoes(
     rows = []
     for r in raw:
         sessoes   = int(r.get("sessions") or 0)
-        carrinho  = int(r.get("sessions_with_cart_additions") or 0) or None
-        checkout  = int(r.get("sessions_that_reached_checkout") or 0) or None
-        compras   = int(r.get("sessions_that_completed_checkout") or 0) or None
+        carrinho  = int(r.get("sessions_with_cart_additions") or 0)  # 0 = dia sem carrinho, não ausência de dado
+        checkout  = int(r.get("sessions_that_reached_checkout") or 0)
+        compras   = int(r.get("sessions_that_completed_checkout") or 0)
         conv_rate = float(r.get("conversion_rate") or 0)
         rows.append({
             "data":                 r.get("day", "")[:10],
@@ -270,18 +270,48 @@ def sync_cliente(
         cliente_key, date_start, date_end, store,
     )
 
+    # Busca contexto histórico extra (21 dias antes) para a detecção de bots ter mediana estável
+    from datetime import timedelta as _td
+    ctx_start = date_start - _td(days=21)
     try:
-        rows = buscar_sessoes(store, token, date_start, date_end)
+        ctx_rows = buscar_sessoes(store, token, ctx_start, date_end)
     except Exception as exc:
         logger.error("[%s] Erro na API ShopifyQL: %s", cliente_key, exc)
         return False
+
+    if not ctx_rows:
+        logger.warning("[%s] API retornou 0 linhas para o período", cliente_key)
+        return False
+
+    # Detecta bots com contexto completo (21 dias de janela)
+    ctx_rows = _detectar_bots(ctx_rows, janela_dias=14, fator=3.0)
+
+    # Filtra só os dias do período solicitado para gravar
+    periodo = {str(date_start + _td(days=i)) for i in range((date_end - date_start).days + 1)}
+    rows = [r for r in ctx_rows if r["data"] in periodo]
 
     if not rows:
         logger.warning("[%s] API retornou 0 linhas para o período", cliente_key)
         return False
 
-    # Detecção de bots (janela de 14 dias para ter contexto)
-    rows = _detectar_bots(rows, janela_dias=14, fator=3.0)
+    # Preserva is_bot_suspect=1 já gravado no SQLite (não regride para 0 numa recarga)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn_check = sqlite3.connect(str(db_path))
+    conn_check.execute(_DDL.format(tabela=tabela))
+    already_flagged = set()
+    try:
+        cur = conn_check.execute(
+            f"SELECT data FROM {tabela} WHERE is_bot_suspect = 1"
+        )
+        already_flagged = {row[0] for row in cur.fetchall()}
+    except Exception:
+        pass
+    conn_check.close()
+
+    for r in rows:
+        if r["data"] in already_flagged:
+            r["is_bot_suspect"] = 1  # nunca regride para 0
+
     bots = [r for r in rows if r.get("is_bot_suspect")]
     if bots:
         logger.warning(
