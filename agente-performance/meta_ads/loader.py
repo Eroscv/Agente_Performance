@@ -155,6 +155,8 @@ def _normalizar(row: dict) -> dict:
         return 0.0
 
     def _pixel_val(lista: list) -> float:
+        # action_values com breakout de janela: soma 7d_click + 1d_view
+        # (mesma lógica do campaign_totals)
         for a in (lista or []):
             if a.get("action_type") == "offsite_conversion.fb_pixel_purchase":
                 return float(a.get("7d_click", 0) or 0) + float(a.get("1d_view", 0) or 0)
@@ -178,7 +180,7 @@ def _normalizar(row: dict) -> dict:
         "ad_name":            row.get("ad_name"),
         "ad_id":              row.get("ad_id"),
         "objetivo":           row.get("objective"),
-        "status_criativo":    None,
+        "status_criativo":    row.get("_effective_status"),  # populado por _enriquecer_status()
         "impressoes":         impressoes,
         "alcance":            float(row.get("reach", 0) or 0),
         "cliques_link":       cliques_link,
@@ -241,8 +243,9 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
         "time_range":   f'{{"since":"{date_start}","until":"{date_end}"}}',
         "time_increment": 1,
         "limit":        500,
-        "filtering":    '[{"field":"spend","operator":"GREATER_THAN","value":"0"}]',
-        # Janela de atribuição fixa: 7d clique + 1d visualização (padrão dos relatórios)
+        # Sem filtro de spend: anúncios inativos podem ter compras atribuídas
+        # via 7d_click ou 1d_view de dias anteriores. Filtrar por spend=0 descarta essas linhas.
+        # action_attribution_windows fixa: 7d clique + 1d visualização
         "action_attribution_windows": ATTRIBUTION_WINDOWS,
     }
 
@@ -270,6 +273,62 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
         url      = next_url if next_url else None
         params   = {}
 
+    return rows
+
+
+def _enriquecer_status(
+    rows: list[dict],
+    account_id: str,
+    token_env: str = "META_ACCESS_TOKEN",
+) -> list[dict]:
+    """
+    Busca effective_status dos ad_ids presentes em rows via GET /{ad_id}.
+    Popula row['_effective_status'] para uso em _normalizar.
+
+    A API de Insights não expe effective_status diretamente.
+    Fazemos uma única chamada batch com todos os ad_ids distintos.
+    """
+    token   = _get_token(token_env)
+    ad_ids  = list({r.get("ad_id") for r in rows if r.get("ad_id")})
+    if not ad_ids:
+        return rows
+
+    status_map: dict[str, str] = {}
+    BATCH = 50
+    for i in range(0, len(ad_ids), BATCH):
+        lote = ad_ids[i:i + BATCH]
+        try:
+            # Graph API batch request: POST /v20.0/ com array de requests
+            batch_payload = [
+                {"method": "GET", "relative_url": f"{aid}?fields=effective_status"}
+                for aid in lote
+            ]
+            import json as _json
+            resp = requests.post(
+                f"{API_BASE}/",
+                data={
+                    "access_token": token,
+                    "batch": _json.dumps(batch_payload),
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            results = resp.json()
+            for item in (results or []):
+                if item and item.get("code") == 200:
+                    body = _json.loads(item.get("body", "{}"))
+                    aid  = body.get("id", "")
+                    status_map[aid] = body.get("effective_status", "")
+        except Exception as exc:
+            logger.warning("[_enriquecer_status] Erro ao buscar status: %s", exc)
+
+    for row in rows:
+        row["status_criativo"] = status_map.get(row.get("ad_id", ""), None)
+
+    logger.info(
+        "[_enriquecer_status] %d ad_ids enriquecidos com effective_status",
+        len(status_map),
+    )
     return rows
 
 
@@ -513,6 +572,10 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
                 "[%s] %d linhas ignoradas — account_id diferente de %s",
                 account_id, ignoradas, account_id
             )
+
+        # Enriquece status_criativo via endpoint /ads (effective_status)
+        # rows já estão normalizadas (buscar_insights chama _normalizar internamente)
+        rows = _enriquecer_status(rows, account_id, token_env=token_env)
         linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
 
         # Totais campaign-level — receita sem arredondamento de ad-level
