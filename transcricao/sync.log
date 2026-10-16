@@ -61491,3 +61491,730 @@ _Percentual só é exibido quando n≥20 (IC estreito o suficiente para ser úti
 _Use 'tempo médio de resolução vs SLA' como métrica primária._
 [BQ] ✅ 4 métricas salvas em metricas_sla
 [2026-10-16 21:03:11] Métricas finalizadas.
+[2026-10-16 22:14:33] Iniciando sync...
+2026-10-16 22:14:34 [INFO] Iniciando sync de reuniões do Google Drive...
+2026-10-16 22:14:35 [INFO] file_cache is only supported with oauth2client<4.0.0
+2026-10-16 22:14:53 [INFO] Docs encontrados (global + Meet recursivo): 32
+2026-10-16 22:14:53 [INFO] Arquivos .docx encontrados no Drive: 32
+2026-10-16 22:14:53 [INFO]   📥 Processando: Botica: Semanal - 2026/10/16 14:00 GMT-03:00 (Granola)
+2026-10-16 22:14:56 [INFO]   ✅ SQLite | ✅ Mongo | ✅ BQ | Botica: Semanal | 2026-10-16 
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Treinamento FEQ - 2026/10/15 11:00 GMT-03:00 (Granola)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Pod: Social Media - 2026/10/14 15:00 GMT-03:00 (Granola)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Diaria  - Fluxo Semanal Conta - 2026/10/13 10:00 GMT-03:00 (Granola)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Estratégia de conteúdo, produtos e Black November com time Guaramedia - 2026/10/07 14:23 GMT-03:00 (Granola)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Seleção e catalogação de vídeos para campanhas de marketing - 2026/10/06 14:09 GMT-03:00 (Granola)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Diaria  - Fluxo Semanal Conta - 2026/10/06 09:01 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Planejamento de divulgação de cursos e estratégia de investimento em marketing - 2026/10/06 10:21 GMT-03:00 (Granola)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Check Prioridades Performance - 2026/10/05 17:00 GMT-03:00 (Granola)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Check up Contas - 2026/09/18 11:00 GMT-03:00 - Anotações do Granola
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Check Prioridades Performance - 2026/09/28 16:00 GMT-03:00 - Anotações do Granola
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Diaria - Fluxo Semanal Conta - 2026/09/29 10:00 GMT-03:00 - Anotações do Granola
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: 3P & Performance - 2026/09/29 14:30 GMT-03:00 - Anotações do Granola
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Onboarding FEQ e Botica - 2026/10/01 10:00 GMT-03:00 - Anotações do Granola (Aline)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: On-boarding: FEQ e Botica - 2026/10/01 10:00 GMT-03:00 - Anotações do Granola (Miguel)
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Grupo Estudos Performance - Método M4 - 2026/10/02 11:00 GMT-03:00 - Anotações do Granola
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Grupo Estudos Performance - Método M4 - 2026/10/02 11:02 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Diaria  - Fluxo Semanal Conta - 2026_09_28 09_00 GMT-03_00 - Anotações do Gemini.docx
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: 3P & Performance SO - 2026/09/23 14:33 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: 3P & Performance SO - 2026/09/09 14:30 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: 3P & Performance SO - 2026/08/26 14:30 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: 3P & Performance SO - 2026/09/02 14:31 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Reunião iniciada às 2026/08/25 13:09 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Bia e Isa - 2026/08/12 16:47 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Reunião iniciada às 2026/06/24 09:51 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/06/15 14:00 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/05/22 16:01 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: 3P e Performance - 2026/05/20 14:59 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/05/08 16:00 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: 3P&Performance - 2026/05/06 11:16 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/04/30 16:01 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:56 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/04/24 10:00 GMT-03:00 - Anotações do Gemini
+2026-10-16 22:14:57 [INFO] 
+Sync concluído — novos: 1 | pulados: 31 | erros: 0
+[2026-10-16 22:14:57] Sync finalizado.
+[2026-10-16 22:14:57] Iniciando análise de sentimento...
+2026-10-16 22:15:00 [INFO] Iniciando análise de reuniões...
+2026-10-16 22:15:00 [INFO] Reuniões para analisar: 4
+2026-10-16 22:15:00 [INFO]   🔍 Analisando: Diaria (2026-10-13)
+2026-10-16 22:15:00 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:00 [ERROR]   ❌ Erro ao analisar 'Diaria': Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpQz6h9nHRJFmejVin'}
+2026-10-16 22:15:00 [INFO]   🔍 Analisando: Pod: Social Media (2026-10-14)
+2026-10-16 22:15:00 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:00 [ERROR]   ❌ Erro ao analisar 'Pod: Social Media': Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpS4bqaQT6JA8kanxT'}
+2026-10-16 22:15:00 [INFO]   🔍 Analisando: Treinamento FEQ (2026-10-15)
+2026-10-16 22:15:00 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:00 [ERROR]   ❌ Erro ao analisar 'Treinamento FEQ': Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpSc5khtrEvAu7CaLs'}
+2026-10-16 22:15:00 [INFO]   🔍 Analisando: Botica: Semanal (2026-10-16)
+2026-10-16 22:15:01 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:01 [ERROR]   ❌ Erro ao analisar 'Botica: Semanal': Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpT85zzDq73N2qLimA'}
+2026-10-16 22:15:01 [INFO] 
+Análise concluída — analisadas: 0 | alertas: 0 | erros: 4
+[2026-10-16 22:15:02] Iniciando gestão de tickets...
+2026-10-16 22:15:07 [INFO] Tickets abertos: 0
+2026-10-16 22:15:07 [INFO] Verificando resoluções com Claude...
+2026-10-16 22:15:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:07 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpudY5opQtVfCFWxTm'}
+2026-10-16 22:15:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:07 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpvLCQky73pDD78ZQy'}
+2026-10-16 22:15:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:07 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpw1dUEREygs9wQMAB'}
+2026-10-16 22:15:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:07 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpwiYf4FSa8e87zVZx'}
+2026-10-16 22:15:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:07 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpxPEff6jVHcetkMeb'}
+2026-10-16 22:15:08 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:08 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpy88PqganPPh5a32L'}
+2026-10-16 22:15:08 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:08 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpyrHeMj2661KV2yej'}
+2026-10-16 22:15:08 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:08 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gpzXy8fe72zKdfnZq1'}
+2026-10-16 22:15:08 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:08 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq1D8xu2a4nz3Yf8tJ'}
+2026-10-16 22:15:08 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:08 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq1spfnxUd8MsvMa2o'}
+2026-10-16 22:15:08 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:08 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq2azY5LEkFNTdjxkP'}
+2026-10-16 22:15:09 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:09 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq3GfsSLcHxiuppa18'}
+2026-10-16 22:15:09 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:09 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq4QsSvkug6AuhR2wj'}
+2026-10-16 22:15:09 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:09 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq5AWjXTBo9BmvDDd7'}
+2026-10-16 22:15:09 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:09 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq5tgMCafYsPiHczNQ'}
+2026-10-16 22:15:09 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:09 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq6a7Kp3zfRpfJxhck'}
+2026-10-16 22:15:10 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:10 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq7Eo3vu2uJov6sKQA'}
+2026-10-16 22:15:10 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:10 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq7uUNSAmn5o3LsqeH'}
+2026-10-16 22:15:10 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:10 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq8fryjJoJq1pUid55'}
+2026-10-16 22:15:10 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:10 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gq9RVmAZHy7J1Y68rX'}
+2026-10-16 22:15:10 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:10 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqA5wmDgBtTAJVt2qB'}
+2026-10-16 22:15:10 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:10 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqAksDpXGLdWw1UeNH'}
+2026-10-16 22:15:11 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:11 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqBUXgjNcT292Awu46'}
+2026-10-16 22:15:11 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:11 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqCKd6Kea8Tw4wMSLU'}
+2026-10-16 22:15:11 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:11 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqD5XYJHeQbH9rhJ6p'}
+2026-10-16 22:15:11 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:11 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqDvNQyGVsVp9UBGZS'}
+2026-10-16 22:15:11 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:11 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqEg2MQ9cPuGyedTkU'}
+2026-10-16 22:15:11 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:11 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqFTecofNqXR7tY3SC'}
+2026-10-16 22:15:12 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:12 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqGDHEH1Dgb7gAG3VU'}
+2026-10-16 22:15:12 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:12 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqGxw64RWbRZ5cHY4Y'}
+2026-10-16 22:15:12 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:12 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqHfMdEuqApQ4UjZ8s'}
+2026-10-16 22:15:12 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:12 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqJQ11eAmNnNREm1de'}
+2026-10-16 22:15:12 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:12 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqK6AgLiHcQgmMMeTg'}
+2026-10-16 22:15:12 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:12 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqKp5sCoH2FLedenBS'}
+2026-10-16 22:15:13 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:13 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqLWzb8hNSsxQd3FEk'}
+2026-10-16 22:15:13 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:13 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqMDAqDfmTj816fx2C'}
+2026-10-16 22:15:13 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:13 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqMsrDBdW4HAU1akeF'}
+2026-10-16 22:15:13 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:13 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqNaGRzFn67thMXnfA'}
+2026-10-16 22:15:13 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:13 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqPDxrPRDDbP8WLYuo'}
+2026-10-16 22:15:13 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:13 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqPsuc9kaRFEwXZe73'}
+2026-10-16 22:15:14 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:14 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqQX6WbMkYCqVqEUgj'}
+2026-10-16 22:15:14 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:14 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqRA4N3jCkXoQQVyeA'}
+2026-10-16 22:15:14 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:14 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqRozbr1fZYFXHwsui'}
+2026-10-16 22:15:14 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:14 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqSVR56MTDBWjpMB26'}
+2026-10-16 22:15:14 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:14 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqTCpnEpv1jXsjhaGM'}
+2026-10-16 22:15:14 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:14 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqTuFZsEL6CAzoaVhm'}
+2026-10-16 22:15:15 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:15 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqUf9TsvwdPukvHXKw'}
+2026-10-16 22:15:15 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:15 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqVP3b2zMZoAEDKCdu'}
+2026-10-16 22:15:15 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:15 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqW7TYEfWrrxufHrok'}
+2026-10-16 22:15:15 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:15 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqWo8oj8foMc5eb4T4'}
+2026-10-16 22:15:15 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:15 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqXUZ2YDmAEbgGA7AQ'}
+2026-10-16 22:15:15 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:15 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqY9kCirGD3r3ZmVZ5'}
+2026-10-16 22:15:15 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:15 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqYqARxwMUSbcDSa3U'}
+2026-10-16 22:15:16 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:16 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqZUbuZCBCSP6JUfEq'}
+2026-10-16 22:15:16 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:16 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqa7JkZHNzNLcn1rW3'}
+2026-10-16 22:15:16 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:16 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqajmHTeTG3afdG1sX'}
+2026-10-16 22:15:16 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:16 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqbNiTpkNRp97Jbjvu'}
+2026-10-16 22:15:16 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:16 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqc39kTVWgpsEhf4q1'}
+2026-10-16 22:15:16 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:16 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqcgr5oUrutBR88RnN'}
+2026-10-16 22:15:17 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:17 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqdP1uDqbnd93TNa4A'}
+2026-10-16 22:15:17 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:17 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqe3TDXDAoZ8mfWVHu'}
+2026-10-16 22:15:17 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:17 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqexWeQET1ZWkeDKPU'}
+2026-10-16 22:15:17 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:17 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqfiQb3nkCn8CwE8rh'}
+2026-10-16 22:15:17 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:17 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqgUnzycX1bAoVS1FM'}
+2026-10-16 22:15:17 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:17 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqhN8Qe6rEHemkoX97'}
+2026-10-16 22:15:18 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:18 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqi8GBgG9vodGMx7Xo'}
+2026-10-16 22:15:18 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:18 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqipSNKtKcpwbXoyFC'}
+2026-10-16 22:15:18 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:18 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqjapi9G8aKFHzZzNh'}
+2026-10-16 22:15:18 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:18 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqkHVMCAZzm57NdcGZ'}
+2026-10-16 22:15:18 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:18 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqkwRt6rDnmwxnfuSZ'}
+2026-10-16 22:15:18 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:18 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqmdcG8UcEU1nrkYbu'}
+2026-10-16 22:15:19 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:19 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqnN1ChiMEmZ53BapZ'}
+2026-10-16 22:15:19 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:19 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqo89Ftp69M7qYdxUM'}
+2026-10-16 22:15:19 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:19 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqopZehe6c48moWmAq'}
+2026-10-16 22:15:19 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:19 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqpawxWEuv6aSkQ4aS'}
+2026-10-16 22:15:19 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:19 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqqH8T2MwoLVPvwuUm'}
+2026-10-16 22:15:20 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:20 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqr6zAY1rJqPLZk6XJ'}
+2026-10-16 22:15:20 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:20 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqroucRtNLnV2AqdYZ'}
+2026-10-16 22:15:20 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:20 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqsUL8uhoHrxYBHfxT'}
+2026-10-16 22:15:20 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:20 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqt82nXFoXDqewV3fi'}
+2026-10-16 22:15:20 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:20 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqtqh9ZVLKkfatT7Nn'}
+2026-10-16 22:15:20 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:20 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gquYbwLNfDxKFZJBTV'}
+2026-10-16 22:15:20 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:20 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqvFGfHeSuxaCRZtJ8'}
+2026-10-16 22:15:21 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:21 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqvsifsCLz86MsZm9b'}
+2026-10-16 22:15:21 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:21 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqwZeo16GRoxrv6tN4'}
+2026-10-16 22:15:21 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:21 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqxEL1NU8T2xLiuN57'}
+2026-10-16 22:15:21 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:21 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqxwk33vApk7ZJQKnT'}
+2026-10-16 22:15:21 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:21 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqyeerjUYDfowHYXxt'}
+2026-10-16 22:15:21 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:21 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gqzHceUuoDfYpJ5dvV'}
+2026-10-16 22:15:22 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:22 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr15F3C8Z8MroT3i7d'}
+2026-10-16 22:15:22 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:22 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr1jfgBhZ65J2BotcK'}
+2026-10-16 22:15:22 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:22 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr2NdCvvJhWiBuMZbq'}
+2026-10-16 22:15:22 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:22 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr33ZMUUmghiimE3D5'}
+2026-10-16 22:15:22 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:22 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr3jUZGCwSoivQfGE4'}
+2026-10-16 22:15:22 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:22 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr4PRDtGMmTmjR7Bzb'}
+2026-10-16 22:15:23 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:23 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr5282TPx1b72oBYHk'}
+2026-10-16 22:15:23 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:23 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr5i3Wn83rhUg9jmd4'}
+2026-10-16 22:15:23 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:23 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr6Z99aqhyvVJCmKvX'}
+2026-10-16 22:15:23 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:23 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr7Jnk4swjjvkX6o3c'}
+2026-10-16 22:15:23 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:23 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr85AmaYcrcYNrDrLv'}
+2026-10-16 22:15:23 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:23 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr8sHnxuezK5oyEVyf'}
+2026-10-16 22:15:24 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:24 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6gr9WzMJihXVcTyrGC5'}
+2026-10-16 22:15:24 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:24 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grAAgW2VoZ2RshYfFy'}
+2026-10-16 22:15:24 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:24 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grAp7vn24yMi49JuSg'}
+2026-10-16 22:15:24 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:24 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grBdyrJcRkRuR7HKyw'}
+2026-10-16 22:15:24 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:24 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grCHfxZ3APJFAYSCHJ'}
+2026-10-16 22:15:24 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:24 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grCzqwcNCg5s7nb5zL'}
+2026-10-16 22:15:25 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:25 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grDqw7mogdVWEKRCDo'}
+2026-10-16 22:15:25 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:25 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grEYcTyh6Zx4Qpq9sw'}
+2026-10-16 22:15:25 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:25 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grFEnHcY1Emx3qNFy8'}
+2026-10-16 22:15:25 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:25 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grG7c1x42JxWwE4wt4'}
+2026-10-16 22:15:25 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:25 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grGjovCmhRcFqpFwUi'}
+2026-10-16 22:15:25 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:25 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grHSjfQgthaPkYharw'}
+2026-10-16 22:15:26 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:26 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grJ3wKZDGT7LChBmBh'}
+2026-10-16 22:15:26 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:26 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grJmc2KzV9Eykz2fGZ'}
+2026-10-16 22:15:26 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:26 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grKUWrZBGaUAd6g7vZ'}
+2026-10-16 22:15:26 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:26 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grL8hkrrADUAm68Rjs'}
+2026-10-16 22:15:26 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:26 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grLmf7nnxadmvqoxJm'}
+2026-10-16 22:15:26 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:26 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grMT6EvCEH6JdduUoW'}
+2026-10-16 22:15:27 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:27 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grN8kxoVuMSPeHY7fJ'}
+2026-10-16 22:15:27 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:27 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grNrR1Ju6wt7vrjGqW'}
+2026-10-16 22:15:27 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:27 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grPZqRmxjzxyc41GAU'}
+2026-10-16 22:15:27 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:27 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grQCHqaBqHdaVHmtLL'}
+2026-10-16 22:15:27 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:27 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grQyf5hQYouVmpxafh'}
+2026-10-16 22:15:27 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 22:15:27 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6grRoXaAhGdfX1qBwfA'}
+2026-10-16 22:15:27 [INFO] Tickets resolvidos: 0
+[2026-10-16 22:15:28] Salvando métricas SLA...
+📊 *Métricas de SLA — últimos 90 dias*
+_Gerado em 2026-10-16_
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Por tipo de alerta*
+
+🚫 *BLOQUEIO* (SLA: 3d)
+  • Total: 12 | Abertos: 12 | Resolvidos: 0
+  • Tempo médio: sem dados ainda
+  ⚠️ _n=12 — IC 95% de 0% a 24% (amplitude 24pp). Métrica percentual não confiável com n<20._
+
+🔒 *SEM_ACESSO* (SLA: 3d)
+  • Total: 1 | Abertos: 1 | Resolvidos: 0
+  • Tempo médio: sem dados ainda
+  ⚠️ _n=1 — IC 95% de 0% a 79% (amplitude 79pp). Métrica percentual não confiável com n<20._
+
+🔇 *SEM_RESPOSTA* (SLA: 5d)
+  • Total: 7 | Abertos: 5 | Resolvidos: 2
+  • Tempo médio resolução: 0.0d ✅
+  ⚠️ _n=7 — IC 95% de 8% a 64% (amplitude 56pp). Métrica percentual não confiável com n<20._
+
+🚨 *URGENTE* (SLA: 2d)
+  • Total: 7 | Abertos: 7 | Resolvidos: 0
+  • Tempo médio: sem dados ainda
+  ⚠️ _n=7 — IC 95% de 0% a 35% (amplitude 35pp). Métrica percentual não confiável com n<20._
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔴 *SLA vencido (25 tickets)*
+
+🚨 `bde3202bd314` — Mushin — 10d aberto (SLA 2d, atraso 8d)
+  _Copy 'mais foco e menos ansiedade' precisa alteração urgente por problema legal _
+🚨 `6caaf7774c8e` — Sabrina — 10d aberto (SLA 2d, atraso 8d)
+  _Ajustes pendentes em criativos estáticos aguardando aprovação de cliente_
+🚨 `60ed37490e95` — interno — 10d aberto (SLA 2d, atraso 8d)
+  _Meta de 12 vídeos deve ser concluída esta semana com taxa de sucesso estimada de_
+🚨 `30b2415b920e` — SourceSoft — 10d aberto (SLA 2d, atraso 8d)
+  _ROAS abaixo da meta (4,2) com tendência de queda; CTR e conversão caíram_
+🚨 `03ac51857b9d` — SourceSoft — 10d aberto (SLA 2d, atraso 8d)
+  _Gel facial com share 1,4% vs meta 6-7%; precisa novos criativos urgentemente_
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Tendência semanal (novos vs fechados)*
+
+  2026-W40: +27 ██████████ / -2 ░░
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+_📌 Nota: métricas baseadas em tickets individuais, não em amostra de mensagens._
+_Percentual só é exibido quando n≥20 (IC estreito o suficiente para ser útil)._
+_Use 'tempo médio de resolução vs SLA' como métrica primária._
+[BQ] ✅ 4 métricas salvas em metricas_sla
+[2026-10-16 22:15:29] Métricas finalizadas.
+[2026-10-16 23:02:22] Iniciando sync...
+2026-10-16 23:02:23 [INFO] Iniciando sync de reuniões do Google Drive...
+2026-10-16 23:02:23 [INFO] file_cache is only supported with oauth2client<4.0.0
+2026-10-16 23:02:41 [INFO] Docs encontrados (global + Meet recursivo): 32
+2026-10-16 23:02:41 [INFO] Arquivos .docx encontrados no Drive: 32
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Botica: Semanal - 2026/10/16 14:00 GMT-03:00 (Granola)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Treinamento FEQ - 2026/10/15 11:00 GMT-03:00 (Granola)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Pod: Social Media - 2026/10/14 15:00 GMT-03:00 (Granola)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Diaria  - Fluxo Semanal Conta - 2026/10/13 10:00 GMT-03:00 (Granola)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Estratégia de conteúdo, produtos e Black November com time Guaramedia - 2026/10/07 14:23 GMT-03:00 (Granola)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Seleção e catalogação de vídeos para campanhas de marketing - 2026/10/06 14:09 GMT-03:00 (Granola)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Diaria  - Fluxo Semanal Conta - 2026/10/06 09:01 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Planejamento de divulgação de cursos e estratégia de investimento em marketing - 2026/10/06 10:21 GMT-03:00 (Granola)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Check Prioridades Performance - 2026/10/05 17:00 GMT-03:00 (Granola)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Check up Contas - 2026/09/18 11:00 GMT-03:00 - Anotações do Granola
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Check Prioridades Performance - 2026/09/28 16:00 GMT-03:00 - Anotações do Granola
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Diaria - Fluxo Semanal Conta - 2026/09/29 10:00 GMT-03:00 - Anotações do Granola
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: 3P & Performance - 2026/09/29 14:30 GMT-03:00 - Anotações do Granola
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Onboarding FEQ e Botica - 2026/10/01 10:00 GMT-03:00 - Anotações do Granola (Aline)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: On-boarding: FEQ e Botica - 2026/10/01 10:00 GMT-03:00 - Anotações do Granola (Miguel)
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Grupo Estudos Performance - Método M4 - 2026/10/02 11:00 GMT-03:00 - Anotações do Granola
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Grupo Estudos Performance - Método M4 - 2026/10/02 11:02 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Diaria  - Fluxo Semanal Conta - 2026_09_28 09_00 GMT-03_00 - Anotações do Gemini.docx
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: 3P & Performance SO - 2026/09/23 14:33 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: 3P & Performance SO - 2026/09/09 14:30 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: 3P & Performance SO - 2026/08/26 14:30 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: 3P & Performance SO - 2026/09/02 14:31 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Reunião iniciada às 2026/08/25 13:09 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Bia e Isa - 2026/08/12 16:47 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Reunião iniciada às 2026/06/24 09:51 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/06/15 14:00 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/05/22 16:01 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: 3P e Performance - 2026/05/20 14:59 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/05/08 16:00 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: 3P&Performance - 2026/05/06 11:16 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/04/30 16:01 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO]   ⏭  Já processado: Mushin <> Guará - 2026/04/24 10:00 GMT-03:00 - Anotações do Gemini
+2026-10-16 23:02:41 [INFO] 
+Sync concluído — novos: 0 | pulados: 32 | erros: 0
+[2026-10-16 23:02:41] Sync finalizado.
+[2026-10-16 23:02:41] Iniciando análise de sentimento...
+2026-10-16 23:02:43 [INFO] Iniciando análise de reuniões...
+2026-10-16 23:02:43 [INFO] Reuniões para analisar: 4
+2026-10-16 23:02:43 [INFO]   🔍 Analisando: Diaria (2026-10-13)
+2026-10-16 23:02:43 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:43 [ERROR]   ❌ Erro ao analisar 'Diaria': Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTTMMdEYrA4mHGpPjL'}
+2026-10-16 23:02:43 [INFO]   🔍 Analisando: Pod: Social Media (2026-10-14)
+2026-10-16 23:02:43 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:43 [ERROR]   ❌ Erro ao analisar 'Pod: Social Media': Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTUN97a4YoidPQKkK8'}
+2026-10-16 23:02:43 [INFO]   🔍 Analisando: Treinamento FEQ (2026-10-15)
+2026-10-16 23:02:43 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:43 [ERROR]   ❌ Erro ao analisar 'Treinamento FEQ': Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTUru88w3u3GJh47VW'}
+2026-10-16 23:02:43 [INFO]   🔍 Analisando: Botica: Semanal (2026-10-16)
+2026-10-16 23:02:44 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:44 [ERROR]   ❌ Erro ao analisar 'Botica: Semanal': Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTVLBByJcX4i2vKSGV'}
+2026-10-16 23:02:44 [INFO] 
+Análise concluída — analisadas: 0 | alertas: 0 | erros: 4
+[2026-10-16 23:02:44] Iniciando gestão de tickets...
+2026-10-16 23:02:45 [INFO] Tickets abertos: 0
+2026-10-16 23:02:45 [INFO] Verificando resoluções com Claude...
+2026-10-16 23:02:45 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:45 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTdYn3ugfjiLZGJsu3'}
+2026-10-16 23:02:46 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:46 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTeDUTn6NmsXGtJpRx'}
+2026-10-16 23:02:46 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:46 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTeqS2GspQZ3QqXf7Y'}
+2026-10-16 23:02:46 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:46 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTfW7RqxsVtYtRss4e'}
+2026-10-16 23:02:46 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:46 [WARNING]   Claude falhou para ticket bde3202bd314: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTgDGZBhHYxDqAA4mx'}
+2026-10-16 23:02:46 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:46 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTguwDuM5TqJPNYBPX'}
+2026-10-16 23:02:46 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:46 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTheqyjXYa7H8tMMFG'}
+2026-10-16 23:02:47 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:47 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTiKmYVf8ForvYzrAi'}
+2026-10-16 23:02:47 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:47 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTixUWQ1Qx656xWbAy'}
+2026-10-16 23:02:47 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:47 [WARNING]   Claude falhou para ticket f08ea5dd6373: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTjdAGyBXh7ZmXEjt7'}
+2026-10-16 23:02:47 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:47 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTkJahAHWrjgdYrQ6b'}
+2026-10-16 23:02:47 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:47 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTkwHEEEWb7m7PHkNt'}
+2026-10-16 23:02:47 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:47 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTmcTYLRuEs4cRoCFm'}
+2026-10-16 23:02:47 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:47 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTnHtzDK6dK8Bpdke9'}
+2026-10-16 23:02:48 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:48 [WARNING]   Claude falhou para ticket cfd4c3a33398: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTo9ysW1QauAg53Sup'}
+2026-10-16 23:02:48 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:48 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kToudifLgEecvSoAeH'}
+2026-10-16 23:02:48 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:48 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTpfmoFTC5dyHUcxTZ'}
+2026-10-16 23:02:48 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:48 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTqS9dyCMVwzokxBzP'}
+2026-10-16 23:02:48 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:48 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTrAKNc8sjhFypr5v8'}
+2026-10-16 23:02:49 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:49 [WARNING]   Claude falhou para ticket 5c8a39f78b08: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTrrjHXMPs6sCnbS7z'}
+2026-10-16 23:02:49 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:49 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTsUw9J55pGHo9swWD'}
+2026-10-16 23:02:49 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:49 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTt9s6GaZi4nAG6NHi'}
+2026-10-16 23:02:49 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:49 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTtqJAvjc7QWa6jays'}
+2026-10-16 23:02:49 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:49 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTuUVhEsm6my2Kt4P8'}
+2026-10-16 23:02:49 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:49 [WARNING]   Claude falhou para ticket 91f73b57d4e0: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTv7BofXc4DVqz7iZi'}
+2026-10-16 23:02:49 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:49 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTvo7FKGfgKRsRQFX1'}
+2026-10-16 23:02:50 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:50 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTwSofWcWqXtYZU9SC'}
+2026-10-16 23:02:50 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:50 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTx7jgjog2DFgU5iMU'}
+2026-10-16 23:02:50 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:50 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTxmgcsbwoTfFEUkvF'}
+2026-10-16 23:02:50 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:50 [WARNING]   Claude falhou para ticket 87a3f2a41b02: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTyT7NPQcNUTkLQ9Aw'}
+2026-10-16 23:02:50 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:50 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTz9XUYYUa5UWofW2Z'}
+2026-10-16 23:02:50 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:50 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kTznUshhEDRzo2NnQR'}
+2026-10-16 23:02:51 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:51 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU1PSMG11SpZNrodMJ'}
+2026-10-16 23:02:51 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:51 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU22tN3XwXF8ucyCAk'}
+2026-10-16 23:02:51 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:51 [WARNING]   Claude falhou para ticket e998fbb92bc1: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU2tUvpjENbssoy7pU'}
+2026-10-16 23:02:51 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:51 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU43gTisnS1ukwcapJ'}
+2026-10-16 23:02:51 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:51 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU4iMiLG81nykLW3Nu'}
+2026-10-16 23:02:52 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:52 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU5WVLLVukLazZL661'}
+2026-10-16 23:02:52 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:52 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU6J7ra5vKuhcMaeR9'}
+2026-10-16 23:02:52 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:52 [WARNING]   Claude falhou para ticket 6caaf7774c8e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU6tatvLFgEy6PGW11'}
+2026-10-16 23:02:52 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:52 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU7XHnmCWQrPxrBLGq'}
+2026-10-16 23:02:52 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:52 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU8AEmJWykJzbUwfTV'}
+2026-10-16 23:02:52 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:52 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU8og1t4fSBgqNKpad'}
+2026-10-16 23:02:52 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:52 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kU9mU8nB7Y8VAzQucV'}
+2026-10-16 23:02:53 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:53 [WARNING]   Claude falhou para ticket 60ed37490e95: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUATeWbAcXncSbcygE'}
+2026-10-16 23:02:53 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:53 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUBA4KoctfSrmkWmJq'}
+2026-10-16 23:02:53 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:53 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUBvwqRG9SphXwtk9H'}
+2026-10-16 23:02:53 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:53 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUCb8SaP7MY1PhQkb9'}
+2026-10-16 23:02:53 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:53 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUDFaQad4rfhfLhK2a'}
+2026-10-16 23:02:53 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:53 [WARNING]   Claude falhou para ticket ee3a52cfa5af: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUDumGpfTT1o1LFCHk'}
+2026-10-16 23:02:54 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:54 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUEbS6FFqPHEzH53ED'}
+2026-10-16 23:02:54 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:54 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUGoP9HBhycjjkxUHW'}
+2026-10-16 23:02:55 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:55 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUJkiMRthjNmBFc4Q4'}
+2026-10-16 23:02:55 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:55 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUKz8FNHHPm4KTnRDG'}
+2026-10-16 23:02:55 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:55 [WARNING]   Claude falhou para ticket 967313d61cf8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUMLjQvG8kLHJGjVnR'}
+2026-10-16 23:02:55 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:55 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUN1B4YLoDhBzPJ72i'}
+2026-10-16 23:02:56 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:56 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUNdd2tAPmSsC3Tthk'}
+2026-10-16 23:02:56 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:56 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUPMHDgEV8PceNcPRh'}
+2026-10-16 23:02:56 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:56 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUQefn1T32a7npSMmk'}
+2026-10-16 23:02:56 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:56 [WARNING]   Claude falhou para ticket 2c443c302223: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUS6jyK8ZnQyyacPKD'}
+2026-10-16 23:02:57 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:57 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUT52JpCCW7WzrcCnx'}
+2026-10-16 23:02:57 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:57 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUUZKdGrwJGi2Yfh6Z'}
+2026-10-16 23:02:57 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:57 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUVUdteoGa8SjQnkTG'}
+2026-10-16 23:02:57 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:57 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUW6qsnJajDJqWYCrz'}
+2026-10-16 23:02:57 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:57 [WARNING]   Claude falhou para ticket e19183396aa3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUWqVkKAtvfK2Axx5R'}
+2026-10-16 23:02:58 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:58 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUXYuMk3aV4ZMBCgp3'}
+2026-10-16 23:02:58 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:58 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUYC6kUvraZ3D1WCM3'}
+2026-10-16 23:02:58 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:58 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUYs2tr7nd1h1Z3YMS'}
+2026-10-16 23:02:58 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:58 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUZUVUvp4BmNcY38jV'}
+2026-10-16 23:02:58 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:58 [WARNING]   Claude falhou para ticket f89a308cbdd5: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUa7wBztv7MJWbBbN9'}
+2026-10-16 23:02:58 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:58 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUao7zdUW2NtCd5Xzi'}
+2026-10-16 23:02:59 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:59 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUbTJEdi777ESXZpxH'}
+2026-10-16 23:02:59 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:59 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUcBCvbMTRp2oqytD5'}
+2026-10-16 23:02:59 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:59 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUcr94h48EBkfQ47sA'}
+2026-10-16 23:02:59 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:59 [WARNING]   Claude falhou para ticket 30b2415b920e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUdXpJwtRJLAjKfnaU'}
+2026-10-16 23:02:59 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:59 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUeCWcG4awhF41MHtj'}
+2026-10-16 23:02:59 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:59 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUeqwjMfosb5sGgnaC'}
+2026-10-16 23:02:59 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:02:59 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUfTQMfdJ9p165A8k9'}
+2026-10-16 23:03:00 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:00 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUg5re76Q2VdRqNdHL'}
+2026-10-16 23:03:00 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:00 [WARNING]   Claude falhou para ticket 30f787042cbe: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUh1fxKKyKkQhtSLYx'}
+2026-10-16 23:03:00 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:00 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUhoJBH4Qj2MFCZP9m'}
+2026-10-16 23:03:00 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:00 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUieeZVLHvBnE3BGiG'}
+2026-10-16 23:03:00 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:00 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUjTkofP7tu3m1Dkkr'}
+2026-10-16 23:03:01 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:01 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUkBQwEg6WCYwZAK9W'}
+2026-10-16 23:03:01 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:01 [WARNING]   Claude falhou para ticket 03ac51857b9d: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUkq7EJ3s24AvMW5dk'}
+2026-10-16 23:03:01 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:01 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUmt7a6rWh5HrAnzGY'}
+2026-10-16 23:03:01 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:01 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUnfkF7k6qaFAeBict'}
+2026-10-16 23:03:01 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:01 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUopwiLP2ngML2jAFv'}
+2026-10-16 23:03:02 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:02 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUppUXY6eqTKjqqR3N'}
+2026-10-16 23:03:02 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:02 [WARNING]   Claude falhou para ticket 66d48f199d4e: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUqdatS77DAbiFpaXL'}
+2026-10-16 23:03:02 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:02 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUre77V7UnAW9edu11'}
+2026-10-16 23:03:02 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:02 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUsYwDu42Mn4vdEFXm'}
+2026-10-16 23:03:02 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:02 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUtSkry8cSEUP266cn'}
+2026-10-16 23:03:03 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:03 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUuSnTYEMRibGida7V'}
+2026-10-16 23:03:03 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:03 [WARNING]   Claude falhou para ticket 8cf660a6e809: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUvAhN7P1Cb57QppZY'}
+2026-10-16 23:03:03 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:03 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUvwpmFEihE1H2Az1b'}
+2026-10-16 23:03:03 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:03 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUwhU96qRauu6Mwj1X'}
+2026-10-16 23:03:03 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:03 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUxRdLMw1Pfh6mVahm'}
+2026-10-16 23:03:04 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:04 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUy54ca97hAmWwZn74'}
+2026-10-16 23:03:04 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:04 [WARNING]   Claude falhou para ticket 1747f578c8c3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUyjzQweMGn9uHcieQ'}
+2026-10-16 23:03:04 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:04 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kUzPh3yCVvoXQ8yjht'}
+2026-10-16 23:03:04 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:04 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV13sZ2o3x6FFFBU6H'}
+2026-10-16 23:03:04 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:04 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV1hpd8EFFpwMghaaJ'}
+2026-10-16 23:03:04 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:04 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV2PFdm8dkL2zuyqkV'}
+2026-10-16 23:03:05 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:05 [WARNING]   Claude falhou para ticket 9a9381e1dfc3: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV398hUqhHtqCTzK9K'}
+2026-10-16 23:03:05 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:05 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV3krHcfSny25zb7Hz'}
+2026-10-16 23:03:05 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:05 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV4N4mpL8be5Xbvaoa'}
+2026-10-16 23:03:05 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:05 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV51FQZa1iqCg3iQyp'}
+2026-10-16 23:03:05 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:05 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV5fgy7s4dpd9EdXLp'}
+2026-10-16 23:03:05 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:05 [WARNING]   Claude falhou para ticket 8f17f52029e8: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV6LdUEZ6bYmokbB3T'}
+2026-10-16 23:03:05 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:05 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV7439nibHAtpbWcir'}
+2026-10-16 23:03:06 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:06 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV7jxjzfZ8Hyf3ZXHW'}
+2026-10-16 23:03:06 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:06 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV8Z55qufrxADSCf97'}
+2026-10-16 23:03:06 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:06 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kV9MhGDrJd9BbVAbtD'}
+2026-10-16 23:03:06 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:06 [WARNING]   Claude falhou para ticket b6c86dc74e24: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVA9KCs8C6XZ1fW1i1'}
+2026-10-16 23:03:06 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:06 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVAsUmvt2Ag25Q6VuU'}
+2026-10-16 23:03:06 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:06 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVBe7E4V7UVjE8DMQZ'}
+2026-10-16 23:03:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:07 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVCMmWcBkMqRmMyN7k'}
+2026-10-16 23:03:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:07 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVD5S4zH6TRAseJw2c'}
+2026-10-16 23:03:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:07 [WARNING]   Claude falhou para ticket dc7ca1bf6644: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVDit5pJkb1JivvPgH'}
+2026-10-16 23:03:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:07 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVEQ41KDjod9azVu3a'}
+2026-10-16 23:03:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:07 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVFDAWjo9A8L3wxCUu'}
+2026-10-16 23:03:07 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:07 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVFpdUfxNy8473Xh4X'}
+2026-10-16 23:03:08 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:08 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVGUa4pDeZwSGfH7uh'}
+2026-10-16 23:03:08 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 400 Bad Request"
+2026-10-16 23:03:08 [WARNING]   Claude falhou para ticket c4254e0b5513: Error code: 400 - {'type': 'error', 'error': {'type': 'invalid_request_error', 'message': 'Your credit balance is too low to access the Anthropic API. Please go to Plans & Billing to upgrade or purchase credits.'}, 'request_id': 'req_011Cg6kVH9zsdotyZAQVX7Tz'}
+2026-10-16 23:03:08 [INFO] Tickets resolvidos: 0
+[2026-10-16 23:03:08] Salvando métricas SLA...
+📊 *Métricas de SLA — últimos 90 dias*
+_Gerado em 2026-10-16_
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Por tipo de alerta*
+
+🚫 *BLOQUEIO* (SLA: 3d)
+  • Total: 12 | Abertos: 12 | Resolvidos: 0
+  • Tempo médio: sem dados ainda
+  ⚠️ _n=12 — IC 95% de 0% a 24% (amplitude 24pp). Métrica percentual não confiável com n<20._
+
+🔒 *SEM_ACESSO* (SLA: 3d)
+  • Total: 1 | Abertos: 1 | Resolvidos: 0
+  • Tempo médio: sem dados ainda
+  ⚠️ _n=1 — IC 95% de 0% a 79% (amplitude 79pp). Métrica percentual não confiável com n<20._
+
+🔇 *SEM_RESPOSTA* (SLA: 5d)
+  • Total: 7 | Abertos: 5 | Resolvidos: 2
+  • Tempo médio resolução: 0.0d ✅
+  ⚠️ _n=7 — IC 95% de 8% a 64% (amplitude 56pp). Métrica percentual não confiável com n<20._
+
+🚨 *URGENTE* (SLA: 2d)
+  • Total: 7 | Abertos: 7 | Resolvidos: 0
+  • Tempo médio: sem dados ainda
+  ⚠️ _n=7 — IC 95% de 0% a 35% (amplitude 35pp). Métrica percentual não confiável com n<20._
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+🔴 *SLA vencido (25 tickets)*
+
+🚨 `bde3202bd314` — Mushin — 10d aberto (SLA 2d, atraso 8d)
+  _Copy 'mais foco e menos ansiedade' precisa alteração urgente por problema legal _
+🚨 `6caaf7774c8e` — Sabrina — 10d aberto (SLA 2d, atraso 8d)
+  _Ajustes pendentes em criativos estáticos aguardando aprovação de cliente_
+🚨 `60ed37490e95` — interno — 10d aberto (SLA 2d, atraso 8d)
+  _Meta de 12 vídeos deve ser concluída esta semana com taxa de sucesso estimada de_
+🚨 `30b2415b920e` — SourceSoft — 10d aberto (SLA 2d, atraso 8d)
+  _ROAS abaixo da meta (4,2) com tendência de queda; CTR e conversão caíram_
+🚨 `03ac51857b9d` — SourceSoft — 10d aberto (SLA 2d, atraso 8d)
+  _Gel facial com share 1,4% vs meta 6-7%; precisa novos criativos urgentemente_
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Tendência semanal (novos vs fechados)*
+
+  2026-W40: +27 ██████████ / -2 ░░
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+_📌 Nota: métricas baseadas em tickets individuais, não em amostra de mensagens._
+_Percentual só é exibido quando n≥20 (IC estreito o suficiente para ser útil)._
+_Use 'tempo médio de resolução vs SLA' como métrica primária._
+[BQ] ✅ 4 métricas salvas em metricas_sla
+[2026-10-16 23:03:10] Métricas finalizadas.
