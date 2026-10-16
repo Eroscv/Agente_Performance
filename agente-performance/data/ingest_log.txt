@@ -1,0 +1,1 @@
+2026-10-15 18:37 UTC | Enviados: 1 (Source OF/shopify) | Sem dados: 4 | Erros: 0 | Nota: 2 tentativas anteriores SIGKILL (SQLite lock por main.py)

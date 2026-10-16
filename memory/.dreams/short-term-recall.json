@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-06T11:57:49.087Z",
+  "updatedAt": "2026-10-16T18:55:59.141Z",
   "entries": {
     "memory:memory/2026-06-22.md:1:30": {
       "key": "memory:memory/2026-06-22.md:1:30",
@@ -44,13 +44,13 @@
       "endLine": 37,
       "source": "memory",
       "snippet": "# Memory — 2026-06-24 ## Projetos ativos: Agente de Performance + Agente de Briefings (Guará Marketing) ### Identidade - Nome: Cesar - Role: Senior Lead Systems Engineer & Automation Architect - Configurado por Eros (Guará Marketing) para os projetos Flora e Agente de Performance ### Infraestrutura - Host: ip-172-26-10-132 (AWS Ubuntu) - Proxy HTTPS: 44.204.251.251 - Porta agente briefings: 8002 - URL externa briefings: https://44.204.251.251/briefings/slack/events - Venv: /home/ubuntu/.openclaw/workspace/Agente_briefing/venv - Serviço: agente-briefings.service (active) ### Agente de Performance - Diretório: /home/ubuntu/.openclaw/workspace/agente-performance/ - GitHub: https://github.co",
-      "recallCount": 8,
+      "recallCount": 9,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 8,
+      "totalScore": 9,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-08-17T15:32:27.399Z",
+      "lastRecalledAt": "2026-10-13T19:13:29.128Z",
       "queryHashes": [
         "eb94228f54b4",
         "6f2eb0360318",
@@ -59,7 +59,8 @@
         "a4c58fc2a09b",
         "9aed56b80585",
         "137494fd710e",
-        "a1489de516bc"
+        "a1489de516bc",
+        "9ae855f9f405"
       ],
       "recallDays": [
         "2026-06-24",
@@ -69,7 +70,8 @@
         "2026-07-13",
         "2026-07-16",
         "2026-07-22",
-        "2026-08-17"
+        "2026-08-17",
+        "2026-10-13"
       ],
       "conceptTags": [
         "ip-172-26-10-132",
@@ -89,13 +91,13 @@
       "endLine": 31,
       "source": "memory",
       "snippet": "# Memória — 2026-06-23 ## Projeto: Agente de Performance Guará ### Localização - Projeto: `/home/ubuntu/.openclaw/workspace/agente-performance` - Banco SQLite campanhas: `data/campanhas.db` (30.905 registros, 93 colunas, mai/2023–jun/2026) - Banco contexto: `data/context.db` (TTL 24h) - Banco logs: `data/logs.db` - Env virtual: `venv/` dentro do projeto - Serviço systemd: `agente-guara.service` (User=ubuntu, porta 8001) - Apache proxy: vhost `flora-webhook.conf`, rotas `/guara/` e `/guara/slack/events` - Repositório GitHub: https://github.com/Eroscv/Flora-Agente (privado) - Último commit pushado: `feat: comparativos WoW/MoM/antes-depois/períodos/ranking` ### Regras absolutas - **Flora é I",
-      "recallCount": 11,
+      "recallCount": 12,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 11,
+      "totalScore": 12,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-10-06T11:57:49.087Z",
+      "lastRecalledAt": "2026-10-13T19:13:29.128Z",
       "queryHashes": [
         "eb94228f54b4",
         "a4c58fc2a09b",
@@ -107,7 +109,8 @@
         "181dc1adbe8b",
         "d1a81b7f8df5",
         "e1ef71978c2b",
-        "0c9a946a1a8e"
+        "0c9a946a1a8e",
+        "9ae855f9f405"
       ],
       "recallDays": [
         "2026-06-24",
@@ -119,7 +122,8 @@
         "2026-08-17",
         "2026-09-01",
         "2026-09-22",
-        "2026-10-06"
+        "2026-10-06",
+        "2026-10-13"
       ],
       "conceptTags": [
         "home/ubuntu",
@@ -139,13 +143,13 @@
       "endLine": 95,
       "source": "memory",
       "snippet": "- `ranking_comparativo` — ranking de todas as campanhas por qualquer métrica ### Pendências do usuário (Slack app) - Configurar no painel api.slack.com: - Event Subscriptions URL: `https://44.204.251.251/guara/slack/events` - Bot events: `app_mention`, `message.im` - OAuth Scopes: `chat:write`, `reactions:write`, `reactions:read`, `app_mentions:read`, `im:history` - Slash command `/ajuda` → mesma URL ### Pendências técnicas abertas - Integrar `agent/cache.py` e `agent/conversation_log.py` no fluxo principal do `engine.py` - Integrar handler Slack para export (detectar palavras \"excel\"/\"pdf\" e chamar `reports/exporter.py`) - Testar bot com perguntas reais no Slack - Exposição do",
-      "recallCount": 8,
+      "recallCount": 9,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 8,
+      "totalScore": 9,
       "maxScore": 1,
       "firstRecalledAt": "2026-06-24T11:53:19.976Z",
-      "lastRecalledAt": "2026-10-06T11:57:49.087Z",
+      "lastRecalledAt": "2026-10-16T18:55:59.141Z",
       "queryHashes": [
         "eb94228f54b4",
         "a4c58fc2a09b",
@@ -154,7 +158,8 @@
         "45e4baf90404",
         "d1a81b7f8df5",
         "e1ef71978c2b",
-        "0c9a946a1a8e"
+        "0c9a946a1a8e",
+        "f81151b58043"
       ],
       "recallDays": [
         "2026-06-24",
@@ -163,7 +168,8 @@
         "2026-07-22",
         "2026-07-28",
         "2026-09-22",
-        "2026-10-06"
+        "2026-10-06",
+        "2026-10-16"
       ],
       "conceptTags": [
         "ranking-comparativo",
@@ -253,21 +259,23 @@
       "endLine": 54,
       "source": "memory",
       "snippet": "| Hidratante Corporal 300ml | NV DMAE (10%), Symbiocaps®, Óleo de Semente de Uva, Manteiga de Karité | | Gel Creme Facial 50g | Instensyl® (5%), AH nanoencapsulado, Óleo de Uva + Vit E, Symbiocaps® | | Água Micelar Demaquilante | Ecoskin® (pré+probióticos), Extrato de Chá Verde, Extrato de Camomila | Detecção via regex `_INGREDIENTE_RE` + mapeamento `_PRODUTO_MAP`. ### Humanização dos prompts - Prompts reescritos em todos os 5 agentes especializados + prompt principal - Tom: coloquial leve, reações espontâneas, empatia real, nomes próprios nas transferências - Ex: \"Que bom que você veio 🤎\" em vez de \"Como posso ajudar?\" - Usuário pediu mais humanização às 16:06 — aguarda exemplo concreto",
-      "recallCount": 3,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-02T18:31:23.287Z",
-      "lastRecalledAt": "2026-07-14T12:59:54.258Z",
+      "lastRecalledAt": "2026-10-16T18:55:59.141Z",
       "queryHashes": [
         "0d0550a70f3b",
         "f7ca85ea071d",
-        "d09a3d905b6f"
+        "d09a3d905b6f",
+        "f81151b58043"
       ],
       "recallDays": [
         "2026-07-02",
-        "2026-07-14"
+        "2026-07-14",
+        "2026-10-16"
       ],
       "conceptTags": [
         "ingrediente-re",
@@ -323,26 +331,28 @@
       "endLine": 178,
       "source": "memory",
       "snippet": "5. **Exportação para Notion via Slack:** - Detecta \"notion\" no texto da mensagem ou no argumento do `/relatorio` - Detecta cliente por token no texto (consórcio, source of, mushin, bazar, máximo) - Publica página e retorna link clicável no Slack - Suporta combinação: \"excel e notion\" → upload no Slack + link no Notion 6. **Source OF identificado em tudo:** - System prompt do Claude menciona \"Source OF — empresa de beleza e cosméticos\" - Arquivos exportados: `source_of_*.xlsx`, `source_of_*.pdf` - Cabeçalho Excel: \"Source OF — Meta Ads\" - Páginas Notion: título `📊 Source OF — Meta Ads · período` - Database padrão Notion: `source_of` 7. **README.md completo** — 585",
-      "recallCount": 5,
+      "recallCount": 6,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 5,
+      "totalScore": 6,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-14T12:59:54.258Z",
-      "lastRecalledAt": "2026-09-28T12:49:26.472Z",
+      "lastRecalledAt": "2026-10-16T18:55:59.141Z",
       "queryHashes": [
         "d09a3d905b6f",
         "239c05a450c4",
         "797e5a298e32",
         "1a2c4f9726f6",
-        "e9b8827cda2f"
+        "e9b8827cda2f",
+        "f81151b58043"
       ],
       "recallDays": [
         "2026-07-14",
         "2026-07-22",
         "2026-07-31",
         "2026-08-25",
-        "2026-09-28"
+        "2026-09-28",
+        "2026-10-16"
       ],
       "conceptTags": [
         "source-of",
@@ -393,22 +403,24 @@
       "endLine": 87,
       "source": "memory",
       "snippet": "- **Arquivo:** `prompt/prompts.py` — `GERAL_PROMPT` - Adicionada tabela completa de links: hidratante, gel creme, água micelar, gel termo, travel size - **Causa do problema:** mensagens da (17) 99609-5930 classificadas como GERAL (bug do classificador) — Flora GERAL só conhecia `https://sourceof.com.br` ### Casos específicos atendidos - **(47) 9981-6366 — Iraci:** se apresentando em conversa já iniciada → corrigido com `has_history` - **(17) 99609-5930:** resposta truncada + link errado (home em vez do produto) → corrigido + mensagem reenviada ### Testes realizados - **Arquivo criado:** `Flora-Agente-repo/testes-pedidos.md` (publicado no GitHub) - Testados 5 endpoints Shopify: listagem, bu",
-      "recallCount": 3,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-16T12:25:11.159Z",
-      "lastRecalledAt": "2026-08-05T10:34:53.654Z",
+      "lastRecalledAt": "2026-10-16T18:55:59.141Z",
       "queryHashes": [
         "9aed56b80585",
         "45e4baf90404",
-        "77aa0c0c2c2e"
+        "77aa0c0c2c2e",
+        "f81151b58043"
       ],
       "recallDays": [
         "2026-07-16",
         "2026-07-28",
-        "2026-08-05"
+        "2026-08-05",
+        "2026-10-16"
       ],
       "conceptTags": [
         "prompt/prompts.py",
@@ -428,24 +440,29 @@
       "endLine": 59,
       "source": "memory",
       "snippet": "- GitHub: https://github.com/Eroscv/Flora-Agente/blob/main/CONVERSAS.md - Privacidade: telefones mascarados (5514****3327) no GitHub - Inclui: resumo geral, atividade diária, top clientes, perfis enriquecidos, handoffs, blacklist, todas as mensagens na íntegra ## Infraestrutura / Caminhos importantes - Agente Performance: `/home/ubuntu/.openclaw/workspace/agente-performance/` - Flora: `/home/ubuntu/.openclaw/workspace/Flora-Agente-repo/` - Flora DB: `Flora-Agente-repo/flora.db` - Agente Performance DB: `agente-performance/data/performance.db` (ou similar) - Logs Performance: `agente-performance/data/logs.db` - Scripts Flora: `Flora-Agente-repo/scripts/` - Scripts Performance: `agente-perfor",
-      "recallCount": 4,
+      "recallCount": 7,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 4,
+      "totalScore": 7,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-22T13:30:13.347Z",
-      "lastRecalledAt": "2026-10-01T13:22:28.500Z",
+      "lastRecalledAt": "2026-10-15T11:20:02.461Z",
       "queryHashes": [
         "137494fd710e",
         "7b71f84b7a6c",
         "a1489de516bc",
-        "0f0ab927ca1a"
+        "0f0ab927ca1a",
+        "9ae855f9f405",
+        "e8fcfc33d8df",
+        "9f735615e33c"
       ],
       "recallDays": [
         "2026-07-22",
         "2026-07-31",
         "2026-08-17",
-        "2026-10-01"
+        "2026-10-01",
+        "2026-10-13",
+        "2026-10-15"
       ],
       "conceptTags": [
         "home/ubuntu",
@@ -465,20 +482,22 @@
       "endLine": 52,
       "source": "memory",
       "snippet": "8. Perguntas negativas: \"não estão convertendo\" → sem_conversao; \"ruins\" → alertas_roas 9. limit=999 para \"todas\"/\"tudo\" 10. \"mês passado\" = mês calendário completo (não hoje-30d) 11. Retry automático (2x) em JSON inválido antes de cair no fallback 12. Cache NLP em memória (por pergunta normalizada) 13. Logging de latência em ms em cada chamada NLP 14. Log de intent desconhecida retornada pelo Claude - _detect_intent normaliza acentos via unicodedata - Fallback regex: 30/30 casos corretos ### Script de README automático - `scripts/gerar_readme_consultas.py` — lê logs.db + banco, gera CONSULTAS.md - `scripts/push_consultas.sh` — commit + push (idempotente) - Cron OpenClaw: todo dia 00:00 UTC",
-      "recallCount": 2,
+      "recallCount": 3,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 2,
+      "totalScore": 3,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-22T13:30:13.347Z",
-      "lastRecalledAt": "2026-08-17T15:32:27.399Z",
+      "lastRecalledAt": "2026-10-13T19:13:29.128Z",
       "queryHashes": [
         "137494fd710e",
-        "a1489de516bc"
+        "a1489de516bc",
+        "9ae855f9f405"
       ],
       "recallDays": [
         "2026-07-22",
-        "2026-08-17"
+        "2026-08-17",
+        "2026-10-13"
       ],
       "conceptTags": [
         "sem-conversao",
@@ -810,13 +829,13 @@
       "endLine": 196,
       "source": "memory",
       "snippet": "| `be_mushin` | Relatórios — BE MUSHIN | `37a8a727-a8ff-81a3-88e2-000bb475bc39` | | `bazar_precatorio` | Relatórios — Bazar do Precatório | `37a8a727-a8ff-81aa-800d-000b5bb61eb4` | | `torre_controle` | Torre de Controle — Regras | `37a8a727-a8ff-81e7-a038-000bf73a3e79` | | `clientes` | Clientes | `30ecc6df-d8ec-4e56-8377-1cce7b0d6c83` | ### Pendências do usuário (Slack app) - Configurar no painel api.slack.com: - Event Subscriptions URL: `https://44.204.251.251/guara/slack/events` - Bot events: `app_mention`, `message.im` - OAuth Scopes: `chat:write`, `reactions:write`, `reactions:read`, `app_mentions:read`, `im:history`, `files:write` - Cadastrar todos os 11 slash commands → mesma",
-      "recallCount": 7,
+      "recallCount": 8,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 7,
+      "totalScore": 8,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T12:04:07.334Z",
-      "lastRecalledAt": "2026-09-22T19:37:14.414Z",
+      "lastRecalledAt": "2026-10-16T18:55:59.141Z",
       "queryHashes": [
         "797e5a298e32",
         "1a2c4f9726f6",
@@ -824,7 +843,8 @@
         "39dda023cb66",
         "c3567ce9436d",
         "2fbd4fd55425",
-        "5ff2eddb4a55"
+        "5ff2eddb4a55",
+        "f81151b58043"
       ],
       "recallDays": [
         "2026-07-31",
@@ -832,7 +852,8 @@
         "2026-09-02",
         "2026-09-03",
         "2026-09-10",
-        "2026-09-22"
+        "2026-09-22",
+        "2026-10-16"
       ],
       "conceptTags": [
         "be-mushin",
@@ -1112,24 +1133,28 @@
       "endLine": 96,
       "source": "memory",
       "snippet": "### Flora-Agente — Lista de Melhorias Levantadas 12 melhorias mapeadas baseadas no código real: - 🔴 Alta: Ativar INJECT_ORDERS (LogisticaAgent/PagamentoAgent pausados), Rastreio em tempo real, Survey em handoffs/inactivity - 🟡 Média: Memória de sessão >72h, Upsell no VendasAgent, Detecção abandono checkout, Whisper melhorado - 🟢 Baixa: Jana Trigger com histórico, Dashboard SQLite, Notificação pedido entregue, Blacklist automático, Multi-idioma ### Repositório Flora — Estado - Branch: main, up to date - `data/.notion_flora_ids.json` tinha modificação não commitada (não alterado por nós) - Serviço flora-agente.service: intocável (regra absoluta) --- ## Sessão da tarde (14:30 → 18:55 UTC)",
-      "recallCount": 4,
+      "recallCount": 6,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 4,
+      "totalScore": 6,
       "maxScore": 1,
       "firstRecalledAt": "2026-07-31T16:01:49.882Z",
-      "lastRecalledAt": "2026-10-01T13:22:28.500Z",
+      "lastRecalledAt": "2026-10-15T11:20:02.461Z",
       "queryHashes": [
         "7b71f84b7a6c",
         "77aa0c0c2c2e",
         "181dc1adbe8b",
-        "0f0ab927ca1a"
+        "0f0ab927ca1a",
+        "e8fcfc33d8df",
+        "9f735615e33c"
       ],
       "recallDays": [
         "2026-07-31",
         "2026-08-05",
         "2026-09-01",
-        "2026-10-01"
+        "2026-10-01",
+        "2026-10-13",
+        "2026-10-15"
       ],
       "conceptTags": [
         "flora-agente",
@@ -1818,22 +1843,24 @@
       "endLine": 61,
       "source": "memory",
       "snippet": "3. **Validação de CNPJ** — validação real com dígitos verificadores; texto inválido pede retry 4. **Verificação de stage do CRM** — removida para leads `concluido` (elimina chamada desnecessária) 5. **Buffer** — aumentado de 1.5s para 2.0s 6. **Rotação de logs** — journald limitado: 500MB, 30 dias, rotação semanal 7. **Mensagem de encerramento** — bot envia \"Registrado! Muito obrigado! 🙏...\" ao concluir 8. **Description do CRM** — campo `description` enviado fora do objeto `fields` (fix da API Supabase) 9. **Description formatada** — nome, telefone, serviço, cidade, CNPJ, canal acumulados a cada etapa ### Formato real da Whapi (botões) ```json { \"type\": \"reply\", \"reply\": { \"type\":",
-      "recallCount": 3,
+      "recallCount": 4,
       "dailyCount": 0,
       "groundedCount": 0,
-      "totalScore": 3,
+      "totalScore": 4,
       "maxScore": 1,
       "firstRecalledAt": "2026-09-02T18:06:00.925Z",
-      "lastRecalledAt": "2026-09-10T19:52:49.153Z",
+      "lastRecalledAt": "2026-10-16T18:55:59.141Z",
       "queryHashes": [
         "4bcedf6dc45e",
         "39dda023cb66",
-        "6f60de20d27d"
+        "6f60de20d27d",
+        "f81151b58043"
       ],
       "recallDays": [
         "2026-09-02",
         "2026-09-03",
-        "2026-09-10"
+        "2026-09-10",
+        "2026-10-16"
       ],
       "conceptTags": [
         "1.5s",

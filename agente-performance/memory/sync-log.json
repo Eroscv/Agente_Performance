@@ -1,0 +1,30 @@
+[
+  {
+    "timestamp": "2026-10-15T19:09:03Z",
+    "tipo": "gads_diario",
+    "dias": 30,
+    "contas": [
+      {
+        "cliente": "source_of",
+        "customer_id": "4311260590",
+        "linhas": 148,
+        "periodo": "2026-09-15→2026-10-14",
+        "status": "ok"
+      },
+      {
+        "cliente": "pod_kombucha",
+        "customer_id": "6123672195",
+        "linhas": 155,
+        "periodo": "2026-09-15→2026-10-14",
+        "status": "ok"
+      },
+      {
+        "cliente": "botica",
+        "status": "inativo"
+      }
+    ],
+    "total_linhas": 303,
+    "sucessos": 2,
+    "erros": 0
+  }
+]

@@ -28,6 +28,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.poolmanager import PoolManager
+from urllib3.util.ssl_ import create_urllib3_context
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -56,6 +59,29 @@ DASHBOARD_TOKEN = os.getenv("DASHBOARD_INGEST_TOKEN", "")
 
 RETRY_MAX       = 3
 RETRY_BASE_SECS = 2
+
+# ============================================================
+# HTTP SESSION — força HTTP/1.1 para compatibilidade com Supabase Edge Functions
+# urllib3 ≥2.x negocia HTTP/2 via ALPN mas o response body fica travado com essa
+# versão do servidor. Forçar HTTP/1.1 resolve o problema.
+# ============================================================
+
+class _HTTP1Adapter(HTTPAdapter):
+    """HTTPAdapter que desabilita HTTP/2 no ALPN, forçando HTTP/1.1."""
+    def init_poolmanager(self, *args, **kwargs):
+        ctx = create_urllib3_context()
+        ctx.set_alpn_protocols(["http/1.1"])
+        kwargs["ssl_context"] = ctx
+        return super().init_poolmanager(*args, **kwargs)
+
+
+def _make_session() -> requests.Session:
+    s = requests.Session()
+    s.mount("https://", _HTTP1Adapter())
+    return s
+
+
+_SESSION = _make_session()
 
 # ============================================================
 # SYNC STATE DB
@@ -125,7 +151,7 @@ def _post(payload: dict, dry_run: bool) -> bool:
     }
     for attempt in range(1, RETRY_MAX + 1):
         try:
-            resp = requests.post(DASHBOARD_URL, json=payload, headers=headers, timeout=30)
+            resp = _SESSION.post(DASHBOARD_URL, json=payload, headers=headers, timeout=30)
             if resp.ok:
                 log.info("✅ POST OK [%s] %s/%s (%dms)",
                          resp.status_code,
