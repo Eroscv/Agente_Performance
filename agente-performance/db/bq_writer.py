@@ -128,7 +128,23 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
         on_clause = " AND ".join(f"(T.{k} IS NOT DISTINCT FROM S.{k})" for k in keys)
         all_cols = [f.name for f in schema]
         update_cols = [c for c in all_cols if c not in keys]
-        update_clause = ", ".join(f"T.{c} = S.{c}" for c in update_cols)
+
+        # shopify_diario: colunas de sessão são gravadas por write_shopify_sessoes (MERGE separado).
+        # O write_shopify (pedidos) envia NULL nessas colunas — usar COALESCE para preservar
+        # o valor existente no target em vez de sobrescrever com NULL.
+        _SESSOES_COLS = {
+            "sessoes", "sessoes_com_carrinho", "sessoes_checkout",
+            "sessoes_compra", "taxa_conversao", "is_bot_suspect",
+        }
+        if table_id == "shopify_diario":
+            update_clause = ", ".join(
+                f"T.{c} = COALESCE(S.{c}, T.{c})" if c in _SESSOES_COLS
+                else f"T.{c} = S.{c}"
+                for c in update_cols
+            )
+        else:
+            update_clause = ", ".join(f"T.{c} = S.{c}" for c in update_cols)
+
         insert_cols = ", ".join(all_cols)
         insert_vals = ", ".join(f"S.{c}" for c in all_cols)
 
