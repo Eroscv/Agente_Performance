@@ -1,17 +1,17 @@
 #!/bin/bash
 # Wrapper para o cron do OpenClaw
+#
+# Delega pro orquestrador.py (transcricao/agents/) em vez de encadear os
+# 5 scripts na mão: ganha tratamento de erro entre etapas (uma falha não
+# trava as seguintes, mas agora fica REGISTRADA — exit code != 0 se
+# qualquer etapa falhou) e passa a rodar a Camada 4 (criar_tarefas_notion.py
+# via ComunicacaoAgent), que não aparecia aqui antes.
 VENV=/home/ubuntu/.openclaw/workspace/agente-performance/venv/bin/python3
 DIR=/home/ubuntu/.openclaw/workspace/transcricao
 LOG=$DIR/sync.log
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Iniciando sync..." >> "$LOG"
-"$VENV" "$DIR/sync_reunioes.py" >> "$LOG" 2>&1
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Sync finalizado." >> "$LOG"
-
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Iniciando análise de sentimento..." >> "$LOG"
-"$VENV" "$DIR/analisador_reunioes.py" >> "$LOG" 2>&1
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Iniciando gestão de tickets..." >> "$LOG"
-"$VENV" "$DIR/gestor_alertas.py" --processar >> "$LOG" 2>&1
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Salvando métricas SLA..." >> "$LOG"
-"$VENV" "$DIR/metricas_alertas.py" --bq >> "$LOG" 2>&1
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Métricas finalizadas." >> "$LOG"
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Iniciando pipeline de Transcrição..." >> "$LOG"
+"$VENV" "$DIR/orquestrador.py" >> "$LOG" 2>&1
+STATUS=$?
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Pipeline finalizado (exit code $STATUS)." >> "$LOG"
+exit $STATUS
