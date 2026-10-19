@@ -1,273 +1,824 @@
-# Agente de Performance Guará — Correções 16/10/2026
+PLACEHOLDER_CONTENT![Python](https://img.shields.io/badge/Python-3.12-blue) ![FastAPI](https://img.shields.io/badge/FastAPI-0.111-green) ![Slack](https://img.shields.io/badge/Slack-Bolt-purple) ![Claude](https://img.shields.io/badge/Claude-Haiku_4.5-orange)
 
-Documentação técnica das correções implementadas em 16/10/2026 no pipeline de dados do Agente de Performance Guará (Source OF + POD Kombucha).
+> Agente de IA para análise de performance de campanhas de marketing digital.
+> Responde perguntas em linguagem natural via Slack, sincroniza dados de Meta Ads, Google Ads e Shopify, e publica relatórios automáticos no Notion.
 
----
-
-## Sumário
-
-1. [Classificação UTM Meta](#1-classificação-utm-meta)
-2. [NULL → 0 no funil de sessões Shopify](#2-null--0-no-funil-de-sessões-shopify)
-3. [Flag bot_suspect — detecção robusta e não-regressão](#3-flag-bot_suspect--detecção-robusta-e-não-regressão)
-4. [Filtro `spend > 0` removido do loader Meta](#4-filtro-spend--0-removido-do-loader-meta)
-5. [Reprocessamento BQ POD Kombucha (61 dias)](#5-reprocessamento-bq-pod-kombucha-61-dias)
-6. [Testes](#6-testes)
+**Servidor:** AWS EC2 `44.204.251.251` · **Porta:** `8001` · **Serviço:** `agente-guara.service`
 
 ---
 
-## 1. Classificação UTM Meta
+## 📋 Índice
 
-### Problema
-
-O BigQuery contava **361 pedidos Meta** na Sem38 da POD Kombucha (14–20/set/2026), enquanto o CSV do Gerenciador de Anúncios indicava **334**. Diferença: 27 pedidos.
-
-**Causa raiz:** a função `_classificar_utm` em `shopify/sync.py` concatenava `utm_source`, `utm_medium`, `landing_site` e `referring_site` num único campo `combined` sem hierarquia. Isso fazia com que pedidos vindos do **ManyChat** — tráfego orgânico de DM — fossem classificados como Meta, porque o `referring_site` continha referência do Facebook (`l.facebook.com`).
-
-Distribuição dos 27 pedidos extras identificados:
-
-| Causa | Qtd |
-|---|---|
-| `utm_source=manychat` com `referring_site` do Facebook | 23 |
-| `utm_source` vazio, `landing_site` com `utm_source=google` (mal classificado como Meta) | 3 |
-| `utm_source` vazio, `landing_site` com facebook (legítimo, mantido) | 1 |
-
-### Solução
-
-Lógica **hierárquica** em `_classificar_utm`:
-
-```
-1. utm_source → critério primário
-   - "manychat", "klaviyo", "email", "revi" → outros (bloco explícito)
-   - "facebook", "instagram", "fb", "meta", "ig" → meta
-   - "google", "gclid", "cpc", "pmax" → google
-
-2. utm_medium → segundo critério (utm_source vazio ou não reconhecido)
-
-3. landing_site / referring_site → fallback APENAS quando utm_source = ""
-   (evita que ManyChat com referring do Facebook seja contado como Meta)
-```
-
-**Arquivo:** `shopify/sync.py` — função `_classificar_utm` (linha ~191)
-
-### Resultado
-
-| Métrica | Antes | Depois |
-|---|---|---|
-| Pedidos Meta Sem38 POD (BQ) | 361 | 334 ✅ |
-| Diferença vs CSV | +27 | 0 ✅ |
+1. [Visão Geral](#-visão-geral)
+2. [Arquitetura do Sistema](#-arquitetura-do-sistema)
+3. [Clientes Atendidos](#-clientes-atendidos)
+4. [Subagentes de IA](#-subagentes-de-ia)
+5. [Fluxo de Dados (Sync)](#-fluxo-de-dados-sync)
+6. [Fluxo de Consulta (Slack → Resposta)](#-fluxo-de-consulta-slack--resposta)
+7. [Interface Slack](#-interface-slack)
+8. [Módulo de Relatórios](#-módulo-de-relatórios)
+9. [Base de Conhecimento (Notion KB)](#-base-de-conhecimento-notion-kb)
+10. [Banco de Dados e Warehouse](#-banco-de-dados-e-warehouse)
+11. [API REST](#-api-rest)
+12. [Serviços Systemd e Crons](#️-serviços-systemd-e-crons)
+13. [Estrutura de Diretórios](#-estrutura-de-diretórios)
+14. [Variáveis de Ambiente](#-variáveis-de-ambiente)
+15. [Como Rodar Localmente](#-como-rodar-localmente)
+16. [Testes](#-testes)
 
 ---
 
-## 2. NULL → 0 no funil de sessões Shopify
+## 🎯 Visão Geral
 
-### Problema
+O **Agente de Performance Guará** é um sistema de análise de marketing digital com IA, desenvolvido pela Guará Marketing para atender múltiplos clientes. O agente:
 
-As colunas `sessoes_com_carrinho`, `sessoes_checkout` e `sessoes_compra` chegavam como `NULL` no BQ em dias onde o valor era zero. Exemplo real (POD, 06/10):
+- **Responde perguntas em linguagem natural** via Slack (ex: *"qual campanha teve melhor ROAS essa semana?"*)
+- **Sincroniza automaticamente** dados de Meta Ads, Google Ads e Shopify via APIs
+- **Gera relatórios** diários, semanais e mensais publicados no Notion
+- **Detecta automaticamente** o cliente pelo canal do Slack ou pelo contexto da pergunta
+- **Armazena histórico** em SQLite local + espelha no BigQuery para dashboards (Looker Studio)
 
-```
-sess=2343  cart=NULL  checkout=NULL  compra=NULL
-```
+### Stack Tecnológica
 
-**Impacto:** `NULL` e `0` têm semânticas diferentes:
-- `NULL` = dado ausente (API não retornou)
-- `0` = dado presente, valor real é zero
-
-Relatórios e médias calculados sobre colunas com `NULL` produzem resultados incorretos (o BQ ignora `NULL` em `AVG`, `SUM`, etc.).
-
-**Causa:** o código em `scripts/sync_shopify_sessions.py` usava `int(...) or None`, transformando qualquer zero em `None`:
-
-```python
-# ANTES (bugado)
-carrinho = int(r.get("sessions_with_cart_additions") or 0) or None
-```
-
-### Solução
-
-```python
-# DEPOIS (correto)
-carrinho = int(r.get("sessions_with_cart_additions") or 0)
-```
-
-**Arquivo:** `scripts/sync_shopify_sessions.py` — função `buscar_sessoes`
-
-### Observação sobre POD Kombucha
-
-A POD usa checkout fora do Shopify nativo. O `sessions_that_reached_checkout` e `sessions_that_completed_checkout` retornam valores muito baixos (1–3/dia) porque o ShopifyQL só registra o funil do checkout nativo. Os valores gravados são os valores reais da API — não é bug de carga. Para análise de conversão da POD, usar `pedidos_criados`.
+| Camada | Tecnologia |
+|--------|-----------|
+| API / Servidor | FastAPI + Uvicorn (Python 3.12) |
+| Interface Slack | Slack Bolt (async) |
+| LLM Principal | Google Gemini (`GEMINI_API_KEY`) |
+| LLM Fallback | Anthropic Claude Haiku 4.5 |
+| Banco Operacional | SQLite (por cliente/plataforma) |
+| Motor Analítico | DuckDB + Parquet (warehouse local) |
+| Espelho Analítico | BigQuery (Google Cloud) |
+| Relatórios | Notion API |
+| Infraestrutura | AWS EC2 Ubuntu + systemd |
 
 ---
 
-## 3. Flag `bot_suspect` — detecção robusta e não-regressão
+## 🏗️ Arquitetura do Sistema
 
-### Problema
+```mermaid
+graph TB
+    subgraph SLACK["💬 Interface Slack"]
+        U[Usuário] -->|"@menção / DM / Slash command"| SB[Slack Bolt Handler]
+    end
 
-O dia **08/10/2026 da Source OF** teve **8.923 sessões** (mediana histórica: ~1.500/dia) — claramente um pico de bot. A flag `is_bot_suspect` estava chegando como `0` no BQ por dois motivos:
+    subgraph AGENT["🤖 Núcleo de IA"]
+        SB --> ENG[engine.consultar]
+        ENG --> CACHE{Cache Hit?}
+        CACHE -->|"Sim"| RESP
+        CACHE -->|"Não"| NLP[NLP - Claude/Gemini]
+        NLP -->|"intents + params"| ORCH[OrchestratorAgent]
+        ORCH --> ANAL[AnalysisAgent]
+        ORCH --> VAL[ValidationAgent]
+        ANAL --> QUERIES["queries/* (40+ intents)"]
+        QUERIES --> DB_FED[DuckDB Federado]
+        ANAL --> ENRICH[Enriquecimento]
+        ENRICH -->|"delta WoW/MoM"| COMP[Comparatives]
+        ENRICH -->|"receita real"| SHOP_Q[Shopify Query]
+        VAL --> CONF[Confidence Score]
+        CONF --> LLM[Claude / Gemini]
+        LLM --> RESP[Resposta Formatada]
+        RESP --> SB
+    end
 
-**Motivo 1 — Janela curta:** o sync diário busca os últimos 8 dias. Ao detectar bots, a mediana era calculada só com esses 8 dias — e quando o pico estava dentro da janela, a mediana subia junto, reduzindo o contraste.
+    subgraph DATA["🗄️ Camada de Dados"]
+        DB_FED --> SQLite_SOF["SQLite\nsource_of/*"]
+        DB_FED --> SQLite_POD["SQLite\npod_kombucha/*"]
+        DB_FED --> SQLite_BOT["SQLite\nbotica/*"]
+        DB_FED --> PARQUET["Parquet Warehouse\n(histórico 2024–hoje)"]
+    end
 
-**Motivo 2 — Sem proteção de não-regressão:** uma recarga do mesmo período sobrescrevia `is_bot_suspect=1` com `0` se o algoritmo não detectasse o pico naquela execução.
+    subgraph SYNC["🔄 Sync de APIs (Cron/Timer)"]
+        META_API["Meta Ads API"] -->|"sync_meta_diario.py"| SQLite_SOF
+        META_API -->|"sync_meta_diario.py"| SQLite_POD
+        META_API -->|"sync_meta_diario.py"| SQLite_BOT
+        GADS_API["Google Ads API"] -->|"sync_gads_diario.py"| SQLite_SOF
+        GADS_API -->|"sync_gads_diario.py"| SQLite_POD
+        SHOP_API["Shopify API"] -->|"cron_shopify_sync.py"| SQLite_SOF
+        SHOP_API -->|"cron_shopify_sync.py"| SQLite_POD
+        SHOP_API -->|"cron_shopify_sync.py"| SQLite_BOT
+        SQLite_SOF -->|"bq_writer.py dual-write"| BQ[(BigQuery)]
+    end
 
-### Solução
+    subgraph NOTION["📓 Notion"]
+        RESP_REL[Relatório] -->|"builder_semanal/mensal"| NOTION_API[Notion API]
+        NOTION_API --> KB[Knowledge Base]
+        NOTION_API --> HIST[Histórico de Relatórios]
+    end
 
-**Correção 1 — Contexto histórico:** antes de rodar a detecção, buscar 21 dias extras de contexto histórico da API, garantindo que a mediana seja calculada com dados estáveis anteriores ao período de interesse.
-
-```python
-# Busca 21 dias de contexto antes do período
-ctx_start = date_start - timedelta(days=21)
-ctx_rows = buscar_sessoes(store, token, ctx_start, date_end)
-ctx_rows = _detectar_bots(ctx_rows, janela_dias=14, fator=3.0)
-
-# Filtra só os dias do período solicitado para gravar
-rows = [r for r in ctx_rows if r["data"] in periodo]
+    SB -->|"/relatorio"| RESP_REL
 ```
-
-**Correção 2 — Não-regressão:** consultar o SQLite antes de gravar e preservar qualquer `is_bot_suspect=1` já existente.
-
-```python
-# Lê flags já gravadas
-cur = conn.execute(f"SELECT data FROM {tabela} WHERE is_bot_suspect = 1")
-already_flagged = {row[0] for row in cur.fetchall()}
-
-# Preserva — nunca regride para 0
-for r in rows:
-    if r["data"] in already_flagged:
-        r["is_bot_suspect"] = 1
-```
-
-**Arquivo:** `scripts/sync_shopify_sessions.py` — função `sync_cliente`
-
-### Resultado
-
-| Data | Sessões | `is_bot_suspect` antes | depois |
-|---|---|---|---|
-| 2026-10-08 SO | 8.923 | 0 ❌ | 1 ✅ |
-| Outros dias SO | ~1.500–2.300 | 0 ✅ | 0 ✅ |
 
 ---
 
-## 4. Filtro `spend > 0` removido do loader Meta
+## 👥 Clientes Atendidos
 
-### Problema
+O sistema atende múltiplos clientes, configurados em `clientes.json`. Cada cliente tem suas próprias contas de API, tabelas SQLite isoladas e prompts personalizados.
 
-A query de insights da Meta Ads tinha um filtro `spend > 0` que excluía linhas de anúncios sem gasto no dia. Anúncios pausados continuam recebendo **atribuições de conversão** pela janela de 7 dias de clique — e essas conversões estavam sendo descartadas silenciosamente.
+| Emoji | Cliente | Meta Ads | Google Ads | Shopify | Relatório |
+|-------|---------|----------|-----------|---------|-----------|
+| 🔵 | **Source OF** | ✅ `act_1059884...` | ✅ `4311260590` | ✅ | Diário + Semanal + Mensal |
+| 🟢 | **POD Kombucha** | ✅ `act_324906...` | ✅ `6123672195` | ✅ | Semanal + Mensal |
+| 🟠 | **Botica Ouro Preto** | ✅ `act_512078...` | ❌ | ✅ | Semanal + Mensal |
 
-**Caso identificado:** campanha `Guara_Teste_Verticais` (05–11/10):
-- `Est_Kit_Produto_Foto_SemAlcool_Oferta_140727_V7`: Meta=25, BQ=24 (−1)
-- `Vid_Kit_Rafa_Talking_Promocao_Oferta_160926_30s_V02`: Meta=13, BQ=11 (−2)
+### Detecção automática de cliente
 
-**Arquivo:** `meta_ads/loader.py`
+```mermaid
+flowchart LR
+    Q[Pergunta do usuário] --> NLP_DET{NLP detectou\nclient_key?}
+    NLP_DET -->|"Sim"| USE_NLP[Usa cliente do NLP]
+    NLP_DET -->|"Não"| CANAL{Canal Slack\ntem cliente?}
+    CANAL -->|"Sim"| USE_CANAL[Usa cliente do canal]
+    CANAL -->|"Não"| SEG[Modo Segmentado\nretorna seções por cliente]
+```
 
 ---
 
-## 5. Reprocessamento BQ POD Kombucha (61 dias)
+## 🤖 Subagentes de IA
 
-Após a correção da classificação UTM, reprocessados os 61 dias da POD no BQ (28/jun → 16/out/2026) para aplicar a nova lógica em todo o histórico.
+O sistema é composto por múltiplos agentes especializados que se comunicam em cadeia:
 
+### Diagrama de Agentes
+
+```mermaid
+graph TD
+    subgraph ENTRADA["Entrada"]
+        SLACK_MSG[Mensagem Slack] --> ENGINE["engine.consultar()"]
+    end
+
+    subgraph ORQUESTRADOR["1️⃣ OrchestratorAgent\nagent/orchestrator/agent.py"]
+        ENGINE --> OA_CACHE{Cache?}
+        OA_CACHE -->|Hit| OA_RET[Retorna cache]
+        OA_CACHE -->|Miss| OA_NLP[Chama NLP]
+        OA_NLP --> OA_DET[Detecta cliente/plataforma]
+        OA_DET --> OA_DELEGA[Delega para AnalysisAgent]
+        OA_DELEGA --> OA_ENRICH[Enriquece resultado]
+        OA_ENRICH --> OA_CONF[Calcula Confidence Score]
+        OA_CONF --> OA_CACHE_W[Salva cache]
+    end
+
+    subgraph NLP_AGENT["2️⃣ NLP Agent\nagent/nlp.py"]
+        OA_NLP --> NLP_PROMPT[Monta prompt com few-shots]
+        NLP_PROMPT --> LLM_NLP[Claude / Gemini]
+        LLM_NLP --> NLP_PARSE[Parseia JSON]
+        NLP_PARSE -->|"intents[]"| NLP_OUT1[Intenções]
+        NLP_PARSE -->|"campanha"| NLP_OUT2[Campanha]
+        NLP_PARSE -->|"data_inicio/fim"| NLP_OUT3[Período]
+        NLP_PARSE -->|"cliente_key"| NLP_OUT4[Cliente]
+    end
+
+    subgraph ANALYSIS["3️⃣ AnalysisAgent\nagent/analysis_agent.py"]
+        OA_DELEGA --> AA_MAP[Mapeia intent → query]
+        AA_MAP --> AA_EXEC["queries/*.py\n(40+ funções)"]
+        AA_EXEC --> AA_DELTA[Enrich: Delta WoW/MoM]
+        AA_DELTA --> AA_SHOP[Enrich: Shopify real revenue]
+        AA_SHOP --> AA_SQL{Dados vazios?}
+        AA_SQL -->|"Sim"| AA_DYNASQL[SQL Dinâmico\nsql_generator.py]
+        AA_SQL -->|"Não"| AA_RET[Retorna dados]
+        AA_DYNASQL --> AA_RET
+    end
+
+    subgraph VALIDATION["4️⃣ ValidationAgent\nagent/validation_agent.py"]
+        OA_ENRICH --> VA_CHECK[Verifica sanidade\n(zero LLM)]
+        VA_CHECK --> VA_ERROS{Erros?}
+        VA_ERROS -->|"Sim"| VA_WARN[Injeta avisos no meta]
+        VA_ERROS -->|"Não"| VA_OK[OK]
+    end
+
+    subgraph LLM_RESP["5️⃣ LLM Client\nagent/claude_client.py"]
+        OA_CONF --> LLM_PRIM{Gemini\ndisponível?}
+        LLM_PRIM -->|"Sim"| GEMINI[Google Gemini]
+        LLM_PRIM -->|"Não"| CLAUDE[Claude Haiku 4.5]
+        GEMINI --> LLM_FORMAT[Formata resposta\nem Markdown/Slack]
+        CLAUDE --> LLM_FORMAT
+    end
 ```
-Período reprocessado: 2026-06-28 → 2026-10-16
-Pedidos lidos: 4.486 pagos | 5.113 criados
-Receita total: R$ 1.202.204,81
-Linhas BQ: 61 (MERGE OK)
-```
 
-Validação Sem38 pós-reprocessamento:
+### Descrição detalhada de cada agente
 
-| Data | Meta | Google | Outros |
-|---|---|---|---|
-| 2026-09-14 | 51 | 9 | 22 |
-| 2026-09-15 | 47 | 10 | 27 |
-| 2026-09-16 | 43 | 9 | 39 |
-| 2026-09-17 | 49 | 6 | 30 |
-| 2026-09-18 | 46 | 10 | 31 |
-| 2026-09-19 | 51 | 6 | 28 |
-| 2026-09-20 | 47 | 7 | 40 |
-| **Total** | **334** ✅ | **57** | **217** |
+#### 1. OrchestratorAgent (`agent/orchestrator/agent.py`)
+Agente orquestrador principal, ativado quando `MULTI_AGENT=1`. Coordena todo o fluxo:
+- Recebe a pergunta em linguagem natural
+- Verifica cache (retorno imediato se hit)
+- Aciona o NLP para extrair intents, campanha, datas e cliente
+- Detecta o cliente via: NLP > canal Slack > modo segmentado
+- Delega para o `AnalysisAgent` executar as queries
+- Enriquece o resultado com delta (período anterior) e dados Shopify
+- Calcula score de confiança da resposta
+- Salva resultado no cache e atualiza preferências do usuário
+
+#### 2. AnalysisAgent (`agent/analysis_agent.py`)
+Agente executor de análises. Mapeia **40+ intents** para funções SQL específicas:
+- `resumo_geral` → `queries.resumo_por_campanha()`
+- `top_roas` → `queries.top_campanhas_roas()`
+- `alertas_roas` → `queries.alertas_roas_baixo()`
+- `funil` → `queries.metricas_funil()`
+- `evolucao_diaria` → `queries.evolucao_diaria()`
+- `comparar` → `comparar_campanhas_detalhado()`
+- `projecao_mes` → `queries.projecao_fechamento_mes()`
+- ... e mais 30+ intents mapeados
+
+Também executa **SQL dinâmico** via `sql_generator.py` para perguntas ad-hoc com filtros numéricos.
+
+#### 3. ValidationAgent (`agent/validation_agent.py`)
+Validação de sanidade dos dados **sem uso de LLM** (custo zero):
+- Verifica se os dados fazem sentido (ROAS negativo, datas inválidas, etc.)
+- Retorna lista de erros e avisos
+- Injeta metadados de validação no prompt para o Claude/Gemini ter contexto
+
+#### 4. NLP (`agent/nlp.py`)
+Motor de interpretação de linguagem natural:
+- **Primary:** Claude Haiku via Anthropic API
+- **Fallback local:** regex + sinônimos (`synonyms.py`)
+- Usa **few-shot examples** no prompt para maior precisão
+- Cache de resultados NLP por pergunta normalizada
+- Retry automático em caso de JSON inválido (até 2 tentativas)
+- Extrai: `intents[]`, `campanha`, `data_inicio`, `data_fim`, `cliente_key`, `plataforma`, `limit`
+
+#### 5. LLM Client (`agent/claude_client.py`)
+Cliente unificado para geração de respostas:
+- **Primary:** Google Gemini (`GEMINI_API_KEY`) — mais barato
+- **Fallback:** Anthropic Claude Haiku 4.5 (`ANTHROPIC_API_KEY`)
+- Função `gerar_resposta()` monta o prompt com dados brutos + contexto da thread + KB aprovada
+- Resposta formatada em Markdown compatível com Slack Blocks
 
 ---
 
-## 6. Testes
+## 🔄 Fluxo de Dados (Sync)
 
-Os testes estão em `tests/test_correcoes_16_10.py` — **45 testes, todos passando**.
+Os dados são coletados automaticamente das APIs e armazenados em SQLite local. Um mecanismo de **dual-write** espelha os dados no BigQuery em paralelo.
 
+```mermaid
+sequenceDiagram
+    participant CRON as Cron / Timer systemd
+    participant LOADER as loader.py
+    participant API as API Externa<br/>(Meta/Google/Shopify)
+    participant SQLITE as SQLite Local
+    participant BQ as BigQuery
+    participant PARQUET as Parquet Warehouse
+
+    CRON->>LOADER: Dispara sync (diário/semanal)
+    LOADER->>API: Requisição (últimos 8 dias)
+    API-->>LOADER: Dados de campanhas/receita
+    LOADER->>SQLITE: INSERT/UPSERT (síncrono, primário)
+    SQLITE-->>LOADER: OK
+    LOADER->>BQ: MERGE (assíncrono, dual-write)
+    Note over BQ: Falha silenciosa — não bloqueia
+    BQ-->>LOADER: OK (ou erro silencioso)
+    LOADER->>SQLITE: Registra em cron_runs
+    CRON->>PARQUET: ETL: SQLite → Parquet (semanal)
 ```
-pytest tests/test_correcoes_16_10.py -v
-45 passed in 0.10s
-```
 
-### Grupo 1 — Classificação UTM (15 testes)
+### Estratégia de Merge no BigQuery
 
-| Teste | Cenário |
-|---|---|
-| `test_manychat_e_outros` | ManyChat → outros |
-| `test_manychat_com_referring_facebook_e_outros` | ManyChat + referring FB → outros (não meta) |
-| `test_manychat_com_landing_facebook_e_outros` | ManyChat + landing FB → outros |
-| `test_facebook_e_meta` | utm_source=facebook → meta |
-| `test_instagram_e_meta` | utm_source=instagram → meta |
-| `test_facebook_ads_e_meta` | utm_source=facebook ads → meta |
-| `test_fb_abreviado_e_meta` | utm_source=fb → meta |
-| `test_meta_literal_e_meta` | utm_source=meta → meta |
-| `test_google_e_google` | utm_source=google → google |
-| `test_google_ads_e_google` | utm_source=google ads → google |
-| `test_klaviyo_e_outros` | klaviyo → outros |
-| `test_email_e_outros` | email → outros |
-| `test_revi_e_outros` | revi → outros |
-| `test_sem_utm_source_com_landing_facebook_e_meta` | fallback legítimo via landing |
-| `test_sem_utm_source_sem_sinal_e_outros` | sem sinal nenhum → outros |
+Para evitar duplicatas (o sync roda a cada ciclo), o BigQuery usa **MERGE (upsert)**:
 
-### Grupo 2 — Funil de Sessões NULL→0 (15 testes)
+| Plataforma | Chave de Merge |
+|-----------|----------------|
+| Meta Ads | `cliente + plataforma + data + campaign_id + adset_id + ad_id` |
+| Google Ads | `cliente + plataforma + data + campaign_id` |
+| Shopify | `cliente + data` |
 
-| Teste | Cenário |
-|---|---|
-| `test_dia_sem_carrinho_e_zero_nao_null` | 0 carrinho ≠ NULL |
-| `test_dia_sem_checkout_e_zero_nao_null` | 0 checkout ≠ NULL |
-| `test_dia_sem_compra_e_zero_nao_null` | 0 compra ≠ NULL |
-| `test_campo_ausente_na_api_e_zero` | campo ausente → 0 |
-| `test_campo_none_na_api_e_zero` | campo None → 0 |
-| `test_valor_real_preservado` | valores reais não zerados |
-| `test_conversao_arredondada_6_casas` | taxa_conversao com 6 casas decimais |
-| `test_zero_sessoes_sem_erro` | 0 sessões não quebra |
-| `test_tipo_int_carrinho` | tipo int garantido |
-| `test_tipo_int_checkout` | tipo int garantido |
-| `test_tipo_int_compra` | tipo int garantido |
-| `test_taxa_zero_quando_sem_conversao` | conversão 0 → 0.0 |
-| `test_taxa_none_vira_zero` | conversão None → 0.0 |
-| `test_funil_completo_sem_null` | nenhum campo do funil é None |
-| `test_string_vazia_vira_zero` | string vazia → 0 |
+> **Por que chaves diferentes?** O Meta Ads rastreia no nível de anúncio individual (`ad_id`). O Google Ads reporta no nível de campanha — `ad_id` e `adset_id` chegam como `NULL`, e `NULL = NULL` retorna `FALSE` em SQL.
 
-### Grupo 3 — Bot Suspect (15 testes)
+### Frequência de Sync
 
-| Teste | Cenário |
-|---|---|
-| `test_pico_detectado` | 3× mediana → is_bot_suspect=1 |
-| `test_dias_normais_nao_marcados` | dias estáveis → 0 |
-| `test_primeiros_tres_dias_sem_contexto_nao_marcados` | <3 dias de contexto → sem marcação |
-| `test_fator_customizavel` | fator=2.0 detecta picos menores |
-| `test_pico_abaixo_do_fator_nao_marcado` | 2.5× com fator=3.0 → não marca |
-| `test_apenas_um_dia_suspeito_em_multiplos_picos` | dois picos detectados independentemente |
-| `test_nao_regride_flag_ja_gravada` | flag 1 preservada em recarga |
-| `test_nao_regride_nao_afeta_dias_nao_flagged` | não-regressão não afeta dias normais |
-| `test_campo_is_bot_suspect_presente_em_todos_os_rows` | campo presente em todos |
-| `test_is_bot_suspect_e_inteiro` | tipo 0 ou 1 (não bool) |
-| `test_janela_14_dias_usa_apenas_dias_anteriores` | janela não olha para frente |
-| `test_pico_isolado_nao_contamina_mediana_futura` | pico não afeta dias seguintes |
-| `test_sem_rows_retorna_lista_vazia` | lista vazia → [] |
-| `test_rows_com_mediana_zero_nao_marca` | mediana=0 → não marca |
-| `test_08_out_so_detectado_com_contexto_historico` | replica cenário real 08/10 SO |
+| Fonte | Script | Frequência | Janela |
+|-------|--------|-----------|--------|
+| Meta Ads | `sync_meta_diario.py` | Diário (timer) | Últimos 8 dias |
+| Google Ads | `sync_gads_diario.py` | Diário (timer) | Últimos 8 dias |
+| Shopify (Source OF) | `cron_shopify_sync.py` | Diário às 09h30 BRT | Últimos 8 dias |
+| Shopify (POD / Botica) | `cron_shopify_sync.py` | Diário às 09h30 BRT | Últimos 8 dias |
+| Meta Ads (totais semanais) | `sync_meta_semanal.py` | Segunda 06h BRT | Semana anterior |
+| ETL Warehouse | `etl_warehouse.py` | Semanal | Mês corrente |
 
 ---
 
-## Pendências (pós 16/10)
+## 💬 Fluxo de Consulta (Slack → Resposta)
 
-| Item | Status |
-|---|---|
-| `meta_campaign_totals` Sem42 | ⏰ automático segunda 19/10 às 06h BRT |
-| Decimais Google + recálculo 14–30 dias | 🔜 após validação do `spend > 0` removido |
-| Snapshot físico novos clientes (tabela imutável) | 🔜 a definir se necessário além da view |
+```mermaid
+sequenceDiagram
+    participant U as Usuário Slack
+    participant SB as Slack Bolt Handler
+    participant ENG as engine.consultar()
+    participant CACHE as Cache
+    participant NLP as NLP (Claude/Regex)
+    participant ORCH as OrchestratorAgent
+    participant DB as DuckDB Federado
+    participant LLM as Gemini / Claude
+    participant NOTION as Notion KB
+
+    U->>SB: @agente qual campanha tem\nmelhor ROAS essa semana?
+    SB->>SB: ACK imediato (< 3s)
+    SB->>SB: Reage com ⏳
+    SB->>ENG: consultar(texto, channel, thread_ts)
+    ENG->>CACHE: get(pergunta)
+    alt Cache hit
+        CACHE-->>ENG: resultado cacheado
+    else Cache miss
+        ENG->>NLP: interpretar(pergunta)
+        NLP-->>ENG: {intents:[top_roas], data_inicio, data_fim}
+        ENG->>ORCH: consultar(params)
+        ORCH->>ORCH: Detecta cliente pelo canal/NLP
+        ORCH->>DB: queries.top_campanhas_roas(limit, di, df)
+        DB-->>ORCH: [{campanha, roas, invest, compras}]
+        ORCH->>ORCH: Enrich: delta vs semana anterior
+        ORCH->>ORCH: Enrich: receita Shopify real
+        ORCH->>ORCH: ValidationAgent.validate()
+        ORCH->>ORCH: calcular_confianca()
+        ORCH->>CACHE: set(pergunta, resultado)
+        ENG-->>SB: resultado
+    end
+    SB->>NOTION: buscar KB aprovada (intent=top_roas)
+    NOTION-->>SB: exemplos aprovados
+    SB->>LLM: gerar_resposta(dados + contexto + KB)
+    LLM-->>SB: resposta formatada Markdown
+    SB->>U: Posta no thread Slack
+    SB->>SB: Remove ⏳, salva histórico
+    SB->>NOTION: salva resposta como PENDENTE
+```
 
 ---
 
-## Commits desta sprint
+## 🔧 Interface Slack
+
+### Slash Commands
+
+| Comando | Descrição | Exemplo |
+|---------|-----------|---------|
+| `/hoje` | Resumo do dia atual | `/hoje` |
+| `/semana` | Resumo dos últimos 7 dias | `/semana` |
+| `/mes [período]` | Resumo mensal | `/mes junho` · `/mes 2026-05` |
+| `/top [n] [roas\|compras]` | Top campanhas por métrica | `/top 5 roas` · `/top 3 compras` |
+| `/campanha <nome>` | Performance de uma campanha | `/campanha ABO` |
+| `/alertas` | Campanhas com ROAS ruim | `/alertas` |
+| `/funil [campanha]` | Funil de conversão | `/funil` · `/funil Advantage` |
+| `/compare <A> vs <B>` | Comparação entre campanhas | `/compare ABO vs Advantage` |
+| `/relatorio [opts]` | Gera e publica no Notion | `/relatorio` · `/relatorio pod` · `/relatorio mes` |
+| `/pod [arg]` | Consultas POD Kombucha | `/pod status` · `/pod essa semana` |
+| `/campanhas` | Lista todas as campanhas | `/campanhas` |
+| `/status` | Status do sistema | `/status` |
+| `/kb` | Base de conhecimento | `/kb` |
+| `/exemplos` | Exemplos de perguntas | `/exemplos` |
+| `/metricas` | Métricas disponíveis | `/metricas` |
+| `/cache-limpar` | Limpa cache de respostas | `/cache-limpar` |
+| `/ajuda` | Ajuda geral | `/ajuda` |
+
+### Perguntas em linguagem natural
+
+O agente entende perguntas naturais em português via `@menção` ou DM:
 
 ```
-9bcdadd fix(sessions): 0 em vez de NULL para funil; bot_suspect com contexto histórico + preserva flag já gravada
-36b993d fix(utm): reprocessamento BQ POD 61 dias — manychat/outros fora do Meta, Sem38 334 OK
+@agente qual campanha teve melhor ROAS essa semana?
+@agente compara ABO vs Advantage em junho
+@agente tem alguma campanha gastando sem converter?
+@agente gera relatório semanal em Excel e Notion
+@agente projeção de fechamento do mês
+@agente top 5 por compras no mês passado
 ```
+
+### Eventos Slack
+
+| Evento | Handler | Ação |
+|--------|---------|------|
+| `app_mention` | `handle_mention` | Processa @menção, detecta exportação, responde no thread |
+| `message` (DM) | `handle_dm` | Processa DM, mesmo fluxo da menção |
+| `reaction_added` (👍) | `handle_reaction` | Aprova entrada na Knowledge Base |
+
+---
+
+## 📊 Módulo de Relatórios
+
+O sistema gera relatórios automáticos e publica no Notion. Os relatórios são disparados por slash command ou por timers systemd.
+
+```mermaid
+flowchart TD
+    TRIGGER["Gatilho\n(/relatorio ou timer)"] --> TIPO{Tipo?}
+
+    TIPO -->|"Semanal Source OF"| BSS["builder_semanal.py\ngerar_relatorio_semanal()"]
+    TIPO -->|"Semanal POD"| BSP["builder_pod.py\ngerar_relatorio_semanal_pod()"]
+    TIPO -->|"Mensal"| BM["builder_mensal.py\ngerar_relatorio_mensal()"]
+    TIPO -->|"Diário"| BD["builder_diario.py\ngerar_relatorio_diario()"]
+
+    BSS --> SHARED["builder_shared.py\nblocos compartilhados"]
+    BSP --> SHARED
+    BM --> SHARED
+    BD --> SHARED
+
+    SHARED --> BLOCOS["Blocos Notion\n- Resumo geral\n- Top campanhas\n- Alertas\n- Funil\n- Comparativos\n- Próximos passos"]
+
+    BLOCOS --> NOTION_PUB["notion/relatorio.py\npublicar_relatorio_campanha()"]
+    NOTION_PUB --> NOTION_HIST["notion/historico.py\ncriar_relatorio_no_historico()"]
+    NOTION_HIST --> NOTION_DB["Notion Database\n(Histórico de Relatórios)"]
+
+    BLOCOS --> SLACK_RESUMO["Slack\nResumo de 3 linhas\n+ link Notion"]
+```
+
+### Estrutura de um relatório Semanal
+
+| Seção | Conteúdo |
+|-------|---------|
+| 📋 Resumo Geral | Investimento, Receita, ROAS, Compras totais |
+| 🏆 Top Campanhas | Ranking por ROAS e por compras |
+| 🚨 Alertas | Campanhas com ROAS abaixo do mínimo |
+| 🔻 Funil | Impressões → Cliques → Carrinho → Compra |
+| 📈 Comparativo | Semana atual vs semana anterior (delta %) |
+| 🛒 Shopify | Receita real, ROAS real, ticket médio, recompra |
+| 📅 Visão Diária | Breakdown dia a dia da semana |
+| 🎯 Próximos Passos | Recomendações geradas pelo LLM |
+
+---
+
+## 🧠 Base de Conhecimento (Notion KB)
+
+O agente aprende com o tempo através de um sistema de aprovação por reação no Slack.
+
+```mermaid
+sequenceDiagram
+    participant U as Usuário
+    participant BOT as Agente Slack
+    participant KB as Notion KB
+    participant LLM as Gemini / Claude
+
+    U->>BOT: Pergunta sobre campanha
+    BOT->>KB: buscar entradas aprovadas\n(intent=top_roas, limit=5)
+    KB-->>BOT: exemplos aprovados anteriores
+    BOT->>LLM: prompt + dados + KB context
+    LLM-->>BOT: resposta
+    BOT->>U: Posta resposta no Slack
+    BOT->>KB: salva como PENDENTE\n(aprovado=False)
+
+    Note over U,KB: Usuário curte a resposta
+    U->>BOT: 👍 (reação na mensagem)
+    BOT->>KB: aprovar_entrada(page_id)
+    KB-->>KB: aprovado=True, frequencia++
+    BOT->>U: ✅ (confirma aprovação)
+```
+
+**Database Notion:** `3888a727-a8ff-8163-9753-f7579b8a0bbe`
+
+Cada entrada da KB contém:
+- `intent` — tipo de consulta
+- `pergunta` — pergunta original do usuário
+- `resposta` — resposta gerada pelo bot
+- `aprovado` — `True/False`
+- `frequencia` — quantas vezes foi aprovado
+- `slack_ts` — timestamp da mensagem Slack
+
+---
+
+## 🗄️ Banco de Dados e Warehouse
+
+### Arquitetura em Duas Camadas
+
+```mermaid
+graph LR
+    subgraph WRITE["Escrita (SQLite)"]
+        API_SYNC[Sync APIs] --> SQ1["source_of/\nmeta_ads.db\ngoogle_ads.db\nshopify*.db"]
+        API_SYNC --> SQ2["pod_kombucha/\nmeta_ads.db\ngoogle_ads.db\nshopify*.db"]
+        API_SYNC --> SQ3["botica/\nmeta_ads.db\nshopify*.db"]
+        API_SYNC --> LOGS["logs/\ninbox.db\noutbox.db\nagent.db\ncache.db"]
+    end
+
+    subgraph READ["Leitura Analítica (DuckDB)"]
+        SQ1 --> DDB[DuckDB Federado]
+        SQ2 --> DDB
+        SQ3 --> DDB
+        PARQ["Parquet Warehouse\nfato_ads/\nfato_performance/\nfato_shopify/"] --> DDB
+        DDB --> VIEWS["Views federadas\nv_performance\ncampanhas_unificada\nsource_of_meta_ads_diario\npod_kombucha_gads_diario\n..."]
+    end
+
+    subgraph ANALYTICS["Analytics (BigQuery)"]
+        SQ1 -->|"dual-write"| BQ_ADS[ads_diario]
+        SQ1 -->|"dual-write"| BQ_SHOP[shopify_diario]
+        BQ_ADS --> BQ_VIEWS["Views BQ\nv_performance_mensal\nv_ads_diario\nv_benchmark_mensal"]
+        BQ_VIEWS --> LOOKER[Looker Studio]
+    end
+```
+
+### Warehouse Local (Parquet + DuckDB)
+
+| Tabela | Conteúdo | Partição |
+|--------|---------|---------|
+| `fato_performance/` | Performance consolidada por campanha/dia | Mensal |
+| `fato_ads/` | Dados brutos de anúncios Meta + Google | Mensal |
+| `fato_shopify/` | Receita Shopify por cliente/dia | Mensal |
+| `dim_cliente` | Cadastro de clientes | Estático |
+| `dim_campanha` | Cadastro de campanhas | Cresce devagar |
+| `dim_tempo` | Calendário 2024–2030 | Pré-calculado |
+
+**Histórico disponível:** 2024-01 até o mês corrente
+
+### SQLite Operacional
+
+Cada cliente tem bancos isolados em `data/performance/{cliente}/`:
+
+```
+data/performance/
+├── source_of/
+│   ├── meta_ads.db          # Campanhas Meta Ads Source OF
+│   ├── google_ads.db        # Campanhas Google Ads Source OF
+│   ├── shopify.db           # Sessões Shopify Source OF
+│   └── shopify_receita.db   # Receita diária Shopify Source OF
+├── pod_kombucha/
+│   ├── meta_ads.db
+│   ├── google_ads.db
+│   ├── gads.db
+│   └── shopify_receita.db
+└── botica/
+    ├── meta_ads.db
+    └── shopify_receita.db
+```
+
+---
+
+## 🌐 API REST
+
+Além da interface Slack, o agente expõe uma API REST:
+
+| Método | Endpoint | Descrição |
+|--------|----------|-----------|
+| GET | `/health` | Health check do serviço |
+| POST | `/slack/events` | Webhook Slack Bolt |
+| GET | `/campanhas` | Lista todas as campanhas |
+| POST | `/consulta` | Consulta em linguagem natural |
+| POST | `/sql` | Executa SQL (apenas SELECT) |
+| GET | `/resumo` | Resumo geral |
+| GET | `/top/roas` | Top campanhas por ROAS |
+| GET | `/top/compras` | Top campanhas por compras |
+| GET | `/campanha/{nome}` | Performance de campanha |
+| GET | `/campanha/{nome}/funil` | Funil de conversão |
+| GET | `/alertas/roas` | Alertas de ROAS baixo |
+| GET | `/evolucao` | Evolução diária |
+| POST | `/db/reload` | Recarrega conexão do banco |
+| GET | `/shopify/status` | Status sync Shopify |
+| POST | `/shopify/sync` | Dispara sync Shopify manual |
+| GET | `/shopify/receita` | Receita Shopify |
+| GET | `/shopify/diario` | Receita Shopify por dia |
+
+---
+
+## ⚙️ Serviços Systemd e Crons
+
+### Serviços em execução
+
+| Serviço | Tipo | Status | Função |
+|---------|------|--------|--------|
+| `agente-guara.service` | service | ✅ running | FastAPI na porta 8001 |
+| `guara-relatorio-diario.timer` | timer | ✅ waiting | Dispara relatório diário 12h30 UTC |
+| `guara-relatorio-diario.service` | service | ⚠️ failed | Executa `cron_relatorio.py` |
+| `guara-shopify-sessions.timer` | timer | ✅ waiting | Sync sessões Shopify 12h30 UTC |
+| `guara-meta-semanal.timer` | timer | ✅ waiting | Sync Meta semanal (segunda 09h UTC) |
+| `guara-relatorio-semanal.service` | service | ⚠️ failed | Relatório semanal Notion |
+| `guara-api.service` | service | ✅ running | Guará API auxiliar |
+| `rptn-sync.service` | service | ✅ running | Reportana Shopify sync |
+
+### Crons (`crontab -l`)
+
+| Horário | Script | Função |
+|---------|--------|--------|
+| `30 11 * * *` | `run_relatorio_pod.sh` | Relatório POD Kombucha (08h30 BRT) |
+| `30 19 * * *` | `run_relatorio_pod.sh` | Relatório POD Kombucha (16h30 BRT) |
+
+### Fluxo de timers
+
+```mermaid
+gantt
+    title Agenda diária de jobs (UTC)
+    dateFormat HH:mm
+    axisFormat %H:%M
+
+    section Meta Ads
+    Sync Meta diário         :06:00, 30m
+
+    section Shopify
+    Sync Shopify + Sessões   :12:30, 20m
+
+    section Relatórios
+    Relatório Diário Slack   :12:30, 15m
+    Relatório POD (manhã)    :11:30, 10m
+    Relatório POD (tarde)    :19:30, 10m
+
+    section Backup
+    Backup DB (Flora)        :00:00, 5m
+```
+
+---
+
+## 📁 Estrutura de Diretórios
+
+```
+agente-performance/
+│
+├── main.py                         # Entrypoint FastAPI — porta 8001
+├── clientes.json                   # Registry de clientes e configurações de API
+├── requirements.txt                # Dependências Python
+├── .env                            # Variáveis de ambiente (secrets)
+├── .env.example                    # Template de variáveis
+│
+├── agent/                          # 🤖 Núcleo de IA
+│   ├── engine.py                   # Motor principal: NLP → query → resultado
+│   ├── orchestrator/
+│   │   └── agent.py                # OrchestratorAgent (MULTI_AGENT=1)
+│   ├── analysis_agent.py           # AnalysisAgent: 40+ intents mapeados
+│   ├── base_agent.py               # Interface base para agentes
+│   ├── nlp.py                      # NLP: interpreta pergunta → parâmetros
+│   ├── claude_client.py            # Cliente LLM: Gemini (primary) + Claude (fallback)
+│   ├── cache.py                    # Cache in-memory de respostas
+│   ├── context_store.py            # Histórico de threads Slack
+│   ├── conversation_log.py         # Log de conversas
+│   ├── comparatives.py             # Comparativos WoW, MoM, YoY, antes/depois
+│   ├── confidence.py               # Score de confiança de respostas
+│   ├── validation_agent.py         # Validação de sanidade (zero LLM)
+│   ├── sql_generator.py            # SQL dinâmico para queries ad-hoc
+│   ├── sql_validator.py            # Valida SQL antes de executar
+│   ├── registry.py                 # Registry de segmentos ativos
+│   ├── synonyms.py                 # Sinônimos de períodos (português)
+│   ├── user_prefs.py               # Preferências por usuário Slack
+│   ├── tz.py                       # Timezone BRT (UTC-3)
+│   ├── queries/                    # Módulos de queries SQL por domínio
+│   │   ├── resumo.py               # Resumos gerais e por campanha
+│   │   ├── alertas.py              # Alertas de ROAS baixo e sem conversão
+│   │   ├── criativos.py            # Performance de criativos
+│   │   ├── comparativos.py         # Comparações de período e plataforma
+│   │   ├── evolucao.py             # Evolução diária
+│   │   ├── ranking.py              # Rankings por métricas
+│   │   ├── shopify.py              # Receita Shopify e ROAS real
+│   │   ├── source_of/              # Queries específicas Source OF
+│   │   ├── pod_kombucha/           # Queries específicas POD Kombucha
+│   │   └── botica/                 # Queries específicas Botica
+│   └── clients/                    # Agentes especializados por cliente
+│       ├── base.py
+│       ├── source_of.py
+│       ├── pod.py
+│       ├── botica.py
+│       └── relatorio/              # Builders de relatório por cliente
+│
+├── slack/                          # 💬 Interface Slack
+│   ├── handlers.py                 # Slash commands + eventos app_mention/DM/reaction
+│   ├── responder.py                # _processar_e_responder(): núcleo de resposta
+│   ├── formatter.py                # Markdown → Slack Blocks
+│   ├── poster.py                   # Posta mensagens formatadas
+│   └── helpers.py                  # Utilitários, constantes, AJUDA_TEXTO
+│
+├── api/                            # 🌐 REST API
+│   ├── app.py                      # Endpoints FastAPI
+│   └── relatorio_history.py        # Histórico de relatórios via API
+│
+├── db/                             # 🗄️ Camada de dados
+│   ├── connections.py              # Conexões federadas DuckDB (multi-SQLite)
+│   ├── schema.py                   # DDL — criação de tabelas
+│   ├── duck.py                     # Helpers DuckDB
+│   ├── shopify_sync.py             # Alias para shopify/sync.py
+│   ├── bq_writer.py                # Dual-write para BigQuery
+│   ├── registry.py                 # Registry de DBs por cliente/plataforma
+│   ├── consultas_log.py            # Log de consultas Slack
+│   ├── relatorio_log.py            # Log de relatórios publicados
+│   ├── cron_log.py                 # Log de execuções de cron
+│   ├── sync_alerts.py              # Alertas de sync com falha
+│   ├── slack_log.py                # Log de mensagens Slack
+│   └── views.sql                   # Views DuckDB federadas
+│
+├── meta_ads/                       # 🔵 Meta Ads API
+│   └── loader.py                   # Coleta e salva dados Meta Ads
+│
+├── google_ads/                     # 🔴 Google Ads API
+│   ├── client.py                   # Cliente Google Ads API
+│   └── loader.py                   # Coleta e salva dados Google Ads
+│
+├── shopify/                        # 🛒 Shopify API
+│   ├── client.py                   # Cliente Shopify base
+│   ├── sync.py                     # Sync Source OF
+│   ├── sync_pod.py                 # Sync POD Kombucha
+│   ├── sync_botica.py              # Sync Botica Ouro Preto
+│   └── abandoned_checkouts.py      # Carrinhos abandonados
+│
+├── notion/                         # 📓 Notion API
+│   ├── client.py                   # Cliente Notion API
+│   ├── relatorio.py                # Publica relatórios como páginas Notion
+│   ├── knowledge_base.py           # Knowledge Base — memória de longo prazo
+│   ├── historico.py                # Histórico de relatórios publicados
+│   └── blocks.py                   # Helpers para blocos Notion
+│
+├── relatorio/                      # 📊 Builders de Relatório
+│   ├── builder_diario.py           # Relatório diário
+│   ├── builder_semanal.py          # Relatório semanal Source OF
+│   ├── builder_mensal.py           # Relatório mensal Source OF
+│   ├── builder_pod.py              # Relatório POD Kombucha
+│   ├── builder_shared.py           # Blocos compartilhados entre builders
+│   ├── insights.py                 # Geração de insights via LLM
+│   ├── regras.py                   # Regras de negócio (impostos, ROAS mínimo)
+│   └── shared/                     # Formatadores e analytics compartilhados
+│
+├── clientes/                       # 🏢 Configs e prompts por cliente
+│   ├── source_of/
+│   │   ├── config.json             # Config Source OF
+│   │   ├── prompts.py              # System prompts personalizados
+│   │   └── relatorio/              # Relatórios específicos
+│   ├── pod/
+│   │   ├── config.json
+│   │   ├── prompts.py
+│   │   └── relatorio/
+│   └── botica/
+│       ├── config.json
+│       └── prompts.py
+│
+├── scripts/                        # 🔄 Scripts de sync e automação
+│   ├── sync_meta_diario.py         # Meta Ads → SQLite (todos os clientes)
+│   ├── sync_gads_diario.py         # Google Ads → SQLite (todos os clientes)
+│   ├── sync_meta_semanal.py        # Sync semanal Meta (campaign_totals)
+│   ├── cron_shopify_sync.py        # Shopify → SQLite + BigQuery
+│   ├── cron_relatorio.py           # Gera relatório e posta no Slack
+│   ├── cron_todos_relatorios.py    # Dispara todos os relatórios
+│   ├── etl_warehouse.py            # ETL: SQLite → Parquet warehouse
+│   ├── dashboard_ingest.py         # Ingest para dashboard
+│   ├── backup_db.sh                # Backup dos bancos SQLite
+│   ├── source_of/
+│   │   ├── cron.py                 # Cron específico Source OF
+│   │   └── relatorio_diario.py     # Relatório diário Source OF
+│   └── pod/
+│       ├── cron.py                 # Cron específico POD
+│       └── relatorio_diario.py     # Relatório diário POD
+│
+├── data/                           # 💾 Dados locais
+│   ├── performance/                # SQLite por cliente/plataforma
+│   │   ├── source_of/
+│   │   ├── pod_kombucha/
+│   │   └── botica/
+│   ├── warehouse/                  # Parquet + DuckDB (histórico)
+│   │   ├── SCHEMA.md
+│   │   ├── dim_*.parquet
+│   │   ├── fato_ads/               # Particionado por mês (2024-01 → atual)
+│   │   ├── fato_performance/       # Particionado por mês
+│   │   └── fato_shopify/           # Particionado por mês
+│   ├── logs/                       # Logs operacionais
+│   ├── backups/                    # Backups automáticos (a cada 3 dias)
+│   └── exports/                    # CSVs exportados
+│
+├── alteracoes/                     # 📝 Log de alterações significativas
+│   └── YYYY-MM-DD_slug.md
+│
+├── docs/                           # 📚 Documentação técnica
+│   ├── ARQUITETURA_DADOS.md
+│   ├── BIGQUERY.md
+│   ├── DATA_WAREHOUSE.md
+│   └── ...
+│
+└── tests/                          # 🧪 Testes
+    ├── test_consultas.py
+    ├── test_metricas.py
+    ├── test_engine_validacao.py
+    ├── test_duck_connection.py
+    └── test_infraestrutura.py
+```
+
+---
+
+## 🔐 Variáveis de Ambiente
+
+Crie o arquivo `.env` na raiz do projeto (veja `.env.example`):
+
+| Variável | Obrigatório | Descrição |
+|----------|-------------|-----------|
+| `SLACK_BOT_TOKEN` | ✅ | Token do bot Slack (`xoxb-...`) |
+| `SLACK_SIGNING_SECRET` | ✅ | Signing secret do app Slack |
+| `ANTHROPIC_API_KEY` | ✅ | Chave da API Anthropic (Claude) |
+| `GEMINI_API_KEY` | ✅ | Chave da API Google Gemini (LLM primário) |
+| `NOTION_API_KEY` | ✅ | Integration token do Notion |
+| `META_ACCESS_TOKEN` | ✅ | Token de acesso Meta Ads (Source OF) |
+| `META_ACCOUNT_ID` | ✅ | ID da conta Meta Ads Source OF |
+| `META_POD_ACCESS_TOKEN` | ✅ | Token Meta Ads POD Kombucha |
+| `META_BOTICA_ACCESS_TOKEN` | ✅ | Token Meta Ads Botica |
+| `GOOGLE_ADS_DEVELOPER_TOKEN` | ✅ | Token de desenvolvedor Google Ads |
+| `GOOGLE_ADS_CLIENT_ID` | ✅ | OAuth Client ID Google Ads |
+| `GOOGLE_ADS_CLIENT_SECRET` | ✅ | OAuth Client Secret Google Ads |
+| `GOOGLE_ADS_REFRESH_TOKEN` | ✅ | OAuth Refresh Token Google Ads |
+| `SHOPIFY_ACCESS_TOKEN` | ✅ | Token Shopify Source OF |
+| `SHOPIFY_POD_TOKEN` | ✅ | Token Shopify POD Kombucha |
+| `SHOPIFY_BOTICA_TOKEN` | ✅ | Token Shopify Botica |
+| `CLAUDE_MODEL` | ➖ | Modelo Claude (default: `claude-haiku-4-5-20251001`) |
+| `MULTI_AGENT` | ➖ | Ativa OrchestratorAgent (`1` ou `0`, default: `0`) |
+| `LOG_LEVEL` | ➖ | Nível de log (default: `INFO`) |
+| `PORT` | ➖ | Porta do servidor (default: `8001`) |
+| `SLACK_HANDLER_TIMEOUT` | ➖ | Timeout handler Slack em segundos (default: `60`) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | ➖ | Path do service account JSON (BigQuery) |
+
+---
+
+## Testes
+
+```
+python -m pytest tests/ -v
+python -m pytest tests/test_consultas.py -v
+python -m pytest tests/test_metricas.py -v
+```
+
+---
+
+## Licença
+
+Projeto privado — Guará Marketing. Todos os direitos reservados.
+
+---
+
+*Documentação gerada em 2026-10-19 — Cesar (Agente de Performance)*
