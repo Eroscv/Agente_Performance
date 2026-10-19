@@ -481,6 +481,7 @@ Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.
 
     try:
         raw_text = _call_llm(system, user_message)
+        texto_final = raw_text
 
         # Camada 2: tenta extrair JSON estruturado se ativado
         if _use_structured:
@@ -497,12 +498,42 @@ Responda a pergunta do usuário com base nesses dados. Seja analítico e direto.
                         "[gerar_resposta] Dados não disponíveis reportados: %s",
                         parsed["dado_nao_disponivel"],
                     )
-                # Retorna a análise formatada; o dict fica disponível para uso futuro
-                return parsed.get("analise", raw_text)
+                # Usa o campo analise (texto Slack); o dict fica disponível para uso futuro
+                texto_final = parsed.get("analise", raw_text)
             else:
                 logger.warning("[gerar_resposta] Structured output: parse falhou, usando texto bruto")
 
-        return raw_text
+        # ── Guards pós-geração: fact-check + compliance (nunca altera o texto) ──
+        try:
+            from agent.compliance_guard import verificar_compliance
+            from agent.confidence import ConfidenceResult as _CRT2
+            from agent.confidence import recalcular_pos_guards
+            from agent.hallucination_guard import verificar_alucinacao
+
+            hg_tipos  = verificar_alucinacao(texto_final, dados, meta)
+            cg_regras = verificar_compliance(texto_final)
+
+            if hg_tipos or cg_regras:
+                _cr_pre = meta.get("confidence") or {}
+                cr_pre = _CRT2(
+                    level=_cr_pre.get("level", "high"),
+                    score=_cr_pre.get("score", 1.0),
+                    reason=_cr_pre.get("reason"),
+                    evidence=_cr_pre.get("evidence", []),
+                    warnings=_cr_pre.get("warnings", []),
+                )
+                cr_pos = recalcular_pos_guards(cr_pre, hg_tipos, cg_regras)
+                meta["confidence_pos_guards"] = cr_pos.to_dict()
+
+                log_fn = logger.warning if cr_pos.level == "low" else logger.info
+                log_fn(
+                    "[gerar_resposta] Guards pós-geração: hg=%s cg=%s → confiança pós-guards=%s (score=%.2f) intent=%s",
+                    hg_tipos, cg_regras, cr_pos.level, cr_pos.score, intent,
+                )
+        except Exception as e:
+            logger.debug("[gerar_resposta] Guards pós-geração falharam (não crítico): %s", e)
+
+        return texto_final
 
     except Exception as e:
         logger.error("Erro no LLM: %s", e)
