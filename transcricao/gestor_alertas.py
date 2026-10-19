@@ -493,53 +493,30 @@ def main():
     parser.add_argument("--dry-run",   action="store_true", help="Sem salvar / sem Slack")
     args = parser.parse_args()
 
-    conn = get_conn()
+    # Orquestração delegada ao TicketAgent (Camada 3) — ver agents/ticket.py.
+    # Import local: evita import circular (agents.ticket importa este módulo).
+    from agents.ticket import TicketAgent
+    agente = TicketAgent()
 
     if args.fechar:
-        agora = datetime.now(timezone.utc).isoformat()
-        conn.execute("""
-            UPDATE tickets_alerta
-            SET status='fechado', resolvido_em=?, resolvido_por='manual', atualizado_em=?
-            WHERE ticket_id=?
-        """, (agora, agora, args.fechar))
-        conn.commit()
-        t = conn.execute("SELECT * FROM tickets_alerta WHERE ticket_id=?", (args.fechar,)).fetchone()
-        if t:
-            upsert_ticket_bq(t)
+        conn = get_conn()
+        ok = agente.fechar_manual(conn, args.fechar)
+        conn.close()
+        if ok:
             logger.info("Ticket %s fechado manualmente.", args.fechar)
         else:
             logger.warning("Ticket %s não encontrado.", args.fechar)
 
     elif args.status:
-        exibir_status(conn)
+        conn = get_conn()
+        agente.status(conn)
+        conn.close()
 
     elif args.processar:
-        # 1. Abre tickets para todos os alertas críticos ainda não registrados
-        analises = conn.execute("""
-            SELECT a.fonte_id, a.titulo, a.data, a.alertas
-            FROM analise_reunioes a
-            WHERE a.alertas != '[]' AND a.alertas IS NOT NULL
-            ORDER BY a.data
-        """).fetchall()
-
-        total_abertos = 0
-        for analise in analises:
-            n = abrir_tickets_da_analise(conn, analise, args.dry_run)
-            if n:
-                logger.info("  📂 %s (%s) → %d ticket(s) aberto(s)", analise["titulo"], analise["data"], n)
-                total_abertos += n
-
-        logger.info("Tickets abertos: %d", total_abertos)
-
-        # 2. Verifica resoluções nas reuniões posteriores
-        logger.info("Verificando resoluções com Claude...")
-        total_resolvidos = processar_resolucoes(conn, args.dry_run)
-        logger.info("Tickets resolvidos: %d", total_resolvidos)
+        agente.executar(dry_run=args.dry_run)
 
     else:
         parser.print_help()
-
-    conn.close()
 
 
 if __name__ == "__main__":

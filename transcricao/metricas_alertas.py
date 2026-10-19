@@ -374,24 +374,29 @@ def main():
     parser.add_argument("--janela", type=int, default=90, help="Janela em dias (padrão: 90)")
     args = parser.parse_args()
 
+    # Coleta/formatação delegadas ao MetricasAgent (Camada 3) — ver
+    # agents/metricas.py. Import local: evita import circular (agents.metricas
+    # importa este módulo). Impressão em stdout fica aqui (detalhe de CLI).
+    from agents.metricas import MetricasAgent
+    agente = MetricasAgent()
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-
-    m = coletar_metricas(conn, janela_dias=args.janela)
+    m = agente.coletar(conn, janela_dias=args.janela)
     conn.close()
 
     if args.json:
         print(json.dumps(m, indent=2, ensure_ascii=False, default=str))
         return
 
-    relatorio = formatar_relatorio(m)
+    relatorio = agente.formatar(m)
     print(relatorio)
 
     if args.slack:
-        enviar_slack(relatorio)
+        agente.publicar_slack(relatorio)
 
     if args.bq:
-        salvar_metricas_bq(m)
+        agente.publicar_bq(m)
 
 
 if __name__ == "__main__":

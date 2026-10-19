@@ -305,73 +305,11 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Não cria no Notion")
     args = parser.parse_args()
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-
-    if args.todos:
-        reunioes = conn.execute("""
-            SELECT id, data, titulo, participantes, proximas_etapas, fonte_id
-            FROM reunioes
-            WHERE proximas_etapas IS NOT NULL AND proximas_etapas != ''
-            ORDER BY data DESC
-        """).fetchall()
-    else:
-        # Últimos 30 dias
-        desde = (date.today() - timedelta(days=30)).isoformat()
-        reunioes = conn.execute("""
-            SELECT id, data, titulo, participantes, proximas_etapas, fonte_id
-            FROM reunioes
-            WHERE proximas_etapas IS NOT NULL AND proximas_etapas != ''
-              AND data >= ?
-            ORDER BY data DESC
-        """, (desde,)).fetchall()
-
-    conn.close()
-
-    logger.info("Reuniões com próximas etapas: %d", len(reunioes))
-
-    total_criados = 0
-    total_pulados = 0
-    total_erros   = 0
-
-    for reuniao in reunioes:
-        titulo    = reuniao["titulo"]
-        data_r    = reuniao["data"]
-        fonte_id  = reuniao["fonte_id"]
-        area      = detectar_area(titulo)
-        clientes  = detectar_clientes(
-            (titulo or "") + " " + (reuniao["participantes"] or "") + " " + (reuniao["proximas_etapas"] or "")
-        )
-
-        tarefas = parsear_tarefas(reuniao["proximas_etapas"] or "", titulo)
-        if not tarefas:
-            logger.info("  ⏭  Sem tarefas parseáveis: %s (%s)", titulo, data_r)
-            continue
-
-        logger.info("  📋 %s (%s) → %d tarefas | área=%s | clientes=%s",
-                    titulo, data_r, len(tarefas), area, clientes)
-
-        for tarefa in tarefas:
-            ok = criar_card_notion(
-                tarefa=tarefa,
-                reuniao_data=data_r,
-                reuniao_titulo=titulo,
-                fonte_id=fonte_id,
-                clientes=clientes,
-                area=area,
-                dry_run=args.dry_run,
-            )
-            if ok:
-                logger.info("    ✅ %s → %s", tarefa["responsavel_nome"], tarefa["titulo"])
-                total_criados += 1
-            else:
-                logger.warning("    ❌ %s → %s", tarefa["responsavel_nome"], tarefa["titulo"])
-                total_erros += 1
-
-    logger.info(
-        "\nConcluído — criados: %d | pulados: %d | erros: %d",
-        total_criados, total_pulados, total_erros
-    )
+    # Orquestração delegada ao ComunicacaoAgent (Camada 4) — ver
+    # agents/comunicacao.py. Import local: evita import circular
+    # (agents.comunicacao importa este módulo).
+    from agents.comunicacao import ComunicacaoAgent
+    ComunicacaoAgent().executar(todos=args.todos, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
