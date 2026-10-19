@@ -9,3 +9,4 @@ data/campanhas.db
 .DS_Store
 dev-report/
 credentials/
+tests/fixtures/nlp_eval_report.json

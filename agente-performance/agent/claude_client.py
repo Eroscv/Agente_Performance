@@ -117,12 +117,18 @@ def _call_llm(system: str, user_message: str) -> str:
     Chama o LLM com fallback automático: Gemini → Anthropic.
     Lança exceção apenas se ambos falharem.
     """
+    gemini_msg = None
     try:
         text = _call_gemini(system, user_message)
         logger.debug("[LLM] Gemini OK")
         return text
     except Exception as gemini_err:
-        logger.warning("[LLM] Gemini falhou, tentando Anthropic: %s", gemini_err)
+        # Python apaga a variável de `except ... as gemini_err` ao sair do bloco —
+        # guardamos a mensagem aqui, senão o except abaixo levanta UnboundLocalError
+        # em vez do RuntimeError com o diagnóstico real (bug encontrado ao rodar
+        # scripts/avaliar_nlp.py sem API key configurada).
+        gemini_msg = str(gemini_err)
+        logger.warning("[LLM] Gemini falhou, tentando Anthropic: %s", gemini_msg)
 
     try:
         text = _call_anthropic(system, user_message)
@@ -130,7 +136,7 @@ def _call_llm(system: str, user_message: str) -> str:
         return text
     except Exception as ant_err:
         raise RuntimeError(
-            f"Todos os LLMs indisponíveis. Gemini: {gemini_err} | Anthropic: {ant_err}"
+            f"Todos os LLMs indisponíveis. Gemini: {gemini_msg} | Anthropic: {ant_err}"
         )
 
 
