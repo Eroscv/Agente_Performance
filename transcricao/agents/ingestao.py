@@ -16,10 +16,12 @@ ainda que as duas camadas convivam no mesmo arquivo legado
 """
 import logging
 import sys
+from datetime import date, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import sync_reunioes as _impl  # noqa: E402
+from estatistica import taxa_erro  # noqa: E402
 
 from .base import BaseSubagente  # noqa: E402
 from .parser import ParserAgent  # noqa: E402
@@ -102,3 +104,16 @@ class IngestaoAgent(BaseSubagente):
             novos, pulados, erros,
         )
         return resumo
+
+    def metricas(self, conn, janela_dias: int = 90) -> dict:
+        """Taxa de erro/sucesso lida de sync_log — tabela que já existia
+        antes desta sessão, criada por get_conn() em sync_reunioes.py.
+        Sobrescreve BaseSubagente.metricas() (que leria de log_subagente,
+        tabela nova e vazia pra esta camada)."""
+        desde = (date.today() - timedelta(days=janela_dias)).isoformat()
+        rows = conn.execute(
+            "SELECT status, COUNT(*) as n FROM sync_log WHERE criado_em >= ? GROUP BY status",
+            (desde,),
+        ).fetchall()
+        contagem = {r["status"]: r["n"] for r in rows}
+        return taxa_erro(contagem.get("ok", 0), contagem.get("erro", 0))

@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import gestor_alertas as _impl  # noqa: E402
 
 from .base import BaseSubagente  # noqa: E402
+from .metricas import MetricasAgent  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -77,3 +78,9 @@ class TicketAgent(BaseSubagente):
 
         conn.close()
         return {"abertos": total_abertos, "resolvidos": total_resolvidos}
+
+    def metricas(self, conn, janela_dias: int = 90) -> dict:
+        """Delega ao MetricasAgent: a avaliação desta camada já É
+        coletar_metricas() — taxa de resolução por tipo de alerta + IC de
+        Wilson + SLA vencidos. Não reimplementa uma versão mais pobre."""
+        return MetricasAgent().coletar(conn, janela_dias=janela_dias)

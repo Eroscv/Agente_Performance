@@ -50,6 +50,7 @@ class AnaliseAgent(BaseSubagente):
         analisadas = alertas_total = erros = 0
         for reuniao in pendentes:
             titulo = reuniao["titulo"]
+            fonte_id = reuniao["fonte_id"]
             try:
                 resultado = self.analisar(reuniao)
                 n_alertas = len(resultado.get("alertas", []))
@@ -60,12 +61,18 @@ class AnaliseAgent(BaseSubagente):
 
                 analisadas += 1
                 alertas_total += n_alertas
+                if not dry_run:
+                    self.registrar_evento(conn, fonte_id, "ok")
             except json.JSONDecodeError as e:
                 logger.error("  ❌ JSON inválido do Claude em '%s': %s", titulo, e)
                 erros += 1
+                if not dry_run:
+                    self.registrar_evento(conn, fonte_id, "erro", f"JSON inválido: {e}")
             except Exception as e:
                 logger.error("  ❌ Erro ao analisar '%s': %s", titulo, e)
                 erros += 1
+                if not dry_run:
+                    self.registrar_evento(conn, fonte_id, "erro", str(e))
 
         conn.close()
         resumo = {"analisadas": analisadas, "alertas": alertas_total, "erros": erros}

@@ -66,6 +66,7 @@ class ComunicacaoAgent(BaseSubagente):
         card no Notion por tarefa."""
         reunioes = self._buscar_reunioes(todos)
         logger.info("Reuniões com próximas etapas: %d", len(reunioes))
+        log_conn = sqlite3.connect(_impl.DB_PATH)
 
         criados = pulados = erros = 0
         for reuniao in reunioes:
@@ -104,10 +105,18 @@ class ComunicacaoAgent(BaseSubagente):
                 if ok:
                     logger.info("    ✅ %s → %s", tarefa["responsavel_nome"], tarefa["titulo"])
                     criados += 1
+                    if not dry_run:
+                        self.registrar_evento(log_conn, fonte_id, "ok")
                 else:
                     logger.warning("    ❌ %s → %s", tarefa["responsavel_nome"], tarefa["titulo"])
                     erros += 1
+                    if not dry_run:
+                        self.registrar_evento(
+                            log_conn, fonte_id, "erro",
+                            f"criar_card_notion falhou: {tarefa.get('titulo')}",
+                        )
 
+        log_conn.close()
         resumo = {"criados": criados, "pulados": pulados, "erros": erros}
         logger.info(
             "\nConcluído — criados: %d | pulados: %d | erros: %d",
