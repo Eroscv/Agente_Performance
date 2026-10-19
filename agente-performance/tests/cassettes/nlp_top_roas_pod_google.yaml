@@ -61,11 +61,16 @@ interactions:
       \"metrica\" com o nome can\u00f4nico (roas, cpc, ctr, cpm, compras, receita,
       investimento, frequencia, cliques, carrinho, checkout, custo_por_compra)\n8.
       Para comparar_antes_depois: campo \"data_virada\" (YYYY-MM-DD)\n9. Use SOMENTE
-      intents da lista acima. Nunca invente novas.\n\n## Exemplos (few-shot)\n\nPergunta:
-      \"qual a performance da campanha ABO em junho?\"\nResposta: {\"intents\":[\"performance_campanha\"],\"campanha\":\"ABO\",\"data_inicio\":\"2026-06-01\",\"data_fim\":\"2026-06-30\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      intents da lista acima. Nunca invente novas.\n10. Para \"essa semana\"/\"esta
+      semana\"/\"semana atual\": use segunda-feira da semana corrente (calculada a
+      partir de 2026-10-19) at\u00e9 2026-10-19 \u2014 NUNCA uma janela rolante dos
+      \u00faltimos 7 dias. \"semana passada\"/\"\u00faltima semana\" = segunda a domingo
+      da semana anterior. Essa \u00e9 a mesma regra usada em agent/synonyms.py \u2014
+      mantenha consist\u00eancia.\n\n## Exemplos (few-shot)\n\nPergunta: \"qual a
+      performance da campanha ABO em junho?\"\nResposta: {\"intents\":[\"performance_campanha\"],\"campanha\":\"ABO\",\"data_inicio\":\"2026-06-01\",\"data_fim\":\"2026-06-30\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
       \"top 5 campanhas por ROAS no m\u00eas passado\"\nResposta: {\"intents\":[\"top_roas\"],\"campanha\":null,\"data_inicio\":\"2026-06-01\",\"data_fim\":\"2026-06-30\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":5,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
       \"compare maio com junho\"\nResposta: {\"intents\":[\"comparar_periodos\"],\"campanha\":null,\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":\"2026-05-01\",\"periodo_a_fim\":\"2026-05-31\",\"periodo_b_inicio\":\"2026-06-01\",\"periodo_b_fim\":\"2026-06-30\",\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
-      \"quais campanhas est\u00e3o sem convers\u00e3o essa semana?\"\nResposta: {\"intents\":[\"sem_conversao\"],\"campanha\":null,\"data_inicio\":\"2026-07-09\",\"data_fim\":\"2026-07-15\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"quais campanhas est\u00e3o sem convers\u00e3o essa semana?\"\nResposta: {\"intents\":[\"sem_conversao\"],\"campanha\":null,\"data_inicio\":\"2026-07-13\",\"data_fim\":\"2026-07-15\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
       \"mostre todas as campanhas ativas\"\nResposta: {\"intents\":[\"listar_campanhas\"],\"campanha\":null,\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":999,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
       \"o funil da Advantage Hidratante est\u00e1 vazando onde?\"\nResposta: {\"intents\":[\"funil_detalhado\"],\"campanha\":\"Advantage
       Hidratante\",\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
@@ -73,11 +78,11 @@ interactions:
       \"a frequ\u00eancia da ABO est\u00e1 alta?\"\nResposta: {\"intents\":[\"saturacao_frequencia\"],\"campanha\":\"ABO\",\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
       \"como est\u00e3o as campanhas do Source OF no Google no m\u00eas passado?\"\nResposta:
       {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-07-01\",\"data_fim\":\"2026-07-31\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"source_of\",\"plataforma\":\"google_ads\"}\n\nPergunta:
-      \"top ROAS do POD no Meta essa semana\"\nResposta: {\"intents\":[\"top_roas\"],\"campanha\":null,\"data_inicio\":\"2026-08-11\",\"data_fim\":\"2026-08-17\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"meta_ads\"}\n\nPergunta:
-      \"compare Meta Ads vs Google Ads da Source OF essa semana\"\nResposta: {\"intents\":[\"comparar_plataformas\"],\"campanha\":null,\"data_inicio\":\"2026-08-11\",\"data_fim\":\"2026-08-17\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"source_of\",\"plataforma\":null}\n\nPergunta:
+      \"top ROAS do POD no Meta essa semana\"\nResposta: {\"intents\":[\"top_roas\"],\"campanha\":null,\"data_inicio\":\"2026-08-10\",\"data_fim\":\"2026-08-13\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"meta_ads\"}\n\nPergunta:
+      \"compare Meta Ads vs Google Ads da Source OF essa semana\"\nResposta: {\"intents\":[\"comparar_plataformas\"],\"campanha\":null,\"data_inicio\":\"2026-08-10\",\"data_fim\":\"2026-08-13\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"source_of\",\"plataforma\":null}\n\nPergunta:
       \"qual plataforma teve melhor ROAS em julho?\"\nResposta: {\"intents\":[\"comparar_plataformas\"],\"campanha\":null,\"data_inicio\":\"2026-07-01\",\"data_fim\":\"2026-07-31\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
       \"resumo geral de todos os clientes\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
-      \"performance do google ads do pod essa semana\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-08-11\",\"data_fim\":\"2026-08-17\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\nPergunta:
+      \"performance do google ads do pod essa semana\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-08-10\",\"data_fim\":\"2026-08-13\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\nPergunta:
       \"gads pod kombucha m\u00eas passado\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-07-01\",\"data_fim\":\"2026-07-31\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\nPergunta:
       \"top roas search e pmax do pod\"\nResposta: {\"intents\":[\"top_roas\"],\"campanha\":null,\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\nPergunta:
       \"campanhas google do pod kombucha hoje\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-08-17\",\"data_fim\":\"2026-08-17\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\n##
@@ -96,15 +101,15 @@ interactions:
       connection:
       - keep-alive
       content-length:
-      - '12025'
+      - '12404'
       content-type:
       - application/json
       host:
       - generativelanguage.googleapis.com
       user-agent:
-      - google-genai-sdk/2.31.0 gl-python/3.13.16
+      - google-genai-sdk/2.31.0 gl-python/3.14.8
       x-goog-api-client:
-      - google-genai-sdk/2.31.0 gl-python/3.13.16
+      - google-genai-sdk/2.31.0 gl-python/3.14.8
       x-goog-api-key:
       - cassette-demo-key
     method: POST

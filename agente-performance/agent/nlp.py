@@ -195,6 +195,7 @@ Analise a pergunta e detecte qual plataforma está sendo mencionada:
 7. Para ranking_metrica: campo "metrica" com o nome canônico (roas, cpc, ctr, cpm, compras, receita, investimento, frequencia, cliques, carrinho, checkout, custo_por_compra)
 8. Para comparar_antes_depois: campo "data_virada" (YYYY-MM-DD)
 9. Use SOMENTE intents da lista acima. Nunca invente novas.
+10. Para "essa semana"/"esta semana"/"semana atual": use segunda-feira da semana corrente (calculada a partir de {hoje}) até {hoje} — NUNCA uma janela rolante dos últimos 7 dias. "semana passada"/"última semana" = segunda a domingo da semana anterior. Essa é a mesma regra usada em agent/synonyms.py — mantenha consistência.
 
 ## Exemplos (few-shot)
 
@@ -208,7 +209,7 @@ Pergunta: "compare maio com junho"
 Resposta: {"intents":["comparar_periodos"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":"2026-05-01","periodo_a_fim":"2026-05-31","periodo_b_inicio":"2026-06-01","periodo_b_fim":"2026-06-30","data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "quais campanhas estão sem conversão essa semana?"
-Resposta: {"intents":["sem_conversao"],"campanha":null,"data_inicio":"2026-07-09","data_fim":"2026-07-15","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
+Resposta: {"intents":["sem_conversao"],"campanha":null,"data_inicio":"2026-07-13","data_fim":"2026-07-15","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "mostre todas as campanhas ativas"
 Resposta: {"intents":["listar_campanhas"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":999,"cliente_key":null,"plataforma":null}
@@ -226,10 +227,10 @@ Pergunta: "como estão as campanhas do Source OF no Google no mês passado?"
 Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-07-01","data_fim":"2026-07-31","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"source_of","plataforma":"google_ads"}
 
 Pergunta: "top ROAS do POD no Meta essa semana"
-Resposta: {"intents":["top_roas"],"campanha":null,"data_inicio":"2026-08-11","data_fim":"2026-08-17","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"meta_ads"}
+Resposta: {"intents":["top_roas"],"campanha":null,"data_inicio":"2026-08-10","data_fim":"2026-08-13","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"meta_ads"}
 
 Pergunta: "compare Meta Ads vs Google Ads da Source OF essa semana"
-Resposta: {"intents":["comparar_plataformas"],"campanha":null,"data_inicio":"2026-08-11","data_fim":"2026-08-17","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"source_of","plataforma":null}
+Resposta: {"intents":["comparar_plataformas"],"campanha":null,"data_inicio":"2026-08-10","data_fim":"2026-08-13","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"source_of","plataforma":null}
 
 Pergunta: "qual plataforma teve melhor ROAS em julho?"
 Resposta: {"intents":["comparar_plataformas"],"campanha":null,"data_inicio":"2026-07-01","data_fim":"2026-07-31","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
@@ -238,7 +239,7 @@ Pergunta: "resumo geral de todos os clientes"
 Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":null,"data_fim":null,"periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":null,"plataforma":null}
 
 Pergunta: "performance do google ads do pod essa semana"
-Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-08-11","data_fim":"2026-08-17","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"google_ads"}
+Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-08-10","data_fim":"2026-08-13","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"google_ads"}
 
 Pergunta: "gads pod kombucha mês passado"
 Resposta: {"intents":["resumo_geral"],"campanha":null,"data_inicio":"2026-07-01","data_fim":"2026-07-31","periodo_a_inicio":null,"periodo_a_fim":null,"periodo_b_inicio":null,"periodo_b_fim":null,"data_virada":null,"metrica":null,"limit":10,"cliente_key":"pod_kombucha","plataforma":"google_ads"}
@@ -638,6 +639,20 @@ def interpretar(pergunta: str, campanhas_disponiveis: list[str], contexto: str =
             data_inicio  = parsed.get("data_inicio")
             data_fim     = parsed.get("data_fim")
             periodo_nota = None
+
+            # Override determinístico: quando a pergunta menciona exatamente UM
+            # sinônimo de período conhecido (ex: "essa semana", "mês passado"),
+            # confia na data já calculada por agent.synonyms.PERIOD_SYNONYMS em vez
+            # do cálculo livre do LLM. O prompt instrui o Claude a usar a dica de
+            # [contexto] (regra 10), mas ele às vezes a ignora em casos degenerados
+            # — ex: "essa semana" quando hoje é segunda-feira resolve pra um único
+            # dia, e o modelo prefere devolver uma janela de 7 dias "mais razoável"
+            # em vez de seguir a dica literal. Com 2+ sinônimos (ex: "compare maio
+            # com junho") não sobrescreve — esses casos usam periodo_a/periodo_b.
+            from agent.synonyms import periodos_detectados
+            _periodos_sinonimo = periodos_detectados(pergunta)
+            if len(_periodos_sinonimo) == 1:
+                data_inicio, data_fim = _periodos_sinonimo[0]
 
             # Verifica se o período está dentro do range do banco
             if data_inicio or data_fim:
