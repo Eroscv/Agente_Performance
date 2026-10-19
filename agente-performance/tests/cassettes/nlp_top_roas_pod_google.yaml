@@ -1,0 +1,132 @@
+interactions:
+- request:
+    body: '{"contents": [{"parts": [{"text": "[USER]: Pergunta: top roas search e
+      pmax do pod"}], "role": "user"}], "systemInstruction": {"parts": [{"text": "Voc\u00ea
+      \u00e9 um parser de linguagem natural para um sistema de an\u00e1lise de campanhas
+      Meta Ads.\n\nSua tarefa: analisar a pergunta do usu\u00e1rio e retornar SOMENTE
+      um JSON estruturado com os par\u00e2metros corretos.\n\n## Inten\u00e7\u00f5es
+      dispon\u00edveis\n\n### B\u00e1sicas\n- listar_campanhas: listar todas as campanhas
+      dispon\u00edveis\n- resumo_geral: vis\u00e3o geral de todas as campanhas (resumo
+      por campanha)\n- performance_campanha: desempenho de uma campanha espec\u00edfica
+      ao longo do tempo (s\u00e9rie di\u00e1ria)\n- periodo: resumo consolidado totalizando
+      um per\u00edodo espec\u00edfico (sem campanha espec\u00edfica)\n- evolucao_diaria:
+      evolu\u00e7\u00e3o dia a dia de m\u00e9tricas (gr\u00e1fico temporal)\n- historico_mensal:
+      hist\u00f3rico m\u00eas a m\u00eas dos \u00faltimos N meses (sazonalidade, tend\u00eancia)\n-
+      resumo_executivo: vis\u00e3o executiva completa com top campanhas + alertas
+      em uma s\u00f3 resposta\n\n### Rankings\n- top_roas: ranking de campanhas por
+      ROAS (retorno sobre investimento)\n- top_compras: ranking de campanhas por volume
+      de compras/vendas\n- top_receita: ranking de campanhas por receita total gerada\n-
+      top_ctr: ranking de campanhas por CTR (taxa de cliques \u2014 qualidade do an\u00fancio)\n-
+      top_cpm: ranking por menor CPM (custo de exibi\u00e7\u00e3o mais barato)\n-
+      top_alcance: ranking por maior alcance \u00fanico de pessoas\n- top_cliques:
+      ranking por volume de cliques no link\n- ranking_metrica: ranking de todas as
+      campanhas por qualquer m\u00e9trica espec\u00edfica mencionada\n\n### An\u00e1lises
+      espec\u00edficas\n- funil: m\u00e9tricas de funil resumidas (impress\u00f5es
+      \u2192 cliques \u2192 carrinho \u2192 checkout \u2192 compra)\n- funil_detalhado:
+      custo em cada etapa do funil + taxas de convers\u00e3o entre etapas\n- alertas_roas:
+      campanhas com ROAS abaixo do esperado ou com problemas de convers\u00e3o\n-
+      sem_conversao: campanhas gastando dinheiro mas sem nenhuma compra registrada\n-
+      campanhas_inativas: campanhas que pararam de rodar (sem dados recentes)\n- variacao_roas:
+      volatilidade di\u00e1ria do ROAS \u2014 identifica picos e quedas\n- saturacao_frequencia:
+      campanhas com frequ\u00eancia alta (p\u00fablico saturado)\n- eficiencia_criativo:
+      qualidade do criativo \u2014 CPM, CTR, hook rate, reten\u00e7\u00e3o de v\u00eddeo\n-
+      distribuicao_investimento: share de or\u00e7amento por campanha (% do total)\n-
+      metricas_video: m\u00e9tricas de v\u00eddeo (views, ThruPlays, hook rate, custo
+      por view)\n- metricas_engajamento: curtidas, coment\u00e1rios, compartilhamentos,
+      salvamentos\n- metricas_mensageria: conversas iniciadas (WhatsApp/Messenger),
+      custo por conversa\n- comparar: compara\u00e7\u00e3o lado a lado entre campanhas
+      espec\u00edficas mencionadas\n- comparar_periodos: comparar dois per\u00edodos
+      (ex: maio vs junho, semana passada vs essa semana)\n- comparar_wow: evolu\u00e7\u00e3o
+      semana a semana com varia\u00e7\u00e3o % (week over week)\n- comparar_mom: evolu\u00e7\u00e3o
+      m\u00eas a m\u00eas com varia\u00e7\u00e3o % (month over month)\n- comparar_antes_depois:
+      comparar antes e depois de uma data espec\u00edfica\n- comparar_plataformas:
+      comparar Meta Ads vs Google Ads lado a lado (investimento, ROAS, convers\u00f5es,
+      CPC) para o mesmo per\u00edodo e cliente\n\n## Detec\u00e7\u00e3o de cliente\nAnalise
+      a pergunta e detecte qual cliente est\u00e1 sendo mencionado:\n- \"Source OF\",
+      \"source\", \"sof\", \"source of\" \u2192 `\"source_of\"`\n- \"POD\", \"pod
+      kombucha\", \"kombucha\", \"pod\" \u2192 `\"pod_kombucha\"`\n- Nenhum mencionado
+      \u2192 `null`\n\n## Detec\u00e7\u00e3o de plataforma\nAnalise a pergunta e detecte
+      qual plataforma est\u00e1 sendo mencionada:\n- \"Meta\", \"Facebook\", \"meta
+      ads\", \"instagram ads\" \u2192 `\"meta_ads\"`\n- \"Google\", \"google ads\",
+      \"gads\", \"search\", \"pmax\" \u2192 `\"google_ads\"`\n- Nenhuma mencionada
+      \u2192 `null`\n\n## Regras\n1. Retorne M\u00daLTIPLAS inten\u00e7\u00f5es apenas
+      se a pergunta pedir explicitamente mais de uma coisa\n2. Para campanha: extraia
+      o nome ou fragmento mencionado. Se n\u00e3o houver campanha espec\u00edfica,
+      use null\n3. Para datas: converta para YYYY-MM-DD. Hoje \u00e9 2026-10-19. Use
+      as dicas de per\u00edodo no [contexto] quando presentes\n4. Se n\u00e3o houver
+      data mencionada, retorne null para ambas\n5. Para limit: extraia n\u00famero
+      se mencionado (ex: \"top 5\" \u2192 5). Se pedir \"todas\" / \"tudo\" \u2192
+      use 999. Sen\u00e3o, use 10\n6. Para comparar_periodos: extraia periodo_a_inicio,
+      periodo_a_fim, periodo_b_inicio, periodo_b_fim\n7. Para ranking_metrica: campo
+      \"metrica\" com o nome can\u00f4nico (roas, cpc, ctr, cpm, compras, receita,
+      investimento, frequencia, cliques, carrinho, checkout, custo_por_compra)\n8.
+      Para comparar_antes_depois: campo \"data_virada\" (YYYY-MM-DD)\n9. Use SOMENTE
+      intents da lista acima. Nunca invente novas.\n\n## Exemplos (few-shot)\n\nPergunta:
+      \"qual a performance da campanha ABO em junho?\"\nResposta: {\"intents\":[\"performance_campanha\"],\"campanha\":\"ABO\",\"data_inicio\":\"2026-06-01\",\"data_fim\":\"2026-06-30\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"top 5 campanhas por ROAS no m\u00eas passado\"\nResposta: {\"intents\":[\"top_roas\"],\"campanha\":null,\"data_inicio\":\"2026-06-01\",\"data_fim\":\"2026-06-30\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":5,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"compare maio com junho\"\nResposta: {\"intents\":[\"comparar_periodos\"],\"campanha\":null,\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":\"2026-05-01\",\"periodo_a_fim\":\"2026-05-31\",\"periodo_b_inicio\":\"2026-06-01\",\"periodo_b_fim\":\"2026-06-30\",\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"quais campanhas est\u00e3o sem convers\u00e3o essa semana?\"\nResposta: {\"intents\":[\"sem_conversao\"],\"campanha\":null,\"data_inicio\":\"2026-07-09\",\"data_fim\":\"2026-07-15\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"mostre todas as campanhas ativas\"\nResposta: {\"intents\":[\"listar_campanhas\"],\"campanha\":null,\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":999,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"o funil da Advantage Hidratante est\u00e1 vazando onde?\"\nResposta: {\"intents\":[\"funil_detalhado\"],\"campanha\":\"Advantage
+      Hidratante\",\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"qual campanha tem maior alcance em abril?\"\nResposta: {\"intents\":[\"top_alcance\"],\"campanha\":null,\"data_inicio\":\"2026-04-01\",\"data_fim\":\"2026-04-30\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"a frequ\u00eancia da ABO est\u00e1 alta?\"\nResposta: {\"intents\":[\"saturacao_frequencia\"],\"campanha\":\"ABO\",\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"como est\u00e3o as campanhas do Source OF no Google no m\u00eas passado?\"\nResposta:
+      {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-07-01\",\"data_fim\":\"2026-07-31\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"source_of\",\"plataforma\":\"google_ads\"}\n\nPergunta:
+      \"top ROAS do POD no Meta essa semana\"\nResposta: {\"intents\":[\"top_roas\"],\"campanha\":null,\"data_inicio\":\"2026-08-11\",\"data_fim\":\"2026-08-17\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"meta_ads\"}\n\nPergunta:
+      \"compare Meta Ads vs Google Ads da Source OF essa semana\"\nResposta: {\"intents\":[\"comparar_plataformas\"],\"campanha\":null,\"data_inicio\":\"2026-08-11\",\"data_fim\":\"2026-08-17\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"source_of\",\"plataforma\":null}\n\nPergunta:
+      \"qual plataforma teve melhor ROAS em julho?\"\nResposta: {\"intents\":[\"comparar_plataformas\"],\"campanha\":null,\"data_inicio\":\"2026-07-01\",\"data_fim\":\"2026-07-31\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"resumo geral de todos os clientes\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":null,\"plataforma\":null}\n\nPergunta:
+      \"performance do google ads do pod essa semana\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-08-11\",\"data_fim\":\"2026-08-17\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\nPergunta:
+      \"gads pod kombucha m\u00eas passado\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-07-01\",\"data_fim\":\"2026-07-31\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\nPergunta:
+      \"top roas search e pmax do pod\"\nResposta: {\"intents\":[\"top_roas\"],\"campanha\":null,\"data_inicio\":null,\"data_fim\":null,\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\nPergunta:
+      \"campanhas google do pod kombucha hoje\"\nResposta: {\"intents\":[\"resumo_geral\"],\"campanha\":null,\"data_inicio\":\"2026-08-17\",\"data_fim\":\"2026-08-17\",\"periodo_a_inicio\":null,\"periodo_a_fim\":null,\"periodo_b_inicio\":null,\"periodo_b_fim\":null,\"data_virada\":null,\"metrica\":null,\"limit\":10,\"cliente_key\":\"pod_kombucha\",\"plataforma\":\"google_ads\"}\n\n##
+      Formato de resposta (JSON puro, sem markdown, sem explica\u00e7\u00e3o)\n{\n  \"intents\":
+      [\"intent1\"],\n  \"campanha\": \"fragmento ou null\",\n  \"data_inicio\": \"YYYY-MM-DD
+      ou null\",\n  \"data_fim\": \"YYYY-MM-DD ou null\",\n  \"periodo_a_inicio\":
+      null,\n  \"periodo_a_fim\": null,\n  \"periodo_b_inicio\": null,\n  \"periodo_b_fim\":
+      null,\n  \"data_virada\": null,\n  \"metrica\": null,\n  \"limit\": 10,\n  \"cliente_key\":
+      null,\n  \"plataforma\": null\n}"}], "role": "user"}, "generationConfig": {"temperature":
+      0.3, "maxOutputTokens": 2048}}'
+    headers:
+      accept:
+      - '*/*'
+      accept-encoding:
+      - gzip, deflate
+      connection:
+      - keep-alive
+      content-length:
+      - '12025'
+      content-type:
+      - application/json
+      host:
+      - generativelanguage.googleapis.com
+      user-agent:
+      - google-genai-sdk/2.31.0 gl-python/3.13.16
+      x-goog-api-client:
+      - google-genai-sdk/2.31.0 gl-python/3.13.16
+      x-goog-api-key:
+      - cassette-demo-key
+    method: POST
+    uri: https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent
+  response:
+    body:
+      string: "{\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"intents\\\":
+        [\\\"top_roas\\\"], \\\"campanha\\\": null, \\\"data_inicio\\\": null, \\\"data_fim\\\":
+        null, \\\"periodo_a_inicio\\\": null, \\\"periodo_a_fim\\\": null, \\\"periodo_b_inicio\\\":
+        null, \\\"periodo_b_fim\\\": null, \\\"data_virada\\\": null, \\\"metrica\\\":
+        null, \\\"limit\\\": 10, \\\"cliente_key\\\": \\\"pod_kombucha\\\", \\\"plataforma\\\":
+        \\\"google_ads\\\"}\"}], \"role\": \"model\"}, \"finishReason\": \"STOP\"}],
+        \"usageMetadata\": {\"promptTokenCount\": 1, \"candidatesTokenCount\": 1,
+        \"totalTokenCount\": 2}, \"_cassette_sintetica\": true, \"_nota\": \"Resposta
+        escrita \xE0 m\xE3o para teste \u2014 n\xE3o \xE9 uma chamada real ao Gemini.
+        Ver scripts/_gerar_cassette_demo.py.\"}"
+    headers:
+      content-length:
+      - '664'
+      content-type:
+      - application/json
+    status:
+      code: 200
+      message: OK
+version: 1
