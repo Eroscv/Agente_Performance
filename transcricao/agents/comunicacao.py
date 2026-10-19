@@ -4,10 +4,13 @@ transcricao/agents/comunicacao.py
 ComunicacaoAgent — Camada 4 (Comunicação) do pipeline de Transcrição.
 Delega para criar_tarefas_notion.py.
 
-Achado durante esta estruturação (não corrigido aqui, fora de escopo):
-criar_tarefas_notion.tarefas_ja_criadas() existe mas nunca é chamada em
-nenhum lugar — a função de dedup está morta, então rodar com --todos
-sobre uma janela já processada pode criar cards duplicados no Notion.
+Correção aplicada nesta sessão (achado estava documentado aqui antes,
+sem fix): criar_tarefas_notion.tarefas_ja_criadas() existia mas nunca
+era chamada, e mesmo que fosse, a checagem sempre voltaria vazia — o
+filtro busca a propriedade "Origem Reunião" contendo fonte_id[:8], mas
+criar_card_notion() nunca escrevia essa propriedade no card. Os dois
+lados foram corrigidos juntos (ver criar_tarefas_notion.py e
+executar() abaixo); sem isso, chamar o dedup não resolveria nada.
 """
 import logging
 import sqlite3
@@ -37,6 +40,9 @@ class ComunicacaoAgent(BaseSubagente):
 
     def criar_card(self, **kwargs) -> bool:
         return _impl.criar_card_notion(**kwargs)
+
+    def tarefas_ja_criadas(self, fonte_id: str) -> set:
+        return _impl.tarefas_ja_criadas(fonte_id)
 
     def _buscar_reunioes(self, todos: bool) -> list:
         conn = sqlite3.connect(_impl.DB_PATH)
@@ -68,7 +74,7 @@ class ComunicacaoAgent(BaseSubagente):
         logger.info("Reuniões com próximas etapas: %d", len(reunioes))
         log_conn = sqlite3.connect(_impl.DB_PATH)
 
-        criados = pulados = erros = 0
+        criados = pulados = duplicados = erros = 0
         for reuniao in reunioes:
             titulo   = reuniao["titulo"]
             data_r   = reuniao["data"]
@@ -92,7 +98,21 @@ class ComunicacaoAgent(BaseSubagente):
                 titulo, data_r, len(tarefas), area, clientes,
             )
 
+            # Dedup — uma consulta ao Notion por reunião (não por tarefa):
+            # evita recriar card se essa reunião já foi processada antes
+            # (ex: --todos rodado de novo sobre uma janela já coberta).
+            try:
+                ja_criadas = self.tarefas_ja_criadas(fonte_id)
+            except Exception as e:
+                logger.warning("  ⚠️  Falha ao consultar dedup no Notion (%s) — seguindo sem dedup", e)
+                ja_criadas = set()
+
             for tarefa in tarefas:
+                if tarefa["titulo"] in ja_criadas:
+                    logger.info("    ⏭  Já existe no Notion: %s", tarefa["titulo"])
+                    duplicados += 1
+                    continue
+
                 ok = self.criar_card(
                     tarefa=tarefa,
                     reuniao_data=data_r,
@@ -117,9 +137,9 @@ class ComunicacaoAgent(BaseSubagente):
                         )
 
         log_conn.close()
-        resumo = {"criados": criados, "pulados": pulados, "erros": erros}
+        resumo = {"criados": criados, "pulados": pulados, "duplicados": duplicados, "erros": erros}
         logger.info(
-            "\nConcluído — criados: %d | pulados: %d | erros: %d",
-            criados, pulados, erros,
+            "\nConcluído — criados: %d | pulados: %d | duplicados: %d | erros: %d",
+            criados, pulados, duplicados, erros,
         )
         return resumo

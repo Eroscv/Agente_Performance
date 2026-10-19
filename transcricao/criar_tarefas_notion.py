@@ -252,6 +252,15 @@ def criar_card_notion(
             "multi_select": [{"name": c} for c in clientes]
         }
 
+    # Grava fonte_id aqui — é o que tarefas_ja_criadas() consulta (filtro
+    # "contains" em fonte_id[:8]) para não duplicar card em reprocessamento.
+    # Antes desta correção, essa propriedade nunca era escrita, então a
+    # checagem de dedup (quando chamada) sempre voltava vazia mesmo que
+    # cards já existissem.
+    properties["Origem Reunião"] = {
+        "rich_text": [{"text": {"content": fonte_id}}]
+    }
+
     payload = {
         "parent": {"database_id": NOTION_DB_ID},
         "properties": properties,
