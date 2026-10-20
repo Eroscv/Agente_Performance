@@ -10,7 +10,9 @@ Usa ShopifyQL (API 2025-01) para buscar, por dia:
   - sessoes_compra             : derivado de round(sessoes × conversion_rate)
   - taxa_conversao             : conversion_rate (0.0–1.0)
 
-Flag de bot: dia com sessoes > 3× mediana dos últimos 7 dias é marcado como is_bot_suspect=1.
+Flag de bot: dia com sessoes > 3× mediana dos últimos 14 dias é marcado como is_bot_suspect=1.
+Preservação atômica: is_bot_suspect=1 nunca regride para 0 em recargas — a checagem
+ocorre dentro da mesma transação SQLite do INSERT OR REPLACE.
 
 Tabelas de destino:
   source_of    → data/performance/source_of/shopify.db     tabela: source_of_shopify_sessoes
@@ -215,7 +217,13 @@ def salvar_sessoes(
     tabela: str,
     db_path: Path,
 ) -> int:
-    """Persiste sessões diárias no SQLite (INSERT OR REPLACE)."""
+    """
+    Persiste sessões diárias no SQLite (INSERT OR REPLACE).
+
+    Dentro da mesma transação, lê os dias já marcados como is_bot_suspect=1
+    e restaura o flag antes do INSERT OR REPLACE — evitando regressão mesmo
+    em leituras concorrentes durante a janela de escrita.
+    """
     if not rows:
         return 0
 
@@ -223,6 +231,27 @@ def salvar_sessoes(
     conn = sqlite3.connect(str(db_path))
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute(_DDL.format(tabela=tabela))
+
+    # Preservação atômica: lê already_flagged dentro da mesma conexão/transação
+    # para garantir que nenhuma leitura concorrente veja is_bot_suspect=0 transitório.
+    already_flagged: set[str] = set()
+    try:
+        cur = conn.execute(f"SELECT data FROM {tabela} WHERE is_bot_suspect = 1")
+        already_flagged = {row[0] for row in cur.fetchall()}
+    except Exception:
+        pass
+
+    restaurados: list[str] = []
+    for r in rows:
+        if r["data"] in already_flagged and not r.get("is_bot_suspect"):
+            r["is_bot_suspect"] = 1
+            restaurados.append(r["data"])
+
+    if restaurados:
+        logger.warning(
+            "[bot_suspect][%s] flag restaurado (regressão bloqueada) para %d dia(s): %s",
+            tabela, len(restaurados), restaurados,
+        )
 
     cols = [
         "data", "sessoes", "sessoes_com_carrinho", "sessoes_checkout",
@@ -294,24 +323,8 @@ def sync_cliente(
         logger.warning("[%s] API retornou 0 linhas para o período", cliente_key)
         return False
 
-    # Preserva is_bot_suspect=1 já gravado no SQLite (não regride para 0 numa recarga)
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn_check = sqlite3.connect(str(db_path))
-    conn_check.execute(_DDL.format(tabela=tabela))
-    already_flagged = set()
-    try:
-        cur = conn_check.execute(
-            f"SELECT data FROM {tabela} WHERE is_bot_suspect = 1"
-        )
-        already_flagged = {row[0] for row in cur.fetchall()}
-    except Exception:
-        pass
-    conn_check.close()
-
-    for r in rows:
-        if r["data"] in already_flagged:
-            r["is_bot_suspect"] = 1  # nunca regride para 0
-
+    # Nota: a preservação de is_bot_suspect=1 acontece atomicamente dentro de
+    # salvar_sessoes() — não é mais necessário fazer pré-leitura aqui.
     bots = [r for r in rows if r.get("is_bot_suspect")]
     if bots:
         logger.warning(
