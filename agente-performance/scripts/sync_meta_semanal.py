@@ -63,7 +63,7 @@ def sync_semanal_cliente(
     date_end: date,
     dry_run: bool = False,
 ) -> bool | None:
-    """Carrega campaign_totals da semana fechada para um cliente. Retorna True/False/None."""
+    """Carrega campaign_totals da semana fechada para um cliente. Suporta meta_account_id2."""
     plataformas = cfg.get("plataformas", {})
     meta_cfg    = plataformas.get("meta_ads", {})
 
@@ -90,72 +90,86 @@ def sync_semanal_cliente(
         logger.info("[%s] DRY RUN — sem escrita", cliente_key)
         return None
 
-    run_id = registrar_run(
-        cliente_key=cliente_key,
-        periodo="semanal_meta_totals",
-        data_inicio=str(date_start),
-        data_fim=str(date_end),
-        status="iniciado",
-    )
+    # Monta lista de contas: principal + conta2 (se configurada)
+    contas = [(account_id, token_env)]
+    account_id2 = meta_cfg.get("meta_account_id2")
+    if account_id2:
+        token_env2 = meta_cfg.get("meta_token_env2", token_env)
+        contas.append((account_id2, token_env2))
 
-    try:
-        rows = buscar_totais_campaign(
-            account_id=account_id,
-            date_start=date_start,
-            date_end=date_end,
-            token_env=token_env,
+    resultado_final = True
+    all_rows = []
+
+    for acct_id, t_env in contas:
+        label = meta_cfg.get("meta_account_id2_label", acct_id) if acct_id == account_id2 else acct_id
+        run_id = registrar_run(
+            cliente_key=cliente_key,
+            periodo="semanal_meta_totals",
+            data_inicio=str(date_start),
+            data_fim=str(date_end),
+            status="iniciado",
         )
 
-        if not rows:
-            logger.warning("[%s] Nenhuma linha retornada pela API", cliente_key)
+        try:
+            rows = buscar_totais_campaign(
+                account_id=acct_id,
+                date_start=date_start,
+                date_end=date_end,
+                token_env=t_env,
+            )
+
+            if not rows:
+                logger.warning("[%s] Nenhuma linha retornada pela API (account=%s)", cliente_key, acct_id)
+                registrar_run(
+                    cliente_key=cliente_key,
+                    periodo="semanal_meta_totals",
+                    data_inicio=str(date_start),
+                    data_fim=str(date_end),
+                    status="vazio",
+                    run_id=run_id,
+                )
+                continue
+
+            salvas = salvar_totais_campaign(rows, tabela=tabela_totais, db_path=db_path)
+            all_rows.extend(rows)
+
+            # Dual-write BQ (silencioso em falha)
+            try:
+                from db.bq_writer import write_campaign_totals, enabled
+                if enabled():
+                    write_campaign_totals(rows, cliente=cliente_key)
+            except Exception as bq_exc:
+                logger.warning("[%s][BQ] falha silenciosa (account=%s): %s", cliente_key, acct_id, bq_exc)
+
             registrar_run(
                 cliente_key=cliente_key,
                 periodo="semanal_meta_totals",
                 data_inicio=str(date_start),
                 data_fim=str(date_end),
-                status="vazio",
+                status="sucesso",
                 run_id=run_id,
             )
-            return False
+            logger.info(
+                "[%s] ✅ %d linhas | account=%s [%s] | %s → %s | R$ %.2f invest | R$ %.2f receita",
+                cliente_key, salvas, acct_id, label, date_start, date_end,
+                sum(r["investimento"] for r in rows),
+                sum(r["valor_compras"] for r in rows),
+            )
 
-        salvas = salvar_totais_campaign(rows, tabela=tabela_totais, db_path=db_path)
+        except Exception as exc:
+            registrar_run(
+                cliente_key=cliente_key,
+                periodo="semanal_meta_totals",
+                data_inicio=str(date_start),
+                data_fim=str(date_end),
+                status="erro",
+                erro=str(exc),
+                run_id=run_id,
+            )
+            logger.error("[%s] ❌ Erro no sync semanal (account=%s): %s", cliente_key, acct_id, exc)
+            resultado_final = False
 
-        # Dual-write BQ (silencioso em falha)
-        try:
-            from db.bq_writer import write_campaign_totals, enabled
-            if enabled():
-                write_campaign_totals(rows, cliente=cliente_key)
-        except Exception as bq_exc:
-            logger.warning("[%s][BQ] falha silenciosa: %s", cliente_key, bq_exc)
-
-        registrar_run(
-            cliente_key=cliente_key,
-            periodo="semanal_meta_totals",
-            data_inicio=str(date_start),
-            data_fim=str(date_end),
-            status="sucesso",
-            run_id=run_id,
-        )
-        logger.info(
-            "[%s] ✅ %d linhas | %s → %s | R$ %.2f invest | R$ %.2f receita",
-            cliente_key, salvas, date_start, date_end,
-            sum(r["investimento"] for r in rows),
-            sum(r["valor_compras"] for r in rows),
-        )
-        return True
-
-    except Exception as exc:
-        registrar_run(
-            cliente_key=cliente_key,
-            periodo="semanal_meta_totals",
-            data_inicio=str(date_start),
-            data_fim=str(date_end),
-            status="erro",
-            erro=str(exc),
-            run_id=run_id,
-        )
-        logger.error("[%s] ❌ Erro no sync semanal: %s", cliente_key, exc)
-        return False
+    return resultado_final if all_rows else False
 
 
 def main():

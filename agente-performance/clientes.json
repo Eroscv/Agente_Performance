@@ -69,7 +69,9 @@
           "ativo": true,
           "loader": "shopify.sync_pod",
           "loader_fn": "sincronizar",
-          "loader_params": { "dias": 8 },
+          "loader_params": {
+            "dias": 8
+          },
           "tabela_db": "shopify_receita_diaria",
           "store": "d5bead-1b",
           "token_env": "SHOPIFY_POD_TOKEN"
@@ -83,7 +85,9 @@
           "loader_params": {
             "dias": 8
           },
-          "tabela_db": "pod_kombucha_meta_ads_diario"
+          "tabela_db": "pod_kombucha_meta_ads_diario",
+          "meta_account_id2": "act_1136775015453788",
+          "meta_account_id2_label": "Pod Kombucha 2 (_NOVALP)"
         }
       },
       "builder": "relatorio.builder_pod",
@@ -119,7 +123,9 @@
           "ativo": true,
           "loader": "shopify.sync_botica",
           "loader_fn": "sincronizar",
-          "loader_params": { "dias": 8 },
+          "loader_params": {
+            "dias": 8
+          },
           "tabela_db": "shopify_receita_diaria",
           "store": "00mngb-he",
           "token_env": "SHOPIFY_BOTICA_TOKEN"

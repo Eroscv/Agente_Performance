@@ -42,7 +42,7 @@ def carregar_clientes() -> dict:
 
 
 def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool | None:
-    """Executa sync Meta Ads para um cliente. Retorna True/False/None."""
+    """Executa sync Meta Ads para um cliente. Suporta meta_account_id2 (segunda conta)."""
     plataformas = cfg.get("plataformas", {})
     meta_cfg    = plataformas.get("meta_ads", {})
 
@@ -63,52 +63,64 @@ def sync_cliente(cliente_key: str, cfg: dict, dias: int) -> bool | None:
     from pathlib import Path
     db_path = PERFORMANCE_DBS.get((cliente_key, "meta_ads"))
 
-    logger.info("[%s] Iniciando sync Meta Ads (account=%s, tabela=%s, dias=%d)",
-                cliente_key, account_id, tabela, dias)
-
     hoje = datetime.now(UTC).strftime("%Y-%m-%d")
-    run_id = registrar_run(
-        cliente_key=cliente_key,
-        periodo="diario_meta",
-        data_inicio=hoje,
-        data_fim=hoje,
-        status="iniciado",
-    )
 
-    try:
-        linhas, periodo = carregar_meta(
-            account_id=account_id,
-            dias=dias,
-            append=False,
-            tabela=tabela,
-            token_env=token_env,
-            db_path=db_path,
-            cliente_key=cliente_key,
-        )
-        registrar_run(
+    # Monta lista de contas: conta principal + conta2 (se configurada)
+    contas = [(account_id, token_env)]
+    account_id2 = meta_cfg.get("meta_account_id2")
+    if account_id2:
+        token_env2 = meta_cfg.get("meta_token_env2", token_env)  # reutiliza token se não tiver específico
+        contas.append((account_id2, token_env2))
+
+    resultado_final = True
+    for acct_id, t_env in contas:
+        label = meta_cfg.get("meta_account_id2_label", acct_id) if acct_id == account_id2 else acct_id
+        logger.info("[%s] Iniciando sync Meta Ads (account=%s [%s], tabela=%s, dias=%d)",
+                    cliente_key, acct_id, label, tabela, dias)
+
+        run_id = registrar_run(
             cliente_key=cliente_key,
             periodo="diario_meta",
             data_inicio=hoje,
             data_fim=hoje,
-            status="sucesso",
-            run_id=run_id,
+            status="iniciado",
         )
-        logger.info("[%s] ✅ %d linhas | período: %s | tabela: %s",
-                    cliente_key, linhas, periodo, tabela)
-        return True
 
-    except Exception as exc:
-        registrar_run(
-            cliente_key=cliente_key,
-            periodo="diario_meta",
-            data_inicio=hoje,
-            data_fim=hoje,
-            status="erro",
-            erro=str(exc),
-            run_id=run_id,
-        )
-        logger.error("[%s] ❌ Erro no sync Meta: %s", cliente_key, exc)
-        return False
+        try:
+            linhas, periodo = carregar_meta(
+                account_id=acct_id,
+                dias=dias,
+                append=True,  # append=True para não sobrescrever a conta principal
+                tabela=tabela,
+                token_env=t_env,
+                db_path=db_path,
+                cliente_key=cliente_key,
+            )
+            registrar_run(
+                cliente_key=cliente_key,
+                periodo="diario_meta",
+                data_inicio=hoje,
+                data_fim=hoje,
+                status="sucesso",
+                run_id=run_id,
+            )
+            logger.info("[%s] ✅ %d linhas | account=%s | período: %s | tabela: %s",
+                        cliente_key, linhas, acct_id, periodo, tabela)
+
+        except Exception as exc:
+            registrar_run(
+                cliente_key=cliente_key,
+                periodo="diario_meta",
+                data_inicio=hoje,
+                data_fim=hoje,
+                status="erro",
+                erro=str(exc),
+                run_id=run_id,
+            )
+            logger.error("[%s] ❌ Erro no sync Meta account=%s: %s", cliente_key, acct_id, exc)
+            resultado_final = False
+
+    return resultado_final
 
 
 def main():
