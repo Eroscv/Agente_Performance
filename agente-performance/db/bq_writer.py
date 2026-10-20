@@ -448,7 +448,9 @@ def write_shopify(rows: list[dict], cliente: str) -> None:
             "sessoes_checkout":       int(r["sessoes_checkout"]) if r.get("sessoes_checkout") is not None else None,
             "sessoes_compra":         int(r["sessoes_compra"]) if r.get("sessoes_compra") is not None else None,
             "taxa_conversao":         float(r["taxa_conversao"]) if r.get("taxa_conversao") is not None else None,
-            "is_bot_suspect":         int(r.get("is_bot_suspect") or 0),
+            # None quando ausente no row (pedidos sem sessões) → COALESCE no MERGE preserva
+            # o valor existente no BQ em vez de sobrescrever com 0.
+            "is_bot_suspect":         int(r["is_bot_suspect"]) if r.get("is_bot_suspect") is not None else None,
             "criado_em":              agora,
         })
 
