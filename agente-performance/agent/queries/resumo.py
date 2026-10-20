@@ -12,6 +12,7 @@ from utils.formatters import fmt_brl
 logger = logging.getLogger(__name__)
 
 from agent.queries.base import _build_where, _meta_ads_union_source, _meta_ads_where, _ROAS_EXPR, _FREQ_EXPR, AWARENESS_PATTERNS, data_range_disponivel
+from agent.tz import hoje_brt
 
 def resumo_por_campanha(
     data_inicio: Optional[str] = None,

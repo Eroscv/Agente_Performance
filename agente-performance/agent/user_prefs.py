@@ -16,6 +16,7 @@ import logging
 import sqlite3
 from pathlib import Path
 from typing import Optional
+from agent.tz import hoje_brt
 
 logger = logging.getLogger(__name__)
 

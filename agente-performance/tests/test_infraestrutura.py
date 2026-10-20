@@ -39,7 +39,7 @@ class TestConnectionsPerformance:
         from db.connections import get_performance_conn
         conn = get_performance_conn("pod_kombucha", "google_ads")
         n = conn.execute("SELECT COUNT(*) FROM pod_kombucha_gads_diario").fetchone()[0]
-        assert n == 1226  # Google Ads POD — cresce lentamente (campanhas limitadas)
+        assert n == 1595  # Google Ads POD — atualizado 20/10/2026
 
     def test_chave_invalida_levanta_keyerror(self):
         from db.connections import get_performance_conn
@@ -105,7 +105,7 @@ class TestConnectionsFederado:
         assert seg[("source_of",    "meta_ads")]   >= 32193
         assert seg[("source_of",    "google_ads")] >= 372  # backfill 90 dias
         assert seg[("pod_kombucha", "meta_ads")]   >= 2285
-        assert seg[("pod_kombucha", "google_ads")] >= 1226
+        assert seg[("pod_kombucha", "google_ads")] >= 1595
 
     def test_query_fed_helper(self):
         from db.connections import query_fed
