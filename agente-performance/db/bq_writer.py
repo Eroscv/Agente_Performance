@@ -529,7 +529,8 @@ def write_shopify_sessoes(rows: list[dict], cliente: str) -> None:
       T.sessoes_checkout     = S.sessoes_checkout,
       T.sessoes_compra       = S.sessoes_compra,
       T.taxa_conversao       = S.taxa_conversao,
-      T.is_bot_suspect       = S.is_bot_suspect
+      -- GREATEST preserva is_bot_suspect=1 mesmo que o sync envie 0 (nunca regride)
+      T.is_bot_suspect       = GREATEST(COALESCE(T.is_bot_suspect, 0), COALESCE(S.is_bot_suspect, 0))
     WHEN NOT MATCHED THEN INSERT
       (cliente, data, sessoes, sessoes_com_carrinho, sessoes_checkout,
        sessoes_compra, taxa_conversao, is_bot_suspect, criado_em)
