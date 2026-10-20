@@ -387,55 +387,11 @@ def main():
     args = parser.parse_args()
 
     logger.info("Iniciando análise de reuniões...")
-    conn = get_conn()
-    pendentes = reunioes_pendentes(conn, args.todos)
-    logger.info("Reuniões para analisar: %d", len(pendentes))
 
-    analisadas = 0
-    alertas_total = 0
-    erros = 0
-
-    for reuniao in pendentes:
-        titulo = reuniao["titulo"]
-        logger.info("  🔍 Analisando: %s (%s)", titulo, reuniao["data"])
-
-        try:
-            resultado = analisar_com_claude(reuniao)
-
-            n_alertas = len(resultado.get("alertas", []))
-            sentimento = resultado.get("sentimento", "neutro")
-            emoji_s = EMOJI_SENTIMENTO.get(sentimento, "📋")
-
-            logger.info(
-                "     %s sentimento=%s | alertas=%d | clientes=%s",
-                emoji_s,
-                sentimento,
-                n_alertas,
-                resultado.get("clientes_mencionados", []),
-            )
-
-            if not args.dry_run:
-                salvar_analise_sqlite(conn, reuniao, resultado)
-                bq_ok = salvar_analise_bq(reuniao, resultado)
-                logger.info("     💾 SQLite ✅ | BQ %s", "✅" if bq_ok else "⚠️")
-
-            enviar_slack(reuniao, resultado, dry_run=args.dry_run)
-
-            analisadas += 1
-            alertas_total += n_alertas
-
-        except json.JSONDecodeError as e:
-            logger.error("  ❌ JSON inválido do Claude em '%s': %s", titulo, e)
-            erros += 1
-        except Exception as e:
-            logger.error("  ❌ Erro ao analisar '%s': %s", titulo, e)
-            erros += 1
-
-    conn.close()
-    logger.info(
-        "\nAnálise concluída — analisadas: %d | alertas: %d | erros: %d",
-        analisadas, alertas_total, erros,
-    )
+    # Orquestração delegada ao AnaliseAgent (Camada 2) — ver agents/analise.py.
+    # Import local: evita import circular (agents.analise importa este módulo).
+    from agents.analise import AnaliseAgent
+    AnaliseAgent().executar(todos=args.todos, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

@@ -459,59 +459,13 @@ def main():
 
     logger.info("Iniciando sync de reuniões do Google Drive...")
 
-    service = get_drive_service()
-    conn    = get_conn()
-
-    arquivos = listar_docx(service)
-    logger.info(f"Arquivos .docx encontrados no Drive: {len(arquivos)}")
-
-    novos = 0
-    pulados = 0
-    erros = 0
-
-    for arq in arquivos:
-        file_id = arq["id"]
-        nome    = arq["name"]
-
-        if not args.todos and ja_processado(conn, file_id):
-            logger.info(f"  ⏭  Já processado: {nome}")
-            pulados += 1
-            continue
-
-        logger.info(f"  📥 Processando: {nome}")
-
-        try:
-            conteudo = baixar_docx(service, file_id, arq.get("mimeType", MIME_DOCX))
-            texto    = extrair_texto(conteudo)
-            dados    = parsear_reuniao(texto, nome)
-            salvar_reuniao(conn, dados, nome, file_id)
-
-            # Dual-write → MongoDB
-            mongo_ok = salvar_mongo(dados, nome, file_id)
-            mongo_status = "✅ Mongo" if mongo_ok else "⚡ Mongo já existia"
-
-            # Triple-write → BigQuery
-            bq_ok = salvar_bigquery(dados, nome, file_id)
-            bq_status = "✅ BQ" if bq_ok else "⚠️ BQ falhou" if _BQ_AVAILABLE else "BQ indisponível"
-
-            logger.info(f"  ✅ SQLite | {mongo_status} | {bq_status} | {dados['titulo']} | {dados['data']} {dados['hora']}")
-            salvar_log(conn, file_id, nome, "ok", f"Salvo: {dados['titulo']}")
-            novos += 1
-
-        except Exception as e:
-            logger.error(f"  ❌ Erro em {nome}: {e}")
-            salvar_log(conn, file_id, nome, "erro", str(e))
-            erros += 1
-
-    conn.close()
-    if _mongo_client:
-        _mongo_client.close()
-    if _BQ_AVAILABLE and _bq_client is not None:
-        try:
-            _bq_client.close()
-        except Exception:
-            pass
-    logger.info(f"\nSync concluído — novos: {novos} | pulados: {pulados} | erros: {erros}")
+    # Orquestração delegada ao IngestaoAgent (Camada 0) — ver agents/ingestao.py.
+    # Import local pra evitar import circular: agents.ingestao importa este
+    # módulo de volta (sync_reunioes), o que só funciona depois que o
+    # carregamento deste arquivo já terminou (ou seja, dentro de main(), não
+    # no topo do arquivo).
+    from agents.ingestao import IngestaoAgent
+    IngestaoAgent().executar(todos=args.todos)
 
 
 if __name__ == "__main__":

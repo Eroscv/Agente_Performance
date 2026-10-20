@@ -232,6 +232,36 @@ def _build_period_synonyms() -> dict[str, str]:
 PERIOD_SYNONYMS: dict[str, str] = _build_period_synonyms()
 
 
+def periodos_detectados(texto: str) -> list[tuple[str, str]]:
+    """
+    Detecta sinônimos de período no texto e resolve cada um em (data_inicio, data_fim)
+    via PERIOD_SYNONYMS, sem duplicatas.
+
+    Usado tanto por normalizar_pergunta() (pra anotar o [contexto] enviado ao LLM)
+    quanto por agent.nlp.interpretar() (pra sobrescrever a data da resposta do LLM
+    quando o período já foi resolvido deterministicamente — ver nota em interpretar()
+    sobre o LLM ignorar a dica de contexto em casos degenerados, ex: "essa semana"
+    quando hoje é segunda-feira).
+    """
+    t = texto.lower()
+    vistos: set[str] = set()
+    resultado: list[tuple[str, str]] = []
+
+    # Ordena por comprimento (mais específico primeiro) para evitar que "mês" engula "mês passado"
+    for sinonimo in sorted(PERIOD_SYNONYMS.keys(), key=len, reverse=True):
+        if sinonimo in t:
+            periodo = PERIOD_SYNONYMS[sinonimo]
+            if periodo not in vistos:
+                partes = periodo.split(" a ")
+                if len(partes) == 2:
+                    resultado.append((partes[0].strip(), partes[1].strip()))
+                vistos.add(periodo)
+            # Remove o sinonimo do texto processado para evitar matches parciais sobrepostos
+            t = t.replace(sinonimo, " ")
+
+    return resultado
+
+
 def normalizar_pergunta(texto: str) -> str:
     """
     Enriquece a pergunta com anotações de sinônimos para o Claude.
@@ -243,8 +273,7 @@ def normalizar_pergunta(texto: str) -> str:
     """
     t = texto.lower()
     anotacoes: list[str] = []
-    metricas_vistas: set[str]  = set()   # canonical de métrica já anotada
-    periodos_vistos: set[str]  = set()   # período resolvido já anotado
+    metricas_vistas: set[str] = set()   # canonical de métrica já anotada
 
     # Métricas: anota "metrica=canonical" apenas uma vez por canonical
     for sinonimo, canonico in METRIC_SYNONYMS.items():
@@ -253,15 +282,8 @@ def normalizar_pergunta(texto: str) -> str:
             metricas_vistas.add(canonico)
 
     # Períodos: anota "periodo=YYYY-MM-DD a YYYY-MM-DD" apenas uma vez por período resolvido
-    # Ordena por comprimento (mais específico primeiro) para evitar que "mês" engula "mês passado"
-    for sinonimo in sorted(PERIOD_SYNONYMS.keys(), key=len, reverse=True):
-        if sinonimo in t:
-            periodo = PERIOD_SYNONYMS[sinonimo]
-            if periodo not in periodos_vistos:
-                anotacoes.append(f"periodo={periodo}")
-                periodos_vistos.add(periodo)
-            # Remove o sinonimo do texto processado para evitar matches parciais sobrepostos
-            t = t.replace(sinonimo, " ")
+    for ini, fim in periodos_detectados(texto):
+        anotacoes.append(f"periodo={ini} a {fim}")
 
     if anotacoes:
         return f"{texto} [contexto: {', '.join(anotacoes)}]"

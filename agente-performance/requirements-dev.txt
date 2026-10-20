@@ -1,0 +1,16 @@
+# Dependências de desenvolvimento/teste — não vão para produção.
+# requirements.txt continua sendo só o runtime.
+-r requirements.txt
+
+pytest>=8.0.0
+vcrpy>=6.0.0          # cassette de gravação/reprodução de chamadas HTTP (LLM) — ver tests/test_nlp_vcr.py
+pytest-recording>=0.13.0
+pyyaml>=6.0
+
+# google-genai: usado em produção por agent/claude_client.py ("from google import genai")
+# mas ausente de requirements.txt — sem ele, _call_gemini falha com ImportError
+# silencioso (capturado por _call_llm) e todo tráfego cai direto no fallback
+# Anthropic/regex sem ninguém perceber. Incluído aqui pra rodar os testes de
+# cassette; vale investigar se é de fato ausência no requirements.txt de
+# produção ou se é instalado por outro caminho (imagem Docker, setup manual na VPS).
+google-genai>=1.0.0

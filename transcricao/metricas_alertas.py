@@ -22,7 +22,6 @@ Uso:
 
 import argparse
 import json
-import math
 import os
 import sqlite3
 from datetime import datetime, timezone, date, timedelta
@@ -32,6 +31,8 @@ import requests
 from dotenv import load_dotenv
 from google.cloud import bigquery as bq
 from google.oauth2 import service_account as _sa
+
+from estatistica import ic_wilson  # noqa: F401 — re-exportado p/ compatibilidade
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -57,22 +58,8 @@ SLA_DIAS = {
 }
 
 
-# ── Cálculo de IC de Wilson (proporção com n pequeno) ─────────────────────────
-
-def ic_wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
-    """
-    Intervalo de confiança de Wilson para proporção.
-    Retorna (lower, upper) como frações 0-1.
-    Correto para n pequeno (ao contrário do IC normal que falha com n<30).
-    """
-    if n == 0:
-        return (0.0, 1.0)
-    p = k / n
-    denom = 1 + z**2 / n
-    center = (p + z**2 / (2 * n)) / denom
-    margin = z * math.sqrt(p * (1 - p) / n + z**2 / (4 * n**2)) / denom
-    return (max(0.0, center - margin), min(1.0, center + margin))
-
+# ic_wilson() agora vem de estatistica.py (import no topo) — extraído daqui
+# pra ser reutilizável pelos outros subagentes (ver agents/base.py).
 
 # ── Coleta de dados ───────────────────────────────────────────────────────────
 
@@ -374,24 +361,29 @@ def main():
     parser.add_argument("--janela", type=int, default=90, help="Janela em dias (padrão: 90)")
     args = parser.parse_args()
 
+    # Coleta/formatação delegadas ao MetricasAgent (Camada 3) — ver
+    # agents/metricas.py. Import local: evita import circular (agents.metricas
+    # importa este módulo). Impressão em stdout fica aqui (detalhe de CLI).
+    from agents.metricas import MetricasAgent
+    agente = MetricasAgent()
+
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-
-    m = coletar_metricas(conn, janela_dias=args.janela)
+    m = agente.coletar(conn, janela_dias=args.janela)
     conn.close()
 
     if args.json:
         print(json.dumps(m, indent=2, ensure_ascii=False, default=str))
         return
 
-    relatorio = formatar_relatorio(m)
+    relatorio = agente.formatar(m)
     print(relatorio)
 
     if args.slack:
-        enviar_slack(relatorio)
+        agente.publicar_slack(relatorio)
 
     if args.bq:
-        salvar_metricas_bq(m)
+        agente.publicar_bq(m)
 
 
 if __name__ == "__main__":

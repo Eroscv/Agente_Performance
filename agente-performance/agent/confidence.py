@@ -39,6 +39,23 @@ _MIN_INVEST_MEDIUM = 100.0     # R$ mínimo para confiança média
 _MIN_ROWS_LIST     = 3         # mín de linhas para list[dict] ser confiável
 _MIN_DIAS_COBERTURA = 0.70     # 70% dos dias com dados → confiança não penalizada
 
+# Penalidades pós-guards (agent/hallucination_guard.py, agent/compliance_guard.py).
+# "cliente_cruzado" e "blank_response" são os mais graves — vazamento de dado
+# entre clientes e resposta vazia são os piores tipos de falha documentados
+# na Metodologia de Melhoria (Notion): irreversíveis na percepção de quem viu.
+_PENALIDADE_HG = {
+    "cliente_cruzado":        0.50,
+    "periodo_fora_do_escopo": 0.20,
+}
+_PENALIDADE_CG = {
+    "blank_response":  0.50,
+    "prompt_leak":      0.30,
+    "wrong_language":   0.20,
+    "short_response":   0.15,
+    "external_url":     0.10,
+}
+_PENALIDADE_DEFAULT = 0.10  # categoria desconhecida (ex: guard novo sem entrada aqui)
+
 
 @dataclass
 class ConfidenceResult:
@@ -256,5 +273,62 @@ def calcular_confianca(
         score=score,
         reason=reason,
         evidence=evidence,
+        warnings=warnings,
+    )
+
+
+def recalcular_pos_guards(
+    cr: ConfidenceResult,
+    hg_tipos: list[str],
+    cg_regras: list[str],
+) -> ConfidenceResult:
+    """
+    Recalcula a confiança após os guards pós-geração (HallucinationGuard
+    + ComplianceGuard rodarem sobre o texto final). Parte do score
+    pré-LLM já calculado (`cr`) e aplica penalidades adicionais por
+    categoria encontrada — mesmo padrão do pipeline documentado para o
+    agente Flora (CONFIDENCE.md), adaptado aos dois guards deste agente.
+
+    Chamado em agent/claude_client.py::gerar_resposta() logo após o texto
+    ser gerado. Nunca altera a resposta em si — só anota a confiança
+    recalculada (meta["confidence_pos_guards"]) pra quem for inspecionar/
+    logar/decidir depois.
+    """
+    score    = cr.score
+    warnings = list(cr.warnings)
+
+    for tipo in hg_tipos:
+        penalidade = _PENALIDADE_HG.get(tipo, _PENALIDADE_DEFAULT)
+        score -= penalidade
+        warnings.append(f"HallucinationGuard: '{tipo}' detectado (penalidade {penalidade*100:.0f}%)")
+
+    for regra in cg_regras:
+        penalidade = _PENALIDADE_CG.get(regra, _PENALIDADE_DEFAULT)
+        score -= penalidade
+        warnings.append(f"ComplianceGuard: '{regra}' detectado (penalidade {penalidade*100:.0f}%)")
+
+    score = max(0.0, min(score, 1.0))
+
+    if score >= _HIGH_THRESHOLD:
+        level = "high"
+    elif score >= _MEDIUM_THRESHOLD:
+        level = "medium"
+    else:
+        level = "low"
+
+    reason = cr.reason
+    if level == "low" and not reason:
+        reason = "Confiança reduzida por guards pós-geração — ver warnings."
+
+    logger.debug(
+        "[confidence] pós-guards: level=%s score=%.2f hg=%s cg=%s",
+        level, score, hg_tipos, cg_regras,
+    )
+
+    return ConfidenceResult(
+        level=level,
+        score=score,
+        reason=reason,
+        evidence=cr.evidence,
         warnings=warnings,
     )

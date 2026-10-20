@@ -26,5 +26,10 @@ agente-performance/data/campanhas.db*
 relatorio_*.docx
 relatorio_*.pdf
 
+# Dumps de conversas (dados pessoais de terceiros, não devem ser versionados)
+scripts/conversas_*.json
+scripts/conversas_*.txt
+scripts/fetch_log_*.txt
+
 # macOS
 .DS_Store

@@ -1,0 +1,182 @@
+{
+  "_comentario": "Corpus de avaliação de precisão do NLP (agent/nlp.py::interpretar()). Ver seção 4 de 'Metodologia de Teste de Skills — Agente de Performance' (Notion). ESTE É UM CORPUS v0 (SEED), NÃO MINERADO DE PRODUÇÃO: este checkout não tem data/logs.db (nenhum .db existe no repo), então não há histórico real do agent/conversation_log.py disponível para mineração. As perguntas abaixo vêm de 3 fontes rastreáveis: (1) os 16 exemplos few-shot já curados dentro do próprio NLP_SYSTEM_PROMPT em agent/nlp.py, tratados como 'verdade aprovada pela equipe'; (2) os 3 casos já existentes em tests/test_engine_validacao.py::TestNLPDeteccaoCliente; (3) casos novos, direcionados a uma lacuna real encontrada durante esta investigação (ver 'known_gap'). Quando o agente for para produção e acumular logs reais em data/logs.db, rodar scripts/extrair_corpus_producao.py (a escrever) para crescer este corpus com perguntas reais anonimizadas, por pergunta corrigida manualmente — não substituir os casos abaixo, somar.",
+  "_schema": {
+    "id": "identificador único do caso",
+    "pergunta": "texto literal enviado a interpretar()",
+    "source": "few_shot_prompt | existing_test | targeted_new",
+    "expected_intent": "intent primária esperada (deve estar em resultado['intents'])",
+    "expected_cliente_key": "source_of | pod_kombucha | botica | null",
+    "expected_plataforma": "meta_ads | google_ads | null",
+    "expected_period_synonym": "chave de agent.synonyms.PERIOD_SYNONYMS a resolver em tempo de execução (evita hardcode de datas), ou null se período não for checado neste caso",
+    "known_gap": "true = este caso HOJE deve falhar por um bug já identificado e ainda não corrigido; o script reporta separado, não mistura na acurácia 'saudável'",
+    "note": "contexto de por que o caso existe"
+  },
+  "casos": [
+    {
+      "id": "fs_01", "source": "few_shot_prompt",
+      "pergunta": "qual a performance da campanha ABO em junho?",
+      "expected_intent": "performance_campanha", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #1 do prompt"
+    },
+    {
+      "id": "fs_02", "source": "few_shot_prompt",
+      "pergunta": "top 5 campanhas por ROAS no mês passado",
+      "expected_intent": "top_roas", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": "mês passado", "known_gap": false, "note": "few-shot #2; também testa limit=5"
+    },
+    {
+      "id": "fs_03", "source": "few_shot_prompt",
+      "pergunta": "compare maio com junho",
+      "expected_intent": "comparar_periodos", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #3"
+    },
+    {
+      "id": "fs_04", "source": "few_shot_prompt",
+      "pergunta": "quais campanhas estão sem conversão essa semana?",
+      "expected_intent": "sem_conversao", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": "essa semana", "known_gap": false, "note": "few-shot #4"
+    },
+    {
+      "id": "fs_05", "source": "few_shot_prompt",
+      "pergunta": "mostre todas as campanhas ativas",
+      "expected_intent": "listar_campanhas", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #5; também testa limit=999 ('todas')"
+    },
+    {
+      "id": "fs_06", "source": "few_shot_prompt",
+      "pergunta": "o funil da Advantage Hidratante está vazando onde?",
+      "expected_intent": "funil_detalhado", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #6; também testa extração de campanha"
+    },
+    {
+      "id": "fs_07", "source": "few_shot_prompt",
+      "pergunta": "qual campanha tem maior alcance em abril?",
+      "expected_intent": "top_alcance", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #7"
+    },
+    {
+      "id": "fs_08", "source": "few_shot_prompt",
+      "pergunta": "a frequência da ABO está alta?",
+      "expected_intent": "saturacao_frequencia", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #8"
+    },
+    {
+      "id": "fs_09", "source": "few_shot_prompt",
+      "pergunta": "como estão as campanhas do Source OF no Google no mês passado?",
+      "expected_intent": "resumo_geral", "expected_cliente_key": "source_of", "expected_plataforma": "google_ads",
+      "expected_period_synonym": "mês passado", "known_gap": false, "note": "few-shot #9; cliente+plataforma juntos"
+    },
+    {
+      "id": "fs_10", "source": "few_shot_prompt",
+      "pergunta": "top ROAS do POD no Meta essa semana",
+      "expected_intent": "top_roas", "expected_cliente_key": "pod_kombucha", "expected_plataforma": "meta_ads",
+      "expected_period_synonym": "essa semana", "known_gap": false, "note": "few-shot #10"
+    },
+    {
+      "id": "fs_11", "source": "few_shot_prompt",
+      "pergunta": "compare Meta Ads vs Google Ads da Source OF essa semana",
+      "expected_intent": "comparar_plataformas", "expected_cliente_key": "source_of", "expected_plataforma": null,
+      "expected_period_synonym": "essa semana", "known_gap": false, "note": "few-shot #11; plataforma fica null de propósito (compara as duas)"
+    },
+    {
+      "id": "fs_12", "source": "few_shot_prompt",
+      "pergunta": "qual plataforma teve melhor ROAS em julho?",
+      "expected_intent": "comparar_plataformas", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #12"
+    },
+    {
+      "id": "fs_13", "source": "few_shot_prompt",
+      "pergunta": "resumo geral de todos os clientes",
+      "expected_intent": "resumo_geral", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #13; cliente_key null é o esperado aqui (agregado)"
+    },
+    {
+      "id": "fs_14", "source": "few_shot_prompt",
+      "pergunta": "performance do google ads do pod essa semana",
+      "expected_intent": "resumo_geral", "expected_cliente_key": "pod_kombucha", "expected_plataforma": "google_ads",
+      "expected_period_synonym": "essa semana", "known_gap": false, "note": "few-shot #14"
+    },
+    {
+      "id": "fs_15", "source": "few_shot_prompt",
+      "pergunta": "gads pod kombucha mês passado",
+      "expected_intent": "resumo_geral", "expected_cliente_key": "pod_kombucha", "expected_plataforma": "google_ads",
+      "expected_period_synonym": "mês passado", "known_gap": false, "note": "few-shot #15; testa gíria 'gads'"
+    },
+    {
+      "id": "fs_16", "source": "few_shot_prompt",
+      "pergunta": "top roas search e pmax do pod",
+      "expected_intent": "top_roas", "expected_cliente_key": "pod_kombucha", "expected_plataforma": "google_ads",
+      "expected_period_synonym": null, "known_gap": false, "note": "few-shot #16; testa gírias 'search'/'pmax' → google_ads"
+    },
+    {
+      "id": "et_01", "source": "existing_test",
+      "pergunta": "como está o google ads do pod essa semana?",
+      "expected_intent": "resumo_geral", "expected_cliente_key": "pod_kombucha", "expected_plataforma": "google_ads",
+      "expected_period_synonym": "essa semana", "known_gap": false,
+      "note": "tests/test_engine_validacao.py::TestNLPDeteccaoCliente::test_nlp_detecta_pod"
+    },
+    {
+      "id": "et_02", "source": "existing_test",
+      "pergunta": "resumo google ads pod",
+      "expected_intent": "resumo_geral", "expected_cliente_key": "pod_kombucha", "expected_plataforma": "google_ads",
+      "expected_period_synonym": null, "known_gap": false,
+      "note": "tests/test_engine_validacao.py::TestNLPDeteccaoCliente::test_nlp_detecta_plataforma_google"
+    },
+    {
+      "id": "et_03", "source": "existing_test",
+      "pergunta": "qual o roas da semana?",
+      "expected_intent": "periodo", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": "essa semana", "known_gap": false,
+      "note": "tests/test_engine_validacao.py::TestNLPDeteccaoCliente::test_nlp_sem_cliente_retorna_none — intent esperada ajustada para 'periodo' (mais correta semanticamente); o teste original só checava cliente_key is None"
+    },
+    {
+      "id": "gap_botica_01", "source": "targeted_new",
+      "pergunta": "como está a Botica essa semana?",
+      "expected_intent": "resumo_geral", "expected_cliente_key": "botica", "expected_plataforma": null,
+      "expected_period_synonym": "essa semana", "known_gap": true,
+      "note": "GAP REAL: clientes.json registra 'botica' (Botica Ouro Preto, ativo=true) e agent/clients/__init__.py::get_client_agent() trata cliente_key=='botica', mas a seção 'Detecção de cliente' do NLP_SYSTEM_PROMPT em agent/nlp.py só ensina 'source_of'/'pod_kombucha' — Botica nunca é mencionada. Claude não tem como extrair cliente_key='botica' por nome; a pergunta cai em modo segmentado (cliente_key=None)."
+    },
+    {
+      "id": "gap_botica_02", "source": "targeted_new",
+      "pergunta": "resumo da Botica Ouro Preto no Meta esse mês",
+      "expected_intent": "resumo_geral", "expected_cliente_key": "botica", "expected_plataforma": "meta_ads",
+      "expected_period_synonym": "esse mês", "known_gap": true,
+      "note": "mesma lacuna que gap_botica_01, variando a forma de nomear o cliente (nome completo do registry)"
+    },
+    {
+      "id": "gap_botica_03", "source": "targeted_new",
+      "pergunta": "top roas da botica",
+      "expected_intent": "top_roas", "expected_cliente_key": "botica", "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": true,
+      "note": "mesma lacuna, variando intent para confirmar que o problema é na detecção de cliente, não específico de um intent"
+    },
+    {
+      "id": "neg_01", "source": "targeted_new",
+      "pergunta": "qual campanha tem mais cliques essa semana?",
+      "expected_intent": "top_cliques", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": "essa semana", "known_gap": false,
+      "note": "caso negativo de controle — nenhum cliente/plataforma mencionado, deve retornar ambos null"
+    },
+    {
+      "id": "neg_02", "source": "targeted_new",
+      "pergunta": "quais campanhas estão inativas?",
+      "expected_intent": "campanhas_inativas", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false,
+      "note": "caso negativo de controle"
+    },
+    {
+      "id": "amb_01", "source": "targeted_new",
+      "pergunta": "e ontem, como ficou?",
+      "expected_intent": "resumo_geral", "expected_cliente_key": null, "expected_plataforma": null,
+      "expected_period_synonym": "ontem", "known_gap": false,
+      "note": "pergunta de acompanhamento curta, típica de thread — testa resolução de período sem reafirmar intent/cliente explicitamente"
+    },
+    {
+      "id": "amb_02", "source": "targeted_new",
+      "pergunta": "e a source of, tá valendo investir mais?",
+      "expected_intent": "top_roas", "expected_cliente_key": "source_of", "expected_plataforma": null,
+      "expected_period_synonym": null, "known_gap": false,
+      "note": "linguagem coloquial ('tá valendo') em vez de termo técnico — mede robustez além dos few-shots"
+    }
+  ]
+}
