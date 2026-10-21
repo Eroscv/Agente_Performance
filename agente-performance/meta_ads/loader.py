@@ -578,26 +578,9 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         rows = _enriquecer_status(rows, account_id, token_env=token_env)
         linhas = salvar(rows, append=append, tabela=tabela, db_path=db_path)
 
-        # Totais campaign-level — receita sem arredondamento de ad-level
+        # Totais campaign-level: gravados APENAS pelo sync semanal (sync_meta_semanal.py)
+        # O sync diário NÃO grava campaign_totals para evitar janelas móveis sujas no BQ.
         _totais_campaign: list[dict] = []
-        try:
-            tabela_totais = tabela.replace("_diario", "") + "_campaign_totals"
-            date_end_ct   = date.today() - timedelta(days=1)
-            date_start_ct = date_end_ct - timedelta(days=dias - 1)
-            _totais_campaign = buscar_totais_campaign(
-                account_id=account_id,
-                date_start=date_start_ct,
-                date_end=date_end_ct,
-                token_env=token_env,
-            )
-            salvar_totais_campaign(_totais_campaign, tabela=tabela_totais, db_path=db_path)
-            receita_total = sum(r["valor_compras"] for r in _totais_campaign)
-            logger.info(
-                "[%s] Campaign totals: %d campanhas | receita R$ %.2f",
-                account_id, len(_totais_campaign), receita_total,
-            )
-        except Exception as _ct_exc:
-            logger.warning("[%s] Falha ao buscar campaign totals (não crítico): %s", account_id, _ct_exc)
     except Exception as _sync_exc:
         try:
             from db.sync_alerts import registrar_resultado
