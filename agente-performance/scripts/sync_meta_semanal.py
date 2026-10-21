@@ -141,6 +141,41 @@ def sync_semanal_cliente(
             except Exception as bq_exc:
                 logger.warning("[%s][BQ] falha silenciosa (account=%s): %s", cliente_key, acct_id, bq_exc)
 
+            # Snapshot novos clientes semanal — INSERT-only, semana fechada nunca sobrescrita
+            try:
+                from db.bq_writer import write_novos_clientes_semanal, enabled as bq_enabled
+                if bq_enabled():
+                    # Busca dados de novos_clientes da shopify_diario para a semana fechada
+                    import os as _os
+                    from google.cloud import bigquery as _bq
+                    _bq_client = _bq.Client()
+                    _proj = _os.environ.get("BQ_PROJECT", _bq_client.project)
+                    _ds   = _os.environ.get("BQ_DATASET", "guara_performance")
+                    _sql  = f"""
+                        SELECT
+                            '{cliente_key}'                        AS cliente,
+                            DATE '{date_start}'                    AS semana_inicio,
+                            DATE '{date_end}'                      AS semana_fim,
+                            SUM(novos_clientes)                    AS novos_clientes,
+                            SUM(recompradores)                     AS recompradores,
+                            SUM(pedidos)                           AS pedidos
+                        FROM `{_proj}.{_ds}.shopify_diario`
+                        WHERE cliente = '{cliente_key}'
+                          AND data BETWEEN DATE '{date_start}' AND DATE '{date_end}'
+                    """
+                    _rows = list(_bq_client.query(_sql).result())
+                    if _rows and _rows[0].pedidos:
+                        _snap = [{
+                            "semana_inicio": str(date_start),
+                            "semana_fim":    str(date_end),
+                            "novos_clientes": _rows[0].novos_clientes,
+                            "recompradores":  _rows[0].recompradores,
+                            "pedidos":        _rows[0].pedidos,
+                        }]
+                        write_novos_clientes_semanal(_snap, cliente=cliente_key)
+            except Exception as _snap_exc:
+                logger.warning("[%s][BQ] novos_clientes_semanal falha silenciosa: %s", cliente_key, _snap_exc)
+
             registrar_run(
                 cliente_key=cliente_key,
                 periodo="semanal_meta_totals",

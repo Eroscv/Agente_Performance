@@ -8,9 +8,10 @@ Arquitetura:
   BigQuery ← espelho analítico (Looker Studio, cross-cliente, histórico)
 
 API pública:
-  write_ads(rows, cliente, plataforma)   → espelha linhas de ads no BQ
-  write_shopify(rows, cliente)           → espelha receita Shopify no BQ
-  enabled()                              → True se BQ está configurado
+  write_ads(rows, cliente, plataforma)        → espelha linhas de ads no BQ
+  write_shopify(rows, cliente)                → espelha receita Shopify no BQ
+  write_novos_clientes_semanal(rows, cliente) → snapshot semanal (MERGE, semana fechada nunca sobrescrita)
+  enabled()                                   → True se BQ está configurado
 
 O módulo é silencioso em caso de falha — nunca bloqueia o sync principal.
 """
@@ -543,3 +544,89 @@ def write_shopify_sessoes(rows: list[dict], cliente: str) -> None:
         logger.info("[BQ] ✅ shopify_sessoes/%s — MERGE %d linhas OK", cliente, len(valor_linhas))
     except Exception as exc:
         logger.warning("[BQ] shopify_sessoes/%s — falha silenciosa: %s", cliente, exc)
+
+
+def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
+    """
+    Grava snapshot semanal de novos clientes na tabela novos_clientes_semanal.
+
+    Semanas já fechadas NUNCA são sobrescritas — o MERGE usa
+    WHEN NOT MATCHED THEN INSERT (sem WHEN MATCHED UPDATE).
+    Isso garante que o histórico é imutável após a carga de segunda-feira.
+
+    Args:
+        rows: lista de dicts com keys:
+              semana_inicio (str YYYY-MM-DD), semana_fim (str YYYY-MM-DD),
+              novos_clientes (int), recompradores (int), pedidos (int)
+        cliente: 'source_of' | 'pod_kombucha'
+    """
+    if not rows or not enabled():
+        return
+
+    agora = datetime.now(timezone.utc).isoformat()
+    bq = _client()
+    project = os.environ.get("BQ_PROJECT", bq.project)
+    dataset = os.environ.get("BQ_DATASET", "guara_performance")
+    full_table = f"{project}.{dataset}.novos_clientes_semanal"
+
+    bq_rows = []
+    for r in rows:
+        pedidos  = int(r.get("pedidos") or 0)
+        novos    = int(r.get("novos_clientes") or 0)
+        recomb   = int(r.get("recompradores") or 0)
+        bq_rows.append({
+            "cliente":        cliente,
+            "semana_inicio":  r.get("semana_inicio"),
+            "semana_fim":     r.get("semana_fim"),
+            "novos_clientes": novos,
+            "recompradores":  recomb,
+            "pedidos":        pedidos,
+            "pct_novos":      round(novos / pedidos * 100, 1) if pedidos > 0 else None,
+            "pct_retencao":   round(recomb / pedidos * 100, 1) if pedidos > 0 else None,
+            "criado_em":      agora,
+        })
+
+    bq_rows = [r for r in bq_rows if r.get("semana_inicio") and r.get("semana_fim")]
+    if not bq_rows:
+        return
+
+    try:
+        # MERGE com INSERT-only para semanas fechadas: nunca sobrescreve histórico
+        # WHEN MATCHED → não faz nada (semana fechada é imutável)
+        # WHEN NOT MATCHED → insere nova semana
+        valor_linhas = []
+        for r in bq_rows:
+            valor_linhas.append(
+                f"('{r['cliente']}', DATE '{r['semana_inicio']}', DATE '{r['semana_fim']}', "
+                f"{r['novos_clientes']}, {r['recompradores']}, {r['pedidos']}, "
+                f"{'NULL' if r['pct_novos'] is None else r['pct_novos']}, "
+                f"{'NULL' if r['pct_retencao'] is None else r['pct_retencao']}, "
+                f"TIMESTAMP '{r['criado_em']}')"
+            )
+
+        values_sql = ",\n    ".join(valor_linhas)
+        merge_sql = f"""
+        MERGE `{full_table}` T
+        USING (
+          SELECT cliente, semana_inicio, semana_fim, novos_clientes,
+                 recompradores, pedidos, pct_novos, pct_retencao, criado_em
+          FROM UNNEST([
+            STRUCT<cliente STRING, semana_inicio DATE, semana_fim DATE,
+                   novos_clientes INT64, recompradores INT64, pedidos INT64,
+                   pct_novos FLOAT64, pct_retencao FLOAT64, criado_em TIMESTAMP>
+            {values_sql}
+          ])
+        ) S
+        ON T.cliente = S.cliente
+           AND T.semana_inicio = S.semana_inicio
+           AND T.semana_fim = S.semana_fim
+        WHEN NOT MATCHED THEN
+          INSERT (cliente, semana_inicio, semana_fim, novos_clientes,
+                  recompradores, pedidos, pct_novos, pct_retencao, criado_em)
+          VALUES (S.cliente, S.semana_inicio, S.semana_fim, S.novos_clientes,
+                  S.recompradores, S.pedidos, S.pct_novos, S.pct_retencao, S.criado_em)
+        """
+        bq.query(merge_sql).result()
+        logger.info("[BQ] ✅ novos_clientes_semanal/%s — %d semana(s) gravada(s)", cliente, len(bq_rows))
+    except Exception as exc:
+        logger.warning("[BQ] novos_clientes_semanal/%s — falha silenciosa: %s", cliente, exc)
