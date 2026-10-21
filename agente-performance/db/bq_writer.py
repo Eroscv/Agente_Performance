@@ -323,11 +323,11 @@ def write_campaign_totals(
                         ROUND(SUM(CASE WHEN plataforma = 'meta'
                                        THEN investimento * 1.1215
                                        ELSE investimento END), 2)                         AS investimento_total,
-                        CAST(SUM(CASE WHEN plataforma = 'meta'
-                                      THEN compras ELSE 0 END) AS INT64)                  AS compras_meta,
-                        CAST(SUM(CASE WHEN plataforma = 'google'
-                                      THEN compras ELSE 0 END) AS INT64)                  AS compras_google,
-                        CAST(SUM(compras) AS INT64)                                       AS compras_total
+                        ROUND(SUM(CASE WHEN plataforma = 'meta'
+                                      THEN compras ELSE 0 END), 4)                        AS compras_meta,
+                        ROUND(SUM(CASE WHEN plataforma = 'google'
+                                      THEN compras ELSE 0 END), 4)                        AS compras_google,
+                        ROUND(SUM(compras), 4)                                            AS compras_total
                     FROM `{project}.{dataset}.ads_diario`
                     GROUP BY 1, 2
                 ),
