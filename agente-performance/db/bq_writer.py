@@ -556,8 +556,9 @@ def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
 
     Args:
         rows: lista de dicts com keys:
-              semana_inicio (str YYYY-MM-DD), semana_fim (str YYYY-MM-DD),
-              novos_clientes (int), recompradores (int), pedidos (int)
+              semana_inicio, semana_fim (str YYYY-MM-DD),
+              novos_clientes, recompradores, pedidos (int),
+              novos_meta, novos_google, novos_outros (int, opcional)
         cliente: 'source_of' | 'pod_kombucha'
     """
     if not rows or not enabled():
@@ -571,9 +572,12 @@ def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
 
     bq_rows = []
     for r in rows:
-        pedidos  = int(r.get("pedidos") or 0)
-        novos    = int(r.get("novos_clientes") or 0)
-        recomb   = int(r.get("recompradores") or 0)
+        pedidos      = int(r.get("pedidos") or 0)
+        novos        = int(r.get("novos_clientes") or 0)
+        recomb       = int(r.get("recompradores") or 0)
+        novos_meta   = int(r["novos_meta"])   if r.get("novos_meta")   is not None else None
+        novos_google = int(r["novos_google"]) if r.get("novos_google") is not None else None
+        novos_outros = int(r["novos_outros"]) if r.get("novos_outros") is not None else None
         bq_rows.append({
             "cliente":        cliente,
             "semana_inicio":  r.get("semana_inicio"),
@@ -583,6 +587,9 @@ def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
             "pedidos":        pedidos,
             "pct_novos":      round(novos / pedidos * 100, 1) if pedidos > 0 else None,
             "pct_retencao":   round(recomb / pedidos * 100, 1) if pedidos > 0 else None,
+            "novos_meta":     novos_meta,
+            "novos_google":   novos_google,
+            "novos_outros":   novos_outros,
             "criado_em":      agora,
         })
 
@@ -590,10 +597,10 @@ def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
     if not bq_rows:
         return
 
+    def _int_or_null(v):
+        return "NULL" if v is None else str(int(v))
+
     try:
-        # MERGE com INSERT-only para semanas fechadas: nunca sobrescreve histórico
-        # WHEN MATCHED → não faz nada (semana fechada é imutável)
-        # WHEN NOT MATCHED → insere nova semana
         valor_linhas = []
         for r in bq_rows:
             valor_linhas.append(
@@ -601,6 +608,9 @@ def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
                 f"{r['novos_clientes']}, {r['recompradores']}, {r['pedidos']}, "
                 f"{'NULL' if r['pct_novos'] is None else r['pct_novos']}, "
                 f"{'NULL' if r['pct_retencao'] is None else r['pct_retencao']}, "
+                f"{_int_or_null(r['novos_meta'])}, "
+                f"{_int_or_null(r['novos_google'])}, "
+                f"{_int_or_null(r['novos_outros'])}, "
                 f"TIMESTAMP '{r['criado_em']}')"
             )
 
@@ -609,11 +619,14 @@ def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
         MERGE `{full_table}` T
         USING (
           SELECT cliente, semana_inicio, semana_fim, novos_clientes,
-                 recompradores, pedidos, pct_novos, pct_retencao, criado_em
+                 recompradores, pedidos, pct_novos, pct_retencao,
+                 novos_meta, novos_google, novos_outros, criado_em
           FROM UNNEST([
             STRUCT<cliente STRING, semana_inicio DATE, semana_fim DATE,
                    novos_clientes INT64, recompradores INT64, pedidos INT64,
-                   pct_novos FLOAT64, pct_retencao FLOAT64, criado_em TIMESTAMP>
+                   pct_novos FLOAT64, pct_retencao FLOAT64,
+                   novos_meta INT64, novos_google INT64, novos_outros INT64,
+                   criado_em TIMESTAMP>
             {values_sql}
           ])
         ) S
@@ -622,9 +635,11 @@ def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
            AND T.semana_fim = S.semana_fim
         WHEN NOT MATCHED THEN
           INSERT (cliente, semana_inicio, semana_fim, novos_clientes,
-                  recompradores, pedidos, pct_novos, pct_retencao, criado_em)
+                  recompradores, pedidos, pct_novos, pct_retencao,
+                  novos_meta, novos_google, novos_outros, criado_em)
           VALUES (S.cliente, S.semana_inicio, S.semana_fim, S.novos_clientes,
-                  S.recompradores, S.pedidos, S.pct_novos, S.pct_retencao, S.criado_em)
+                  S.recompradores, S.pedidos, S.pct_novos, S.pct_retencao,
+                  S.novos_meta, S.novos_google, S.novos_outros, S.criado_em)
         """
         bq.query(merge_sql).result()
         logger.info("[BQ] ✅ novos_clientes_semanal/%s — %d semana(s) gravada(s)", cliente, len(bq_rows))

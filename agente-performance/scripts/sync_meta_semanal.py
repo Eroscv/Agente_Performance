@@ -158,7 +158,10 @@ def sync_semanal_cliente(
                             DATE '{date_end}'                      AS semana_fim,
                             SUM(novos_clientes)                    AS novos_clientes,
                             SUM(recompradores)                     AS recompradores,
-                            SUM(pedidos)                           AS pedidos
+                            SUM(pedidos)                           AS pedidos,
+                            SUM(novos_meta)                        AS novos_meta,
+                            SUM(novos_google)                      AS novos_google,
+                            SUM(novos_outros)                      AS novos_outros
                         FROM `{_proj}.{_ds}.shopify_diario`
                         WHERE cliente = '{cliente_key}'
                           AND data BETWEEN DATE '{date_start}' AND DATE '{date_end}'
@@ -171,6 +174,9 @@ def sync_semanal_cliente(
                             "novos_clientes": _rows[0].novos_clientes,
                             "recompradores":  _rows[0].recompradores,
                             "pedidos":        _rows[0].pedidos,
+                            "novos_meta":     _rows[0].novos_meta,
+                            "novos_google":   _rows[0].novos_google,
+                            "novos_outros":   _rows[0].novos_outros,
                         }]
                         write_novos_clientes_semanal(_snap, cliente=cliente_key)
             except Exception as _snap_exc:
