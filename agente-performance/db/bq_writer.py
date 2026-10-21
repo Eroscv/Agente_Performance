@@ -97,11 +97,9 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
         tmp_table = f"{project}.{dataset}._{table_id}_tmp_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
         schema = bq.get_table(full_table).schema
 
-        # Cria tabela temporária com TTL de 1 dia
+        # Cria tabela temporária com TTL de 1 hora (garante limpeza mesmo em falha)
         tmp_ref = bigquery.Table(tmp_table, schema=schema)
-        tmp_ref.expires = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0).replace(
-            day=datetime.now(timezone.utc).day + 1
-        )
+        tmp_ref.expires = datetime.now(timezone.utc).replace(microsecond=0) + __import__('datetime').timedelta(hours=1)
         bq.create_table(tmp_ref, exists_ok=True)
 
         # Insere na temp via load_table_from_json (batch load, não streaming)
@@ -124,8 +122,6 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
             return len(load_job.errors)
 
         # MERGE: atualiza se existe, insere se não existe
-        # Usa (T.k IS NOT DISTINCT FROM S.k) para lidar corretamente com NULLs
-        # WHEN MATCHED: sempre atualiza (remove filtro criado_em para evitar stale data)
         on_clause = " AND ".join(f"(T.{k} IS NOT DISTINCT FROM S.{k})" for k in keys)
         all_cols = [f.name for f in schema]
         update_cols = [c for c in all_cols if c not in keys]
@@ -158,8 +154,11 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
         WHEN NOT MATCHED THEN
           INSERT ({insert_cols}) VALUES ({insert_vals})
         """
-        bq.query(merge_sql).result()
-        bq.delete_table(tmp_table, not_found_ok=True)
+        try:
+            bq.query(merge_sql).result()
+        finally:
+            # Garante remoção da tmp mesmo em caso de falha no MERGE
+            bq.delete_table(tmp_table, not_found_ok=True)
 
         logger.info("[BQ] ✅ %s — MERGE %d linhas OK", desc, len(rows))
         return 0
