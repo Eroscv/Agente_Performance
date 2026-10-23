@@ -7,6 +7,18 @@ Views criadas:
   v_dash_campaigns   → Campaigns: Amount spent, Clicks, CPC por Campaign/Campaign type
   v_dash_shopify     → Receita real (Shopify), dedupada, para blocos de loja
 
+Alterações (23/10/2026):
+  - receita renomeado para receita_plataforma em todas as views (evitar confusão com Shopify)
+  - campaign_type: N/A e Google Ads sem objetivo → 'Google'
+  - CPM, CPA, CTR, CPC removidos das views (criar como campo calculado no Data Studio)
+
+Campos calculados no Data Studio:
+  CPM  = SUM(investimento)          / SUM(impressoes) * 1000
+  CPA  = SUM(investimento_ajustado) / SUM(compras)
+  CTR  = SUM(cliques)               / SUM(impressoes) * 100
+  CPC  = SUM(amount_spent)          / SUM(cliques)
+  ROAS = SUM(receita_plataforma)    / SUM(investimento_ajustado)
+
 Regras:
   - Todas as views usam SOMENTE ads_diario como fonte de métricas de anúncio.
   - Meta recebe fator fiscal ×1.1215 em investimento_ajustado / amount_spent.
@@ -68,7 +80,7 @@ SELECT
     ROUND(SUM(investimento), 2)                                         AS investimento,
     ROUND(SUM({_INV_AJ}), 2)                                            AS investimento_ajustado,
     ROUND(SUM(compras), 0)                                              AS compras,
-    ROUND(SUM(receita), 2)                                              AS receita,
+    ROUND(SUM(receita), 2)                                              AS receita_plataforma,
 
     ROUND(SUM(receita) / NULLIF(SUM({_INV_AJ}), 0), 4)                 AS roas,
     ROUND(SUM({_INV_AJ}) / NULLIF(SUM(compras), 0), 2)                 AS cpa,
@@ -104,7 +116,7 @@ SELECT
     ROUND(SUM(investimento), 2)                                         AS investimento,
     ROUND(SUM({_INV_AJ}), 2)                                            AS amount_spent,
     ROUND(SUM(compras), 0)                                              AS compras,
-    ROUND(SUM(receita), 2)                                              AS receita,
+    ROUND(SUM(receita), 2)                                              AS receita_plataforma,
     ROUND(SUM(impressoes), 0)                                           AS impressoes,
     ROUND(SUM(cliques_link), 0)                                         AS cliques,
 
@@ -131,13 +143,19 @@ SELECT
     data,
     campanha,
     campaign_id,
-    COALESCE(objetivo, 'N/A')                                           AS campaign_type,
+    -- N/A = Google Ads (sem objetivo) → renomeado para 'Google'
+    CASE
+        WHEN plataforma = 'google' THEN 'Google'
+        WHEN objetivo IS NULL      THEN 'Google'
+        WHEN objetivo = ''         THEN 'Google'
+        ELSE objetivo
+    END                                                                 AS campaign_type,
     status,
 
     ROUND(SUM(investimento), 2)                                         AS investimento,
     ROUND(SUM({_INV_AJ}), 2)                                            AS amount_spent,
     ROUND(SUM(compras), 0)                                              AS compras,
-    ROUND(SUM(receita), 2)                                              AS receita,
+    ROUND(SUM(receita), 2)                                              AS receita_plataforma,
     ROUND(SUM(impressoes), 0)                                           AS impressoes,
     ROUND(SUM(cliques_link), 0)                                         AS cliques,
 
