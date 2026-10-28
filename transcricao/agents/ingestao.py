@@ -133,16 +133,24 @@ class IngestaoAgent(BaseSubagente):
                 logger.error("  ❌ Erro em %s: %s", nome, e)
                 _impl.salvar_log(conn, file_id, nome, "erro", str(e))
                 erros += 1
-                # Notifica Slack de forma não-bloqueante
+                # Notifica Slack — compatível com contexto sync e async
                 try:
                     import asyncio as _aio
                     from slack_status_atas import notificar_falha_slack as _nfs
                     _slack = getattr(self, "_slack_client", None)
                     if _slack:
-                        _aio.create_task(_nfs(_slack, nome, str(e)))
+                        try:
+                            # Tenta usar loop existente (contexto async do Slack Bolt)
+                            loop = _aio.get_running_loop()
+                            loop.create_task(_nfs(_slack, nome, str(e)))
+                        except RuntimeError:
+                            # Fora de contexto async (cron/CLI): cria loop temporário
+                            try:
+                                _aio.run(_nfs(_slack, nome, str(e)))
+                            except Exception as _re:
+                                logger.debug("[notif-ata] asyncio.run falhou: %s", _re)
                     else:
-                        # Fora de contexto async: agenda para próxima oportunidade
-                        logger.info("[notif-ata] Sem slack_client disponível no IngestaoAgent")
+                        logger.info("[notif-ata] Sem slack_client — configure via set_slack_client()")
                 except Exception as _ne:
                     logger.debug("[notif-ata] Não foi possível notificar: %s", _ne)
 

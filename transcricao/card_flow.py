@@ -167,7 +167,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         else:
             prazo = parse_prazo(text)
             if not prazo:
-                await _say(text="⚠️ Formato inválido. Use `YYYY-MM-DD`, `DD/MM/YYYY`, `amanhã` ou `+N`.")
+                await _say(text="⚠️ Formato inválido. Use `YYYY-MM-DD`, `DD/MM/YYYY`, `DD/MM`, `amanhã`, `hoje` ou `+N`.")
                 return True
         sess["prazo"] = prazo
         sess["step"]  = "descricao"

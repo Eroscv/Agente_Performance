@@ -188,13 +188,18 @@ async def _tarefa_reprocessar(file_id: str, nome: str,
         service = _impl.get_drive_service()
         conn    = _impl.get_conn()
 
-        # Remove dedup para forçar reprocessamento
+        agente = IngestaoAgent()
+        # Tenta processar ANTES de apagar o dedup (fail-safe)
+        resultado = agente.processar_um(service, conn, {"id": file_id, "name": nome})
+
+        # Só remove o dedup APÓS sucesso confirmado
         conn.execute("DELETE FROM sync_log WHERE fonte_id = ? AND status = 'ok'", (file_id,))
         conn.execute("DELETE FROM reunioes WHERE fonte_id = ?", (file_id,))
         conn.commit()
 
-        agente = IngestaoAgent()
-        resultado = agente.processar_um(service, conn, {"id": file_id, "name": nome})
+        # Reinsere com status ok
+        _impl.salvar_log(conn, file_id, nome, "ok",
+                         f"Reprocessado: {resultado.get('dados', {}).get('titulo', nome)}")
         conn.close()
 
         titulo = resultado.get("dados", {}).get("titulo", nome)

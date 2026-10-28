@@ -11,6 +11,7 @@ import logging
 from .constants import get_session, clear_session
 from .generator import gerar_lp
 from .db.queries import (
+    sessoes_abertas_timeout,
     abrir_sessao, encerrar_sessao,
     salvar_mensagem,
     get_preferencias, refs_como_texto,
@@ -66,6 +67,22 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str,
                                   thread_ts: str | None = None) -> bool:
     """Retorna True se a mensagem foi consumida pelo fluxo de landing page."""
     from .constants import _sessions
+    # Limpa sessões LP com timeout (>60 min sem resposta)
+    for s in sessoes_abertas_timeout(minutos=60):
+        encerrar_sessao(s["sessao_id"], "timeout", "timeout")
+        if s["user_id"] == user_id:
+            clear_session(user_id)
+            effective_ts_t = thread_ts
+            async def _say_timeout(**kw):
+                kw.setdefault("channel", channel)
+                if effective_ts_t: kw.setdefault("thread_ts", effective_ts_t)
+                await say(**kw)
+            await _say_timeout(text=(
+                "⏱️ Sua sessão de criação de landing page expirou (60 min sem resposta).\n"
+                "Digite `/criar-landing` para começar novamente."
+            ))
+            return True
+
     sess = _sessions.get(user_id)
     if not sess:
         return False

@@ -11,12 +11,19 @@ from ..db.queries import abrir_sessao
 logger = logging.getLogger(__name__)
 
 _CAMPOS = {
-    "1": "objetivo",   "objetivo":  "objetivo",
-    "2": "tom",        "tom":       "tom",
-    "3": "publico",   "publico":  "publico",
-    "4": "extras",     "extras":    "extras",
-    "5": "refs_boas",  "refs":      "refs_boas",
-    "6": "nada",       "nada":      "nada",
+    "1": "objetivo",
+    "objetivo": "objetivo",
+    "2": "tom",
+    "tom": "tom",
+    "3": "publico",
+    "publico": "publico",
+    "4": "extras",
+    "extras": "extras",
+    "5": "refs_boas",
+    "refs": "refs_boas",
+    "refs_boas": "refs_boas",
+    "6": "nada",
+    "nada": "nada",
 }
 
 _CAMPOS_LABEL = {

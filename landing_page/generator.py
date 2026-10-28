@@ -19,6 +19,17 @@ from .db.queries import (
 
 logger = logging.getLogger(__name__)
 
+# Semáforo: limita a 3 gerações simultâneas de LP para evitar sobrecarga do Claude
+_SEMAFORO_GERACAO = None
+
+def _get_semaforo():
+    """Retorna (ou cria) semáforo asyncio. Sempre chamado dentro de contexto async."""
+    global _SEMAFORO_GERACAO
+    import asyncio
+    if _SEMAFORO_GERACAO is None:
+        _SEMAFORO_GERACAO = asyncio.Semaphore(3)
+    return _SEMAFORO_GERACAO
+
 
 async def gerar_lp(user_id: str, sess: dict, say, channel: str,
                    thread_ts: str | None = None) -> None:
@@ -76,14 +87,23 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
 
     html = None
     try:
-        import anthropic
+        import anthropic, asyncio, functools
         api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("AWS_CLAUDE_KEY", "")
         client  = anthropic.Anthropic(api_key=api_key)
-        msg = client.messages.create(
-            model=os.getenv("CLAUDE_MODEL_LP", "claude-sonnet-4-6"),
-            max_tokens=8192,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        # Semáforo: máx 3 gerações simultâneas para não saturar a API
+        sem = _get_semaforo()
+        async with sem:
+            # Executa em thread para não bloquear o event loop do Slack
+            loop = asyncio.get_event_loop()
+            msg = await loop.run_in_executor(
+                None,
+                functools.partial(
+                    client.messages.create,
+                    model=os.getenv("CLAUDE_MODEL_LP", "claude-sonnet-4-6"),
+                    max_tokens=8192,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+            )
         html = msg.content[0].text.strip()
         html = re.sub(r"^```[a-z]*\n?", "", html)
         html = re.sub(r"\n?```$", "", html)

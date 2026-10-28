@@ -181,3 +181,16 @@ def desativar_ref(ref_id: int, user_id: str) -> bool:
     )
     conn().commit()
     return cur.rowcount > 0
+
+
+# ── Timeout de sessões LP ─────────────────────────────────────────────────────
+
+def sessoes_abertas_timeout(minutos: int = 60) -> list[dict]:
+    """Retorna sessões LP abertas há mais de N minutos."""
+    rows = conn().execute(
+        "SELECT sessao_id, user_id FROM sessoes "
+        "WHERE resultado IS NULL AND encerrada_em IS NULL "
+        "AND iniciada_em < datetime('now', ?)",
+        (f"-{minutos} minutes",),
+    ).fetchall()
+    return [dict(r) for r in rows]
