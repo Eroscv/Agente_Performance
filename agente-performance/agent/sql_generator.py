@@ -4,7 +4,7 @@ agent/sql_generator.py — Geração dinâmica de SQL via LLM (Text-to-SQL).
 Usado como fallback quando nenhum intent cobre a pergunta do usuário.
 
 Fluxo simples (perguntas diretas):
-  pergunta → [LLM: Generator] → SELECT validado → executa
+  pergunta → [LLM: Generator] → SELECT validado → executa no BigQuery
 
 Fluxo com Query Planner (perguntas complexas):
   pergunta → [LLM: Planner] → QueryPlan (JSON) → [LLM: Generator] → SELECT validado → executa
@@ -15,15 +15,16 @@ palavras-chave de comparação, multi-filtro ou múltiplas dimensões.
 Guardrails:
   - Apenas SELECT (bloqueia DDL/DML)
   - LIMIT máx 50 (forçado se ausente)
-  - WHERE cliente_key obrigatório (isolamento entre clientes)
+  - WHERE cliente obrigatório (isolamento entre clientes)
   - Timeout de 8s na execução
-  - Colunas inexistentes → SQLite lança exceção → capturada com mensagem amigável
+  - Erros de coluna → capturado com mensagem amigável
+
+Fonte de dados: BigQuery (guara-db.guara_performance)
 """
 
 import json
 import logging
 import re
-import sqlite3
 import time
 from typing import Optional
 
@@ -33,7 +34,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from db.connections import LEGACY_DB_PATH as DB_PATH, get_federated_conn as _get_fed_conn, query_fed as _query_fed
+from db.connections import query_fed as _query_fed
 
 logger = logging.getLogger(__name__)
 
@@ -59,57 +60,87 @@ def _call_llm(system: str, user: str, max_tokens: int = 512) -> str:
     return resp.content[0].text.strip()
 
 
-# ── Schema injetado no prompt (apenas campanhas_unificada — fonte canônica) ──
+# ── Schema injetado no prompt (BigQuery — fonte oficial) ──────────────────────
 _SCHEMA_CONTEXT = """
-Banco de dados SQLite com a seguinte view principal:
+Banco de dados BigQuery (projeto: guara-db, dataset: guara_performance).
 
-VIEW: campanhas_unificada
+== TABELA PRINCIPAL: `guara-db.guara_performance.ads_diario` ==
+Usar para: análises de campanha, ROAS, investimento, compras por data.
 Colunas disponíveis:
-  data_inicio       TEXT    — data de início do período (ex: '2026-08-11')
-  data_fim          TEXT    — data de fim do período (ex: '2026-08-17')
-  campanha          TEXT    — nome da campanha
-  cliente_key       TEXT    — identificador do cliente: 'source_of' ou 'pod_kombucha'
-  cliente_nome      TEXT    — nome legível do cliente
-  plataforma        TEXT    — 'meta_ads' ou 'google_ads'
-  investimento      REAL    — gasto total em R$
-  valor_compras     REAL    — receita gerada em R$
-  compras           REAL    — número de compras/conversões
-  impressoes        REAL    — impressões totais
-  cliques_link      REAL    — cliques no link
-  cliques_todos     REAL    — todos os cliques (inclusive engajamento)
-  alcance           REAL    — pessoas únicas alcançadas
-  frequencia        REAL    — impressoes / alcance
-  cpm               REAL    — custo por mil impressões
-  ctr_link          REAL    — taxa de clique no link (cliques_link/impressoes*100)
-  cpc_link          REAL    — custo por clique no link
-  cpa               REAL    — custo por aquisição (investimento/compras)
-  roas_compras      REAL    — ROAS bruto da plataforma (valor_compras/investimento)
-  video_3s          REAL    — visualizações de vídeo de 3 segundos
-  thruplays         REAL    — visualizações completas de vídeo
-  reproducoes_video REAL    — reproduções de vídeo iniciadas
-  visualizacoes_landing REAL — visualizações da landing page
-  adicoes_carrinho  REAL    — adições ao carrinho
-  checkout_iniciado REAL    — checkouts iniciados
-  compras_app       REAL    — compras via app
-  compras_site      REAL    — compras via site
-  conversas_iniciadas REAL  — conversas iniciadas (WhatsApp/Messenger)
+  cliente           STRING  — identificador do cliente: 'source_of', 'pod_kombucha' ou 'botica'
+  plataforma        STRING  — 'meta_ads' ou 'google_ads'
+  data              DATE    — data do registro (ex: '2026-08-11')
+  campanha          STRING  — nome da campanha
+  campaign_id       STRING  — ID da campanha na plataforma
+  adset_name        STRING  — nome do conjunto de anúncios
+  ad_name           STRING  — nome do anúncio
+  objetivo          STRING  — objetivo da campanha (OUTCOME_SALES, etc.)
+  status            STRING  — status da campanha (ACTIVE, PAUSED, etc.)
+  investimento      NUMERIC — gasto total em R$
+  compras           FLOAT   — número de compras/conversões
+  receita           NUMERIC — receita gerada em R$ (atribuição da plataforma)
+  impressoes        FLOAT   — impressões totais
+  alcance           FLOAT   — pessoas únicas alcançadas
+  cliques_link      FLOAT   — cliques no link
+  cliques_todos     FLOAT   — todos os cliques (inclusive engajamento)
+  roas              FLOAT   — ROAS bruto da plataforma (receita/investimento) — não usar em SUM()
+  cpa               FLOAT   — custo por aquisição — não usar em SUM()
+  cpm               FLOAT   — custo por mil impressões
+  frequencia        FLOAT   — impressões / alcance
+  video_3s          FLOAT   — visualizações de vídeo de 3 segundos
+  video_50pct       FLOAT   — visualizações de vídeo até 50%
+  thruplays         FLOAT   — visualizações completas de vídeo
+  adicoes_carrinho  FLOAT   — adições ao carrinho
+  checkout_iniciado FLOAT   — checkouts iniciados
+  visualizacoes_landing FLOAT — visualizações da landing page
+  qualidade_ranking STRING  — ranking de qualidade do anúncio
+  engagement_ranking STRING — ranking de engajamento
+  conversion_ranking STRING — ranking de conversão
+
+== VIEW AUXILIAR: `guara-db.guara_performance.v_ads_roas_real` ==
+Usar para: ROAS real (ajustado por Shopify), CPA real.
+Colunas adicionais além das de ads_diario:
+  investimento_ajustado NUMERIC — investimento com fator de ajuste
+  roas_real             NUMERIC — ROAS calculado com receita Shopify real
+  cpa_real              FLOAT   — CPA calculado com investimento ajustado
+
+== VIEW AUXILIAR: `guara-db.guara_performance.v_performance_completa` ==
+Usar para: visão consolidada mensal por cliente (sem granularidade de campanha).
+Colunas:
+  cliente            STRING  — chave do cliente
+  mes                DATE    — primeiro dia do mês
+  investimento_meta  NUMERIC — investimento Meta Ads no mês
+  investimento_google NUMERIC — investimento Google Ads no mês
+  investimento_total NUMERIC — total gasto no mês
+  compras_meta       FLOAT   — compras atribuídas ao Meta
+  compras_google     FLOAT   — compras atribuídas ao Google
+  receita_shopify    NUMERIC — receita real do Shopify
+  pedidos            INTEGER — pedidos Shopify no mês
+  novos_clientes     INTEGER — novos clientes no mês
+  ticket_medio       NUMERIC — ticket médio no mês
+  roas_real_total    NUMERIC — ROAS real total (Shopify / investimento total)
 
 REGRAS OBRIGATÓRIAS:
-  1. SEMPRE incluir WHERE cliente_key = '<valor>' para isolar o cliente
+  1. SEMPRE incluir WHERE cliente = '<valor>' para isolar o cliente
+     Valores válidos: 'source_of', 'pod_kombucha', 'botica'
   2. SEMPRE incluir LIMIT (máximo 50)
-  3. ROAS calculado como: ROUND(SUM(valor_compras)/NULLIF(SUM(investimento),0), 2)
-     — nunca use AVG(roas_compras)
+  3. ROAS calculado como: ROUND(SUM(receita)/NULLIF(SUM(investimento),0), 2)
+     — NUNCA use AVG(roas) nem SUM(roas) — a coluna roas não pode ser somada diretamente
   4. CPA calculado como: ROUND(SUM(investimento)/NULLIF(SUM(compras),0), 2)
   5. CTR como: ROUND(SUM(cliques_link)/NULLIF(SUM(impressoes),0)*100, 2)
-  6. Datas no formato ISO: '2026-08-01'
+  6. Filtros de data: data >= '2026-08-01' AND data <= '2026-08-31'
   7. Apenas SELECT — nenhum INSERT/UPDATE/DELETE/DROP
+  8. Nomes de tabelas sempre com backtick: `guara-db.guara_performance.ads_diario`
+  9. NÃO use campanhas_unificada nem cliente_key — não existem no BQ
+  10. HAVING com múltiplas agregações: prefira subquery wrapper:
+      SELECT * FROM (SELECT ..., SUM(x) AS x_total ... GROUP BY ...) WHERE x_total >= 100
 """
 
 # ── Prompt de geração de SQL (modo direto) ────────────────────────────────────
 _SQL_GEN_SYSTEM = (
-    "Você é um especialista em SQL para análise de campanhas de mídia paga.\n"
+    "Você é um especialista em SQL para BigQuery, análise de campanhas de mídia paga.\n"
     "Gere APENAS o SQL — sem explicações, sem markdown, sem bloco de código.\n"
-    "Responda somente com a query SQL pura, começando em SELECT.\n\n"
+    "Responda somente com a query SQL pura, começando em SELECT ou WITH.\n\n"
     + _SCHEMA_CONTEXT
 )
 
@@ -146,8 +177,9 @@ Schema do JSON de saída:
 }
 
 Regras:
-- Para ROAS use coluna "roas" (será calculado como SUM(valor_compras)/SUM(investimento))
+- Para ROAS use coluna "roas" (será calculado como SUM(receita)/SUM(investimento))
 - Para CPA use coluna "cpa" (será calculado como SUM(investimento)/SUM(compras))
+- Campo de filtro por cliente é "cliente" (não "cliente_key")
 - Nunca invente colunas fora do schema
 - Se período não mencionado, deixe inicio/fim null
 - Se não há comparação, deixe periodo_b null
@@ -155,9 +187,9 @@ Regras:
 
 # ── Prompt do Generator (modo planner) ───────────────────────────────────────
 _SQL_FROM_PLAN_SYSTEM = (
-    "Você é um especialista em SQL para análise de campanhas de mídia paga.\n"
+    "Você é um especialista em SQL para BigQuery, análise de campanhas de mídia paga.\n"
     "Receberá um plano de consulta em JSON e deve gerar APENAS o SQL correspondente.\n"
-    "Sem explicações, sem markdown, sem bloco de código — apenas o SELECT.\n\n"
+    "Sem explicações, sem markdown, sem bloco de código — apenas o SELECT ou WITH.\n\n"
     + _SCHEMA_CONTEXT
     + """
 INSTRUÇÕES PARA COMPARATIVO TEMPORAL:
@@ -166,14 +198,20 @@ INSTRUÇÕES PARA COMPARATIVO TEMPORAL:
   - Calcule delta absoluto e percentual para cada métrica
   - Exemplo:
     WITH periodo_a AS (
-      SELECT campanha, SUM(investimento) AS inv_a, SUM(valor_compras) AS rec_a
-      FROM campanhas_unificada
-      WHERE cliente_key = 'source_of' AND data_inicio >= '2026-08-11' AND data_fim <= '2026-08-17'
+      SELECT campanha,
+             SUM(investimento) AS inv_a,
+             SUM(receita) AS rec_a
+      FROM `guara-db.guara_performance.ads_diario`
+      WHERE cliente = 'source_of'
+        AND data >= '2026-08-11' AND data <= '2026-08-17'
       GROUP BY campanha
     ), periodo_b AS (
-      SELECT campanha, SUM(investimento) AS inv_b, SUM(valor_compras) AS rec_b
-      FROM campanhas_unificada
-      WHERE cliente_key = 'source_of' AND data_inicio >= '2026-08-04' AND data_fim <= '2026-08-10'
+      SELECT campanha,
+             SUM(investimento) AS inv_b,
+             SUM(receita) AS rec_b
+      FROM `guara-db.guara_performance.ads_diario`
+      WHERE cliente = 'source_of'
+        AND data >= '2026-08-04' AND data <= '2026-08-10'
       GROUP BY campanha
     )
     SELECT a.campanha,
@@ -212,7 +250,7 @@ def _is_complex_query(pergunta: str) -> bool:
 
 def _run_planner(
     pergunta: str,
-    cliente_key: str,
+    cliente: str,
     data_inicio: Optional[str],
     data_fim: Optional[str],
 ) -> dict:
@@ -225,7 +263,7 @@ def _run_planner(
         periodo_ctx = f"\nPeríodo de referência: {data_inicio or '?'} até {data_fim or 'hoje'}"
 
     user_msg = (
-        f"Cliente: {cliente_key}{periodo_ctx}\n"
+        f"Cliente: {cliente}{periodo_ctx}\n"
         f"Pergunta: {pergunta}\n\n"
         "Produza o QueryPlan JSON conforme o schema."
     )
@@ -233,7 +271,6 @@ def _run_planner(
     logger.info("[QueryPlanner] Planejando: %r", pergunta[:80])
     raw = _call_llm(system=_PLANNER_SYSTEM, user=user_msg, max_tokens=512)
 
-    # Extrai JSON mesmo se vier com texto ao redor
     json_match = re.search(r"\{.*\}", raw, re.DOTALL)
     if not json_match:
         raise ValueError(f"Planner não retornou JSON válido: {raw[:200]}")
@@ -250,16 +287,16 @@ def _run_planner(
 def _sql_from_plan(
     plan: dict,
     pergunta_original: str,
-    cliente_key: str,
+    cliente: str,
 ) -> str:
     """
     Chama o LLM Generator com o QueryPlan serializado para gerar o SQL final.
     """
     user_msg = (
-        f"Cliente: {cliente_key}\n"
+        f"Cliente: {cliente}\n"
         f"Pergunta original: {pergunta_original}\n\n"
         f"QueryPlan:\n{json.dumps(plan, ensure_ascii=False, indent=2)}\n\n"
-        "Gere o SQL correspondente. Apenas o SELECT, nada mais."
+        "Gere o SQL correspondente. Apenas o SELECT ou WITH, nada mais."
     )
 
     logger.info("[QueryPlanner] Gerando SQL a partir do plano")
@@ -268,29 +305,29 @@ def _sql_from_plan(
 
 # ── Validação ─────────────────────────────────────────────────────────────────
 _MAX_ROWS = 50
-_SELECT_RE    = re.compile(r"^\s*SELECT\b", re.IGNORECASE)
 _FORBIDDEN_RE = re.compile(
     r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|ATTACH|PRAGMA|VACUUM)\b",
     re.IGNORECASE,
 )
-_LIMIT_RE  = re.compile(r"\bLIMIT\s+\d+", re.IGNORECASE)
-_CLKEY_RE  = re.compile(r"cliente_key\s*=", re.IGNORECASE)
+_LIMIT_RE    = re.compile(r"\bLIMIT\s+\d+", re.IGNORECASE)
+_CLIENTE_RE  = re.compile(r"\bcliente\s*=", re.IGNORECASE)
 
 
-def _validate_sql(sql: str, cliente_key: str) -> tuple[str, str | None]:
+def _validate_sql(sql: str, cliente: str) -> tuple[str, str | None]:
     """
     Valida e normaliza o SQL gerado pelo LLM.
     Retorna (sql_limpo, erro_ou_None).
     """
     sql = sql.strip().rstrip(";")
 
-    # Remove backticks finais ou iniciais (markdown leak)
+    # Remove markdown leak (```sql ... ```)
     sql = re.sub(r"^```\w*\s*", "", sql)
     sql = re.sub(r"```\s*$", "", sql).strip()
 
-    # SQLite não suporta FULL OUTER JOIN — converte para LEFT JOIN
+    # BQ não suporta FULL OUTER JOIN — converte para LEFT JOIN
     sql = re.sub(r"\bFULL\s+OUTER\s+JOIN\b", "LEFT JOIN", sql, flags=re.IGNORECASE)
 
+    # Extrai só a partir de WITH ou SELECT
     match = re.search(r"((?:WITH\b|SELECT\b).*)", sql, re.IGNORECASE | re.DOTALL)
     if not match:
         return sql, "SQL gerado não contém SELECT."
@@ -299,12 +336,14 @@ def _validate_sql(sql: str, cliente_key: str) -> tuple[str, str | None]:
     if _FORBIDDEN_RE.search(sql):
         return sql, "SQL gerado contém operação não permitida (DDL/DML)."
 
+    # Garante LIMIT
     if not _LIMIT_RE.search(sql):
         sql = sql + f"\nLIMIT {_MAX_ROWS}"
         logger.debug("[SQLGenerator] LIMIT ausente — adicionado automaticamente")
 
-    if not _CLKEY_RE.search(sql):
-        inject = f"cliente_key = '{cliente_key}'"
+    # Garante WHERE cliente = '...'
+    if not _CLIENTE_RE.search(sql):
+        inject = f"cliente = '{cliente}'"
         if re.search(r"\bWHERE\b", sql, re.IGNORECASE):
             sql = re.sub(r"(\bWHERE\b)", rf"\1 {inject} AND ", sql, count=1, flags=re.IGNORECASE)
         else:
@@ -315,10 +354,10 @@ def _validate_sql(sql: str, cliente_key: str) -> tuple[str, str | None]:
                 count=1,
                 flags=re.IGNORECASE,
             )
-            if not _CLKEY_RE.search(sql):
+            if not _CLIENTE_RE.search(sql):
                 sql = sql + f"\nWHERE {inject}"
         logger.warning(
-            "[SQLGenerator] WHERE cliente_key ausente — injetado: cliente_key='%s'", cliente_key
+            "[SQLGenerator] WHERE cliente ausente — injetado: cliente='%s'", cliente
         )
 
     return sql, None
@@ -333,18 +372,19 @@ def gerar_sql(
     data_fim: Optional[str] = None,
 ) -> str:
     """
-    Gera um SELECT para a pergunta informada.
+    Gera um SELECT BigQuery para a pergunta informada.
 
     Usa Query Planner para perguntas complexas (comparativos, multi-filtro),
     e modo direto para perguntas simples.
 
     Returns:
-        SQL validado e pronto para execução.
+        SQL validado e pronto para execução no BigQuery via query_fed().
 
     Raises:
         ValueError: se o SQL gerado não passar na validação.
         RuntimeError: se o LLM falhar.
     """
+    cliente = cliente_key or "source_of"
     complexa = _is_complex_query(pergunta)
     logger.info(
         "[SQLGenerator] Modo=%s para: %r",
@@ -352,30 +392,29 @@ def gerar_sql(
         pergunta[:60],
     )
 
+    sql_raw = None
+
     if complexa:
-        # Caminho com Planner: 2 chamadas LLM
         try:
-            plan = _run_planner(pergunta, cliente_key, data_inicio, data_fim)
-            sql_raw = _sql_from_plan(plan, pergunta, cliente_key)
+            plan = _run_planner(pergunta, cliente, data_inicio, data_fim)
+            sql_raw = _sql_from_plan(plan, pergunta, cliente)
         except ValueError as e:
             logger.warning("[QueryPlanner] Falhou, caindo no modo direto: %s", e)
-            complexa = False  # fallback para modo direto abaixo
+            complexa = False
 
     if not complexa:
-        # Caminho direto: 1 chamada LLM
         periodo_ctx = ""
         if data_inicio or data_fim:
             periodo_ctx = f"\nPeríodo solicitado: {data_inicio or '?'} até {data_fim or 'hoje'}"
 
         user_msg = (
-            f"Cliente: {cliente_key}{periodo_ctx}\n"
+            f"Cliente: {cliente}{periodo_ctx}\n"
             f"Pergunta: {pergunta}\n\n"
-            "Gere o SQL para responder essa pergunta. Apenas o SELECT, nada mais."
+            "Gere o SQL para responder essa pergunta. Apenas o SELECT ou WITH, nada mais."
         )
         sql_raw = _call_llm(system=_SQL_GEN_SYSTEM, user=user_msg, max_tokens=512)
 
-    # Validação compartilhada para ambos os modos
-    sql_clean, err = _validate_sql(sql_raw, cliente_key)
+    sql_clean, err = _validate_sql(sql_raw, cliente)
     if err:
         logger.error("[SQLGenerator] Validação bloqueou: %s | sql=%r", err, sql_raw[:200])
         raise ValueError(f"SQL inválido: {err}")
@@ -392,6 +431,7 @@ def executar_sql_dinamico(
 ) -> dict:
     """
     Gera e executa SQL dinâmico para uma pergunta não coberta pelos intents fixos.
+    Usa BigQuery como fonte via query_fed() (com fallback DuckDB/SQLite).
 
     Returns:
         {
@@ -417,25 +457,11 @@ def executar_sql_dinamico(
         }
 
     try:
-        # Usa DuckDB federado (lê todos os DBs de performance + legado)
-        # Fallback para SQLite legado se DuckDB falhar
-        try:
-            rows = _query_fed(sql)
-            logger.info(
-                "[SQLGenerator] OK (DuckDB) — %d linhas em %dms (modo=%s)",
-                len(rows), int((time.time() - t0) * 1000), modo,
-            )
-        except Exception as _duck_exc:
-            logger.debug("[SQLGenerator] DuckDB falhou (%s), fallback SQLite", _duck_exc)
-            conn = sqlite3.connect(DB_PATH, timeout=8)
-            conn.row_factory = sqlite3.Row
-            cursor = conn.execute(sql)
-            rows = [dict(r) for r in cursor.fetchall()]
-            conn.close()
-            logger.info(
-                "[SQLGenerator] OK (SQLite fallback) — %d linhas em %dms (modo=%s)",
-                len(rows), int((time.time() - t0) * 1000), modo,
-            )
+        rows = _query_fed(sql, cliente_key=cliente_key)
+        logger.info(
+            "[SQLGenerator] OK — %d linhas em %dms (modo=%s)",
+            len(rows), int((time.time() - t0) * 1000), modo,
+        )
         return {
             "dados": rows,
             "sql": sql,
@@ -443,32 +469,25 @@ def executar_sql_dinamico(
             "latencia_ms": int((time.time() - t0) * 1000),
             "modo": modo,
         }
-    except sqlite3.OperationalError as e:
+    except Exception as e:
         err_msg = str(e)
-        logger.error("[SQLGenerator] Erro SQLite: %s | sql=%r", err_msg, sql[:200])
-        if "no such column" in err_msg:
-            col = re.search(r"no such column: (\S+)", err_msg)
-            col_name = col.group(1) if col else err_msg
+        logger.error("[SQLGenerator] Erro ao executar: %s | sql=%r", err_msg, sql[:200])
+
+        # Mensagem amigável para erros de coluna
+        if "not found" in err_msg.lower() or "unrecognized" in err_msg.lower():
+            col = re.search(r"Name (\w+) not found", err_msg)
+            col_name = col.group(1) if col else err_msg[:80]
             return {
                 "dados": [],
                 "sql": sql,
-                "erro": f"Coluna `{col_name}` não existe. Tente reformular a pergunta.",
+                "erro": f"Coluna `{col_name}` não existe na tabela. Tente reformular a pergunta.",
                 "latencia_ms": int((time.time() - t0) * 1000),
                 "modo": modo,
             }
         return {
             "dados": [],
             "sql": sql,
-            "erro": f"Erro ao executar consulta: {err_msg}",
-            "latencia_ms": int((time.time() - t0) * 1000),
-            "modo": modo,
-        }
-    except Exception as e:
-        logger.error("[SQLGenerator] Erro inesperado: %s", e, exc_info=True)
-        return {
-            "dados": [],
-            "sql": "",
-            "erro": f"Erro inesperado: {e}",
+            "erro": f"Erro ao executar consulta: {err_msg[:200]}",
             "latencia_ms": int((time.time() - t0) * 1000),
             "modo": modo,
         }
