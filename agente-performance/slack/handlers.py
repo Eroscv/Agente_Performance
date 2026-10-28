@@ -144,8 +144,8 @@ def get_slack_app() -> AsyncApp:
 
 
 def _limpar_mencao(text: str, bot_user_id: str | None) -> str:
-    if bot_user_id:
-        text = re.sub(rf"<@{bot_user_id}>", "", text, flags=re.IGNORECASE)
+    # Remove qualquer <@USER_ID> (bot ou usuário) do início da mensagem
+    text = re.sub(r"<@[A-Z0-9]+>", "", text)
     return text.strip()
 
 
