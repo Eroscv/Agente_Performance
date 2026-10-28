@@ -47,11 +47,86 @@ _sys.path.insert(0, "/home/ubuntu/.openclaw/workspace/transcricao")
 from slack_criar_card import (
     registrar_handlers as _registrar_criar_card,
     handle_message_criar_card as _handle_criar_card_msg,
+    cmd_tutorial_transcricao as _cmd_tut_transcricao,
 )
 from slack_landing_page import (
     registrar_handlers_landing as _registrar_landing,
     handle_message_landing as _handle_landing_msg,
+    cmd_tutorial_landing as _cmd_tut_landing,
+    cmd_criar_landing as _cmd_criar_landing,
 )
+
+# ── Interceptor de pseudo-slash-commands via mensagem de texto ─────────────────
+# Permite usar /comando como texto (mencionando o bot ou em DM)
+# sem precisar de cadastro no Slack App Dashboard.
+async def _interceptar_slash(text: str, user_id: str, channel: str,
+                              thread_ts: str, client, say=None) -> bool:
+    """
+    Detecta '/comando [args]' no texto e executa o handler direto.
+    Retorna True se consumiu a mensagem.
+    """
+    m = re.match(r"^/([a-z][a-z0-9-]*)(?:\s+(.*))?$", text.strip(), re.I)
+    if not m:
+        return False
+
+    cmd  = m.group(1).lower()
+    args = (m.group(2) or "").strip()
+
+    # respond fake: posta no canal, visível a todos e ancorado na thread
+    class _Respond:
+        async def __call__(self_, text="", blocks=None, response_type="", **kw):
+            await client.chat_postMessage(
+                channel=channel,
+                thread_ts=thread_ts,
+                text=text,
+                blocks=blocks or [],
+                mrkdwn=True,
+            )
+    _respond = _Respond()
+
+    # command fake para handlers que precisam de command dict
+    _command = {"user_id": user_id, "channel_id": channel, "text": args}
+
+    handlers = {
+        "tutorial":              lambda: _run_tut_performance(_respond),
+        "tutorial-transcricao": lambda: _cmd_tut_transcricao(None, _respond),
+        "tutorial-landing":     lambda: _cmd_tut_landing(None, _respond),
+        "criar-landing":        lambda: _cmd_criar_landing(None, _command, say or _make_say(client, channel)),
+        "ajuda":                lambda: client.chat_postMessage(
+                                    channel=channel, thread_ts=thread_ts,
+                                    text=AJUDA_TEXTO, mrkdwn=True),
+    }
+
+    if cmd not in handlers:
+        return False
+
+    try:
+        await handlers[cmd]()
+    except Exception as e:
+        logger.exception("Erro no pseudo-slash /%s: %s", cmd, e)
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=f"⚠️ Erro ao executar `/{cmd}`: {e}", mrkdwn=True
+        )
+    return True
+
+
+def _make_say(client, channel):
+    """Cria uma função say simples para handlers que precisam dela."""
+    async def _say(**kwargs):
+        if "channel" not in kwargs:
+            kwargs["channel"] = channel
+        await client.chat_postMessage(**kwargs)
+    return _say
+
+
+async def _run_tut_performance(respond):
+    """Executa o corpo do /tutorial sem depender do decorator @app.command."""
+    # Importa o texto diretamente do módulo já carregado
+    import importlib, sys
+    mod = sys.modules.get(__name__)
+    # Chama handle_tutorial passando ack fake e respond real
+    await handle_tutorial(lambda: None, respond)
 
 app = AsyncApp(
     token=os.getenv("SLACK_BOT_TOKEN", ""),
@@ -467,6 +542,10 @@ async def handle_mention(event, say, client, ack):
         return
     if await _handle_landing_msg(user_id, text, say, channel):
         return
+    # Pseudo-slash: /comando digitado como menção
+    if text.startswith("/"):
+        if await _interceptar_slash(text, user_id, channel, thread_ts, client, say):
+            return
     # ─────────────────────────────────────────────────────────────────────────────
 
     # Se tem imagem anexada, processa independente de ter texto ou não
@@ -544,7 +623,11 @@ async def handle_dm(event, client, ack):
         return
     if await _handle_landing_msg(user_id, text, _say_dm, channel):
         return
-    # ─────────────────────────────────────────────────────────────────────────────
+    # Pseudo-slash: /comando digitado em DM
+    if text.startswith("/"):
+        if await _interceptar_slash(text, user_id, channel, channel, client, _say_dm):
+            return
+    # ───────────────────────────────────────────────────────────────────────────
 
     files     = event.get("files", [])
 
