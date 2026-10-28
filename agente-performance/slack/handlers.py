@@ -830,79 +830,126 @@ async def handle_cache_limpar(ack, respond):
 
 @app.command("/tutorial")
 async def handle_tutorial(ack, respond):
-    """Tutorial interativo de primeiro uso do Agente de Performance."""
+    """Tutorial completo do Agente de Performance Guará."""
     await ack()
     texto = """\
 *🎓 Tutorial — Agente de Performance Guará*
-Bem-vindo! Este guia rápido mostra como usar o agente do zero.
+_Tudo que você precisa saber para usar o agente do zero._
 
-──────────────────────────────────────────────────
-*Passo 1 — Como falar com o agente*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*O que é este agente?*
 
-Você tem duas formas:
-• Mencione em qualquer canal: `@agente [sua pergunta]`
-• Mande uma DM direto para o bot
+O Agente de Performance monitora continuamente os dados de mídia paga dos clientes Guará (Meta Ads, Google Ads e Shopify), responde perguntas em linguagem natural, gera alertas proativos e cria criativos de imagem.
 
-:point_right: *Teste agora:* `@agente como foi essa semana?`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*🗣️ Como falar com o agente*
 
-──────────────────────────────────────────────────
-*Passo 2 — Consultas de performance*
+• Em qualquer canal: `@agente [sua pergunta]`
+• DM direto para o bot (sem precisar mencionar)
 
-Pergunte em linguagem natural sobre métricas:
+*Teste agora:* `@agente como foi essa semana?`
 
-:bar_chart:  *Resumos*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*📊 Consultas de performance*
+
+*Resumos por período*
 `@agente resumo de outubro` — investimento, receita, ROAS do mês
 `@agente como foi a semana passada?` — visão geral 7 dias
+`@agente resultado de hoje` — dados do dia atual
 
-:trophy:  *Rankings*
+*Rankings e melhores campanhas*
 `@agente top 5 campanhas por ROAS esse mês`
 `@agente quais campanhas geraram mais compras em outubro?`
+`@agente qual anúncio tem melhor CTR na Source OF?`
 
-:rotating_light:  *Alertas*
-`@agente tem alguma campanha com ROAS baixo?`
-`@agente campanhas sem conversão nos últimos 7 dias`
+*Comparações*
+`@agente compara outubro vs setembro`
+`@agente POD vs Source OF em novembro`
 
-:chart_with_upwards_trend:  *Evolução*
+*Funil de conversão*
+`@agente mostra o funil de outubro para Source OF`
+`/funil` — funil rápido do mês corrente
+
+*Evolução temporal*
 `@agente como evoluiu o ROAS da Advantage dia a dia?`
+`@agente gráfico de investimento semanal`
 
-──────────────────────────────────────────────────
-*Passo 3 — Clientes disponíveis*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*🚨 Alertas e diagnósticos*
 
-O agente cobre 3 clientes ativos:
+`@agente tem alguma campanha com ROAS abaixo do esperado?`
+`@agente campanhas sem conversão nos últimos 7 dias`
+`@agente o que está puxando o resultado para baixo?`
+`/alertas` — lista todos os alertas ativos agora
 
-🔵 *Source OF* (Meta Ads + Google Ads + Shopify)
-🟢 *POD Kombucha* (Meta Ads + Google Ads + Shopify)
-🟠 *Botica Ouro Preto* (Meta Ads + Shopify)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*🏢 Clientes disponíveis*
 
-Para consultar um cliente específico, mencione o nome:
+🔵 *Source OF* — Meta Ads + Google Ads + Shopify
+🟢 *POD Kombucha* — Meta Ads + Google Ads + Shopify
+🟠 *Botica Ouro Preto* — Meta Ads + Shopify
+
+Mencione o nome para filtrar:
 `@agente resumo da POD essa semana`
 `@agente como está a Botica em outubro?`
+`/pod` — resumo rápido da POD
 
-──────────────────────────────────────────────────
-*Passo 4 — Gerar imagens*
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*🎨 Geração de imagens*
 
-O agente gera imagens criativas via Gemini.
-O resultado sempre aparece em :art: *#image_gen*.
+O agente cria criativos via Gemini. Resultado aparece em :art: *#image_gen*.
 
-`@agente crie um banner de Black Friday para POD Kombucha, cores vibrantes`
-`@agente gere uma imagem de campanha de verão para Source OF, estilo clean`
-`@agente faça um criativo de beleza natural, fundo branco, elegante`
+*Formatos suportados:*
+`banner` / `horizontal` — 1344×768 (16:9)
+`story` / `reels` — 768×1344 (9:16)
+`post` / `feed` / `quadrado` — 1024×1024 (1:1)
 
-──────────────────────────────────────────────────
-*Passo 5 — Exportar dados*
+*Exemplos:*
+`@agente banner de Black Friday para POD, cores vibrantes`
+`@agente story de campanha de verão para Source OF, estilo clean`
+`@agente post de beleza natural, fundo branco, elegante`
+`@agente gere uma variação do último criativo com fundo preto`
 
-Peça dados em planilha, PDF ou Notion:
-`@agente relatório de outubro em Excel`
-`@agente exporta para o Notion o resumo da semana`
-Ou use o slash command: `/relatorio notion`
+*Análise de imagem:* envie uma imagem com a mensagem
+`@agente o que você acha desse criativo?`
 
-──────────────────────────────────────────────────
-*⚡ Slash Commands rápidos*
-`/hoje` · `/semana` · `/mes` · `/top` · `/alertas`
-`/campanha [nome]` · `/compare X vs Y` · `/funil`
-`/relatorio` · `/status` · `/exemplos` · `/ajuda`
+Limite: 10 imagens por hora por usuário.
 
-*💡 Dica final:* Dê 👍 nas respostas que gostar — o agente aprende com isso!
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*📤 Exportar dados*
+
+`@agente relatório de outubro em Excel` — gera planilha .xlsx
+`@agente exporta resumo da semana em PDF`
+`@agente exporta para o Notion o relatório de outubro`
+`/relatorio` — abre menu de exportação
+`/relatorio notion` — exporta direto para o Notion
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*⚡ Todos os slash commands*
+
+`/tutorial` — este guia
+`/ajuda` — referência rápida de comandos
+`/exemplos` — exemplos de perguntas por categoria
+`/hoje` — resumo do dia
+`/semana` — resumo da semana
+`/mes` — resumo do mês
+`/top` — top campanhas
+`/alertas` — alertas ativos
+`/campanha [nome]` — dados de uma campanha específica
+`/compare X vs Y` — comparação entre períodos/clientes
+`/funil` — funil de conversão
+`/pod` — resumo POD Kombucha
+`/campanhas` — lista todas as campanhas ativas
+`/metricas` — métricas detalhadas
+`/relatorio` — exportar dados
+`/status` — status do sistema e última atualização
+`/kb` — base de conhecimento (aprendizados salvos)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*💡 Dicas*
+• Dê 👍 nas respostas certas — o agente aprende com isso
+• Os dados são atualizados automaticamente a cada 6h
+• Dúvida sobre cobertura? `/status` mostra a última sincronização
 _Só você está vendo esta mensagem._
 """
     await respond(text=texto, response_type="ephemeral")

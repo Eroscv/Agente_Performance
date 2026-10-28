@@ -459,10 +459,12 @@ async def handle_action_cancelar(ack, body, say):
 def registrar_handlers(app):
     """
     Chama esta função no handlers.py do agente-performance para
-    plugar os handlers de /criar-card no AsyncApp existente.
+    plugar os handlers de /criar-card e /tutorial-transcricao no AsyncApp existente.
     """
     # Comando slash
     app.command("/criar-card")(cmd_criar_card)
+    app.command("/tutorial-transcricao")(cmd_tutorial_transcricao)
+    app.command("/tutorial-imagem")(cmd_tutorial_imagem)
 
     # Botões de responsável (action_id começa com resp_)
     app.action({"action_id": re.compile(r"^resp_")})(handle_action_responsavel)
@@ -483,6 +485,165 @@ def registrar_handlers(app):
         await ack()
 
     logger.info("[criar-card] Handlers registrados no Slack app")
+
+
+# ── Tutorial: Agente de Transcrição ──────────────────────────────────────────────────
+
+async def cmd_tutorial_transcricao(ack, respond):
+    """Tutorial do Agente de Transcrição de Reuniões."""
+    await ack()
+    texto = """\
+*🎓 Tutorial — Agente de Transcrição*
+_Transforma reuniões gravadas em tarefas acionáveis no Notion, automaticamente._
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*O que é este agente?*
+
+O Agente de Transcrição monitora uma pasta no Google Drive, processa automaticamente os arquivos `.docx` de atas de reunião e executa um pipeline de 4 etapas:
+
+1️⃣ *Ingestão* — lê o DOCX e salva no banco
+2️⃣ *Análise* — Claude extrai contexto, participantes e decisões
+3️⃣ *Alertas* — detecta riscos, prazos urgentes e problemas
+4️⃣ *Comunicação* — cria cards no Notion (database *Agenda e Registros*)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*📂 Como alimentar o agente*
+
+Basta subir o arquivo `.docx` da ata na pasta compartilhada do Google Drive. O agente roda automaticamente e processa em minutos.
+
+*Formato esperado:*
+• Arquivo `.docx` (ata exportada do Google Meet / Zoom / manual)
+• Deve conter uma seção de próximas etapas no formato:
+  `[Nome do Responsável] Título da tarefa`
+  _ou_
+  `[Nome] Título: Descrição detalhada`
+
+*Responsáveis mapeados:*
+Aline Satur · Bianca Garbin · Eros Vital · Guilherme Oliveira
+Isabela Rodrigues · Matheus Ferreira · Miguel Ticianeli
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*📄 O que é criado no Notion*
+
+Cada tarefa detectada vira um card no database *Agenda e Registros* com:
+• *Tarefa* — título extraído da ata
+• *Responsável atual* — pessoa atribuída
+• *Revisor* — default Miguel (ajustável)
+• *Status* — sempre `A fazer`
+• *Tipo* — `Reunião`
+• *Área* — detectada automaticamente
+• *Cliente* — Source Of / POD / Botica / Liv Up etc.
+• *Data* — prazo detectado na ata, ou data da reunião +7 dias
+• *Descrição* — contexto + rastreabilidade da reunião de origem
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*➕ Criar card manualmente via Slack*
+
+Não precisa esperar uma reunião! Use `/criar-card` para criar um card direto:
+
+1️⃣ `/criar-card` — inicia o fluxo
+2️⃣ Digite o *título* da tarefa
+3️⃣ Escolha o *responsável* (botões)
+4️⃣ Escolha o *revisor* (botões)
+5️⃣ Informe o *prazo* (`2026-11-10`, `amanhã`, `+7`, ou `pular`)
+6️⃣ Adicione uma *descrição* (ou `pular`)
+7️⃣ Escolha o *cliente* (botões)
+8️⃣ Confirme ✔️ — card criado com link direto para o Notion!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*🚨 Alertas automáticos*
+
+O agente envia alertas no Slack quando detecta:
+• Prazos vencidos ou prestes a vencer
+• Tarefas sem responsável claro
+• Riscos mencionados na ata (bloqueios, dependências externas)
+• Decisões importantes que precisam de follow-up
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*⚡ Slash Commands*
+`/tutorial-transcricao` — este guia
+`/criar-card` — criar card manual no Notion
+
+🔗 *Notion:* Agenda e Registros (cards de Tipo=Reunião)
+_Só você está vendo esta mensagem._
+"""
+    await respond(text=texto, response_type="ephemeral")
+
+
+# ── Tutorial: Agente de Imagem ───────────────────────────────────────────────────
+
+async def cmd_tutorial_imagem(ack, respond):
+    """Tutorial do Agente de Geração de Imagens."""
+    await ack()
+    texto = """\
+*🎓 Tutorial — Agente de Imagem*
+_Gera criativos de mídia paga via Gemini diretamente pelo Slack._
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*O que faz?*
+
+Recebe um pedido em português, refina o prompt com Claude (incluindo dados reais do cliente), gera a imagem via Gemini e posta o resultado em :art: *#image_gen*.
+
+Fluxo interno:
+`Pedido` → `Claude refina prompt (EN)` → `Gemini gera imagem` → `#image_gen`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*🖼️ Como gerar uma imagem*
+
+Mencione o agente ou mande DM:
+`@agente [descrição do criativo]`
+
+Exemplos práticos:
+`@agente banner de Black Friday para POD Kombucha, cores vibrantes`
+`@agente story de lançamento de produto para Source OF, minimalista`
+`@agente post quadrado de suplemento, fundo branco, estilo farmacêutico`
+`@agente capa de campanha de verão para Botica, cores quentes`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*📍 Formatos disponíveis*
+
+Especifique o formato no pedido:
+
+🟦 *Banner / Horizontal* (1344×768, 16:9)
+`banner`, `horizontal`, `capa`, `youtube`, `16:9`
+
+🟨 *Story / Reels* (768×1344, 9:16)
+`story`, `stories`, `reels`, `vertical`, `tiktok`, `9:16`
+
+🟫 *Post / Feed / Quadrado* (1024×1024, 1:1) — *padrão*
+`post`, `feed`, `quadrado`, `square`, `1:1`
+
+Se não especificar, gera quadrado 1:1.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*🔄 Variações e edições*
+
+Peça uma variação do último criativo gerado:
+`@agente gere uma variação com fundo preto`
+`@agente agora com o produto em destaque no centro`
+`@agente mesmo estilo mas para story`
+
+Envie uma imagem para editar ou analisar:
+• _Suba a imagem_ + `@agente adiciona uma chamada de Black Friday`
+• _Suba a imagem_ + `@agente o que você acha desse criativo?`
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*⚠️ Limites e regras*
+
+• Máx *10 imagens por hora* por usuário
+• Resultado sempre postado em *#image_gen* (não na thread)
+• Modelos usados (em ordem de preferência):
+  `gemini-2.5-flash-image` → `gemini-3.1-flash-image` → `gemini-3-pro-image`
+• O prompt é refinado automaticamente com estilo do cliente (se mencionado)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*⚡ Slash Commands*
+`/tutorial-imagem` — este guia
+`/tutorial` — tutorial completo do Agente de Performance
+`/tutorial-transcricao` — tutorial do Agente de Transcrição
+_Só você está vendo esta mensagem._
+"""
+    await respond(text=texto, response_type="ephemeral")
 
 
 import re  # noqa: E402 — necessário para registrar_handlers()
