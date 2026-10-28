@@ -532,20 +532,25 @@ async def handle_mention(event, say, client, ack):
     await ack()
 
     text      = _limpar_mencao(event.get("text", ""), event.get("user"))
+    # Remove backticks que o Slack adiciona quando o usuário formata como código
+    text      = text.strip("`")
     channel   = event["channel"]
     user_id   = event.get("user", "")
     thread_ts = event.get("thread_ts") or event["ts"]
     files     = event.get("files", [])
+
+    logger.info("[mention] user=%s text=%r", user_id, text[:80])
+
+    # ── Pseudo-slash PRIMEIRO: /comando digitado como menção ──────────────────────
+    if text.startswith("/"):
+        if await _interceptar_slash(text, user_id, channel, thread_ts, client, say):
+            return
 
     # ── Intercepta fluxos conversacionais ativos ────────────────────────────────
     if await _handle_criar_card_msg(user_id, text, say, channel):
         return
     if await _handle_landing_msg(user_id, text, say, channel):
         return
-    # Pseudo-slash: /comando digitado como menção
-    if text.startswith("/"):
-        if await _interceptar_slash(text, user_id, channel, thread_ts, client, say):
-            return
     # ─────────────────────────────────────────────────────────────────────────────
 
     # Se tem imagem anexada, processa independente de ter texto ou não
@@ -610,24 +615,27 @@ async def handle_dm(event, client, ack):
     if event.get("bot_id") or event.get("subtype"):
         return
 
-    text      = event.get("text", "").strip()
+    text      = event.get("text", "").strip().strip("`")
     channel   = event["channel"]
     user_id   = event.get("user", "")
     thread_ts = event.get("thread_ts") or event["ts"]
 
-    # ── Intercepta fluxo /criar-card se sessão ativa ─────────────────────────────
     async def _say_dm(**kwargs):
         await client.chat_postMessage(channel=channel, **kwargs)
 
+    logger.info("[dm] user=%s text=%r", user_id, text[:80])
+
+    # ── Pseudo-slash PRIMEIRO: /comando digitado em DM ────────────────────────
+    if text.startswith("/"):
+        if await _interceptar_slash(text, user_id, channel, channel, client, _say_dm):
+            return
+
+    # ── Intercepta fluxos conversacionais ativos ──────────────────────────────
     if await _handle_criar_card_msg(user_id, text, _say_dm, channel):
         return
     if await _handle_landing_msg(user_id, text, _say_dm, channel):
         return
-    # Pseudo-slash: /comando digitado em DM
-    if text.startswith("/"):
-        if await _interceptar_slash(text, user_id, channel, channel, client, _say_dm):
-            return
-    # ───────────────────────────────────────────────────────────────────────────
+    # ─────────────────────────────────────────────────────────────────────────
 
     files     = event.get("files", [])
 
