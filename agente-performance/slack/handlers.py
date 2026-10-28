@@ -41,10 +41,21 @@ from slack.helpers import (
 )
 from slack.responder import _processar_e_responder
 
+# ── Fluxo de criação manual de cards no Notion via Slack ─────────────────────
+import sys as _sys
+_sys.path.insert(0, "/home/ubuntu/.openclaw/workspace/transcricao")
+from slack_criar_card import (
+    registrar_handlers as _registrar_criar_card,
+    handle_message_criar_card as _handle_criar_card_msg,
+)
+
 app = AsyncApp(
     token=os.getenv("SLACK_BOT_TOKEN", ""),
     signing_secret=os.getenv("SLACK_SIGNING_SECRET", ""),
 )
+
+# Registra handlers do fluxo /criar-card
+_registrar_criar_card(app)
 
 
 def get_slack_app() -> AsyncApp:
@@ -441,8 +452,14 @@ async def handle_mention(event, say, client, ack):
 
     text      = _limpar_mencao(event.get("text", ""), event.get("user"))
     channel   = event["channel"]
+    user_id   = event.get("user", "")
     thread_ts = event.get("thread_ts") or event["ts"]
     files     = event.get("files", [])
+
+    # ── Intercepta fluxo /criar-card se sessão ativa ─────────────────────────────
+    if await _handle_criar_card_msg(user_id, text, say, channel):
+        return
+    # ───────────────────────────────────────────────────────────────────────
 
     # Se tem imagem anexada, processa independente de ter texto ou não
     if files and any(f.get("mimetype", "").startswith("image/") for f in files):
@@ -508,7 +525,17 @@ async def handle_dm(event, client, ack):
 
     text      = event.get("text", "").strip()
     channel   = event["channel"]
+    user_id   = event.get("user", "")
     thread_ts = event.get("thread_ts") or event["ts"]
+
+    # ── Intercepta fluxo /criar-card se sessão ativa ─────────────────────────────
+    async def _say_dm(**kwargs):
+        await client.chat_postMessage(channel=channel, **kwargs)
+
+    if await _handle_criar_card_msg(user_id, text, _say_dm, channel):
+        return  # mensagem foi consumida pelo fluxo de criação
+    # ───────────────────────────────────────────────────────────────────────
+
     files     = event.get("files", [])
 
     # Se tem imagem anexada, processa independente de ter texto ou não
