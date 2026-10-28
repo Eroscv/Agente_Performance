@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from docx import Document
+from tz import hoje_brt, agora_utc_iso
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 
@@ -211,81 +212,201 @@ def ja_processado(conn: sqlite3.Connection, file_id: str) -> bool:
 def salvar_log(conn, file_id, nome, status, mensagem):
     conn.execute(
         "INSERT INTO sync_log (fonte_id, nome, status, mensagem, criado_em) VALUES (?,?,?,?,?)",
-        (file_id, nome, status, mensagem, datetime.now(timezone.utc).isoformat()),
+        (file_id, nome, status, mensagem, agora_utc_iso()),
     )
     conn.commit()
 
 
 # ── Extração de texto ─────────────────────────────────────────────────────────
 
-def extrair_texto(docx_bytes: bytes) -> str:
-    """Extrai texto puro do .docx."""
+def extrair_doc(docx_bytes: bytes):
+    """Retorna objeto Document (python-docx) a partir dos bytes."""
     import io
-    doc = Document(io.BytesIO(docx_bytes))
+    return Document(io.BytesIO(docx_bytes))
+
+
+def extrair_texto(docx_bytes: bytes) -> str:
+    """Extrai texto puro do .docx (mantido para compatibilidade)."""
+    doc = extrair_doc(docx_bytes)
     return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
 
 # ── Parser de conteúdo ────────────────────────────────────────────────────────
 
+# Aliases de títulos de seção por fonte
+_ALIASES_SECAO = {
+    # Gemini
+    "resumo":          ["resumo"],
+    "decisoes":        ["decisões", "decisoes"],
+    "proximas_etapas": ["próximas etapas", "proximas etapas"],
+    "detalhes":        ["detalhes"],
+    # Granola
+    "resumo_granola":  ["resumo da reunião", "resumo da reuniao", "visão geral", "visao geral"],
+    "decisoes_granola":["decisões tomadas", "decisoes tomadas"],
+    "proximas_granola":["próximos passos", "proximos passos", "ações", "acoes", "action items",
+                        "encaminhamentos", "próximas ações"],
+}
+
+
+def _secoes_por_heading(doc) -> dict[str, str]:
+    """
+    Extrai seções de um Document agrupando parágrafos por Heading.
+    Retorna dict {titulo_secao_lower: conteudo_concatenado}.
+    Suporta Heading 1, 2 e 3 como delimitadores de seção.
+    """
+    secoes: dict[str, list[str]] = {}
+    secao_atual = None
+    heading_styles = {"heading 1", "heading 2", "heading 3"}
+
+    for p in doc.paragraphs:
+        style_lower = p.style.name.lower()
+        texto_p = p.text.strip()
+        if not texto_p:
+            continue
+
+        if style_lower in heading_styles:
+            secao_atual = texto_p.lower()
+            if secao_atual not in secoes:
+                secoes[secao_atual] = []
+        elif secao_atual is not None:
+            secoes[secao_atual].append(texto_p)
+
+    return {k: "\n".join(v).strip() for k, v in secoes.items() if v}
+
+
+def _buscar_secao(secoes_heading: dict[str, str], aliases: list[str]) -> str:
+    """Busca conteúdo de seção por lista de aliases (case-insensitive, contém)."""
+    for alias in aliases:
+        for chave, conteudo in secoes_heading.items():
+            if alias in chave:
+                return conteudo
+    return ""
+
+
 def _entre_secoes(texto: str, inicio: str, fins: list[str]) -> str:
-    """Extrai bloco de texto entre seções."""
+    """Extrai bloco de texto entre seções (fallback para formato Gemini antigo)."""
     pattern = rf"{re.escape(inicio)}\n(.*?)(?={'|'.join(re.escape(f) for f in fins)}|$)"
     m = re.search(pattern, texto, re.DOTALL | re.IGNORECASE)
     return m.group(1).strip() if m else ""
 
 
-def parsear_reuniao(texto: str, nome_arquivo: str) -> dict:
+_MESES_DATA = {
+    "jan": "01", "fev": "02", "mar": "03", "abr": "04",
+    "mai": "05", "jun": "06", "jul": "07", "ago": "08",
+    "set": "09", "out": "10", "nov": "11", "dez": "12",
+}
+
+
+def _extrair_data_hora(texto: str, nome_arquivo: str) -> tuple[str, str]:
+    """Extrai data ISO e hora do nome do arquivo ou do corpo do texto."""
+    # Nome estilo Gemini: "2026_09_28 09_00" ou "2026_09_28"
+    m = re.search(r"(\d{4}_\d{2}_\d{2})\s+(\d{2}_\d{2})", nome_arquivo)
+    if m:
+        return m.group(1).replace("_", "-"), m.group(2).replace("_", ":")
+
+    # Nome estilo Granola / Google Meet: "2026/10/26 14:00" ou "26/10/2026, 14h00"
+    m = re.search(r"(\d{4})/(\d{2})/(\d{2})\s+(\d{2}):(\d{2})", nome_arquivo)
+    if m:
+        return f"{m.group(1)}-{m.group(2)}-{m.group(3)}", f"{m.group(4)}:{m.group(5)}"
+
+    # Corpo: "Data: 26/10/2026, 14h00"
+    m = re.search(r"Data:\s*(\d{1,2})/(\d{2})/(\d{4}),?\s*(\d{2})h(\d{2})", texto)
+    if m:
+        return f"{m.group(3)}-{m.group(2)}-{m.group(1).zfill(2)}", f"{m.group(4)}:{m.group(5)}"
+
+    # Corpo Gemini antigo: "set. 28, 2026"
+    m = re.search(r"(\w{3})\.\s+(\d{1,2}),\s+(\d{4})", texto)
+    if m:
+        mes = _MESES_DATA.get(m.group(1).lower(), "01")
+        return f"{m.group(3)}-{mes}-{m.group(2).zfill(2)}", ""
+
+    return hoje_brt().isoformat(), ""
+
+
+def _extrair_participantes(doc, texto: str) -> str:
     """
-    Extrai estrutura da reunião do texto bruto do .docx do Gemini.
-    Tenta extrair: data, hora, título, participantes, resumo,
-    decisões, próximas etapas e detalhes.
+    Tenta extrair participantes:
+    1. Linha "Participantes: ..." no corpo (Granola)
+    2. Linha começando com "convidado" (Gemini)
     """
-    linhas = texto.splitlines()
+    for p in doc.paragraphs:
+        txt = p.text.strip()
+        if txt.lower().startswith("participantes:"):
+            return txt.split(":", 1)[1].strip()
 
-    # ── Título (segunda linha não vazia após "Observações") ──
-    titulo = nome_arquivo.split(" - ")[0].strip() if " - " in nome_arquivo else nome_arquivo
-
-    # ── Data e hora ──
-    data_str = ""
-    hora_str = ""
-    # Tenta pegar do nome do arquivo: "2026_09_28 09_00"
-    m_data = re.search(r"(\d{4}_\d{2}_\d{2})\s+(\d{2}_\d{2})", nome_arquivo)
-    if m_data:
-        data_str = m_data.group(1).replace("_", "-")
-        hora_str = m_data.group(2).replace("_", ":")
-    else:
-        # Tenta pegar do corpo (ex: "set. 28, 2026")
-        m_data2 = re.search(r"(\w{3})\.\s+(\d{1,2}),\s+(\d{4})", texto)
-        if m_data2:
-            meses = {
-                "jan": "01", "fev": "02", "mar": "03", "abr": "04",
-                "mai": "05", "jun": "06", "jul": "07", "ago": "08",
-                "set": "09", "out": "10", "nov": "11", "dez": "12",
-            }
-            mes = meses.get(m_data2.group(1).lower(), "01")
-            data_str = f"{m_data2.group(3)}-{mes}-{m_data2.group(2).zfill(2)}"
-
-    # ── Participantes (linha após "convidado") ──
-    participantes = ""
-    for i, linha in enumerate(linhas):
+    for linha in texto.splitlines():
         if linha.lower().startswith("convidado"):
-            participantes = linha.replace("convidado", "").strip()
-            break
+            return linha.replace("convidado", "", 1).strip()
+
+    return ""
+
+
+def parsear_reuniao(texto: str, nome_arquivo: str, doc=None) -> dict:
+    """
+    Extrai estrutura da reunião.
+    Suporta dois formatos:
+      - Gemini: seções delimitadas por texto ("Resumo", "Próximas etapas"…)
+      - Granola: seções delimitadas por Heading 2 ("Próximos Passos"…)
+
+    Se `doc` (objeto Document) for passado, usa extração por heading primeiro.
+    Fallback automático para regex de texto quando campos ficam vazios.
+    """
+    titulo = nome_arquivo.split(" - ")[0].strip() if " - " in nome_arquivo else nome_arquivo
+    data_str, hora_str = _extrair_data_hora(texto, nome_arquivo)
+
+    # ── Extração por headings (Granola e qualquer doc estruturado) ──
+    secoes_heading: dict[str, str] = {}
+    participantes = ""
+    if doc is not None:
+        secoes_heading = _secoes_por_heading(doc)
+        participantes  = _extrair_participantes(doc, texto)
+
+    if not participantes:
+        for linha in texto.splitlines():
+            if linha.lower().startswith("convidado"):
+                participantes = linha.replace("convidado", "", 1).strip()
+                break
 
     # ── Resumo ──
-    resumo = _entre_secoes(texto, "Resumo", ["Integração", "Decisões", "Próximas", "Detalhes", "Anexos"])
+    resumo = _buscar_secao(secoes_heading,
+        _ALIASES_SECAO["resumo"] + _ALIASES_SECAO["resumo_granola"])
+    if not resumo:
+        resumo = _entre_secoes(texto, "Resumo",
+            ["Integração", "Decisões", "Próximas", "Detalhes", "Anexos"])
 
     # ── Decisões ──
-    decisoes = _entre_secoes(texto, "Decisões", ["Próximas etapas", "Detalhes", "Revise"])
+    decisoes = _buscar_secao(secoes_heading,
+        _ALIASES_SECAO["decisoes"] + _ALIASES_SECAO["decisoes_granola"])
+    if not decisoes:
+        decisoes = _entre_secoes(texto, "Decisões", ["Próximas etapas", "Detalhes", "Revise"])
 
-    # ── Próximas etapas ──
-    proximas = _entre_secoes(texto, "Próximas etapas", ["Detalhes", "Revise", "Como está"])
+    # ── Próximas etapas / Próximos Passos ──
+    proximas = _buscar_secao(secoes_heading,
+        _ALIASES_SECAO["proximas_etapas"] + _ALIASES_SECAO["proximas_granola"])
+    if not proximas:
+        proximas = _entre_secoes(texto, "Próximas etapas", ["Detalhes", "Revise", "Como está"])
 
     # ── Detalhes ──
-    detalhes = _entre_secoes(texto, "Detalhes", ["Revise", "Como está", "Confira"])
+    detalhes = _buscar_secao(secoes_heading, _ALIASES_SECAO["detalhes"])
+    if not detalhes:
+        detalhes = _entre_secoes(texto, "Detalhes", ["Revise", "Como está", "Confira"])
+
+    # Fallback: se detalhes ainda vazio, concatenar todas as seções que sobraram
+    if not detalhes and secoes_heading:
+        conhecidas = set(
+            _ALIASES_SECAO["resumo"] + _ALIASES_SECAO["resumo_granola"]
+            + _ALIASES_SECAO["decisoes"] + _ALIASES_SECAO["decisoes_granola"]
+            + _ALIASES_SECAO["proximas_etapas"] + _ALIASES_SECAO["proximas_granola"]
+        )
+        extras = [
+            f"[{k}]\n{v}"
+            for k, v in secoes_heading.items()
+            if not any(alias in k for alias in conhecidas)
+        ]
+        detalhes = "\n\n".join(extras)[:4000]
 
     return {
-        "data":            data_str or datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "data":            data_str,
         "hora":            hora_str,
         "titulo":          titulo,
         "participantes":   participantes,
@@ -297,7 +418,7 @@ def parsear_reuniao(texto: str, nome_arquivo: str) -> dict:
 
 
 def salvar_reuniao(conn: sqlite3.Connection, dados: dict, nome_arquivo: str, file_id: str):
-    agora = datetime.now(timezone.utc).isoformat()
+    agora = agora_utc_iso()
     conn.execute("""
         INSERT OR IGNORE INTO reunioes
           (data, hora, titulo, participantes, resumo, decisoes,
@@ -307,6 +428,49 @@ def salvar_reuniao(conn: sqlite3.Connection, dados: dict, nome_arquivo: str, fil
            :proximas_etapas, :detalhes, :fonte_arquivo, :fonte_id, :criado_em)
     """, {**dados, "fonte_arquivo": nome_arquivo, "fonte_id": file_id, "criado_em": agora})
     conn.commit()
+
+
+def atualizar_reuniao_campos_vazios(
+    conn: sqlite3.Connection,
+    dados: dict,
+    nome_arquivo: str,
+    file_id: str,
+) -> bool:
+    """
+    Atualiza campos vazios de uma reunião já existente (reprocessamento).
+    Só preenche campos que hoje são NULL ou string vazia.
+    Retorna True se algum campo foi atualizado.
+    """
+    row = conn.execute(
+        """SELECT resumo, decisoes, proximas_etapas, detalhes, participantes
+           FROM reunioes WHERE fonte_id = ?""",
+        (file_id,)
+    ).fetchone()
+    if not row:
+        return False
+
+    updates = {}
+    for campo in ("resumo", "decisoes", "proximas_etapas", "detalhes", "participantes"):
+        antigo = row[campo] if isinstance(row, sqlite3.Row) else row[list(dados.keys()).index(campo)]
+        novo   = dados.get(campo) or ""
+        # Atualiza apenas se o campo estava vazio e o novo tem conteúdo
+        if (not antigo or antigo.strip() == "") and novo.strip():
+            updates[campo] = novo
+
+    if not updates:
+        return False
+
+    set_clause = ", ".join(f"{c} = :{c}" for c in updates)
+    conn.execute(
+        f"UPDATE reunioes SET {set_clause} WHERE fonte_id = :fonte_id",
+        {**updates, "fonte_id": file_id},
+    )
+    conn.commit()
+    logger.info(
+        "[update] Campos atualizados em '%s': %s",
+        file_id[:12], ", ".join(updates.keys()),
+    )
+    return True
 
 
 # ── MongoDB ───────────────────────────────────────────────────────────────
@@ -337,7 +501,7 @@ def salvar_mongo(dados: dict, nome_arquivo: str, file_id: str) -> bool:
     col = get_mongo_col()
     if col is None:
         return False
-    agora = datetime.now(timezone.utc).isoformat()
+    agora = agora_utc_iso()
     doc = {
         **dados,
         "fonte_arquivo": nome_arquivo,
@@ -424,7 +588,7 @@ def salvar_bigquery(dados: dict, nome_arquivo: str, file_id: str) -> bool:
     if table is None:
         return False
     try:
-        agora = datetime.now(timezone.utc).isoformat()
+        agora = agora_utc_iso()
         row = {
             "fonte_id":        file_id,
             "data":            dados.get("data") or None,
