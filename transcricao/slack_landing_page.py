@@ -261,37 +261,71 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str) -> 
 
 # ── Handlers de botões ────────────────────────────────────────────────────────
 
-async def handle_action_objetivo(ack, body, say):
-    await ack()
-    user_id  = body["user"]["id"]
-    sess     = _session(user_id)
-    objetivo = body["actions"][0]["value"]
-    channel  = body["container"]["channel_id"]
-    sess["objetivo"] = objetivo
-    sess["step"]     = "publico"
-    await _pedir_publico(say, channel, objetivo)
+def _thread_ts_from_body(body: dict) -> str | None:
+    """Extrai thread_ts do body de uma action do Slack."""
+    return (
+        body.get("message", {}).get("thread_ts")
+        or body.get("message", {}).get("ts")
+        or body.get("container", {}).get("message_ts")
+    )
 
 
-async def handle_action_tom(ack, body, say):
+async def handle_action_objetivo(ack, body, say, client):
     await ack()
-    user_id = body["user"]["id"]
-    sess    = _session(user_id)
-    tom     = body["actions"][0]["value"]
-    channel = body["container"]["channel_id"]
-    sess["tom"]  = tom
-    sess["step"] = "extras"
-    await _pedir_extras(say, channel, tom)
+    user_id   = body["user"]["id"]
+    sess      = _session(user_id)
+    objetivo  = body["actions"][0]["value"]
+    channel   = body["container"]["channel_id"]
+    thread_ts = _thread_ts_from_body(body)
+    sess["objetivo"]  = objetivo
+    sess["thread_ts"] = thread_ts
+    sess["step"]      = "publico"
+
+    async def _say(**kwargs):
+        kwargs.setdefault("channel", channel)
+        if thread_ts:
+            kwargs.setdefault("thread_ts", thread_ts)
+        await client.chat_postMessage(**kwargs)
+
+    await _pedir_publico(_say, channel, objetivo)
+
+
+async def handle_action_tom(ack, body, say, client):
+    await ack()
+    user_id   = body["user"]["id"]
+    sess      = _session(user_id)
+    tom       = body["actions"][0]["value"]
+    channel   = body["container"]["channel_id"]
+    thread_ts = _thread_ts_from_body(body)
+    sess["tom"]       = tom
+    sess["thread_ts"] = thread_ts
+    sess["step"]      = "extras"
+
+    async def _say(**kwargs):
+        kwargs.setdefault("channel", channel)
+        if thread_ts:
+            kwargs.setdefault("thread_ts", thread_ts)
+        await client.chat_postMessage(**kwargs)
+
+    await _pedir_extras(_say, channel, tom)
 
 
 async def handle_action_gerar(ack, body, say, client):
     """Gera a landing page completa via Claude Opus e envia como arquivo .html."""
     await ack()
-    user_id = body["user"]["id"]
-    sess    = _sessions.get(user_id, {})
-    channel = body["container"]["channel_id"]
+    user_id   = body["user"]["id"]
+    sess      = _sessions.get(user_id, {})
+    channel   = body["container"]["channel_id"]
+    thread_ts = _thread_ts_from_body(body)
+
+    async def _say(**kwargs):
+        kwargs.setdefault("channel", channel)
+        if thread_ts:
+            kwargs.setdefault("thread_ts", thread_ts)
+        await client.chat_postMessage(**kwargs)
 
     if not sess:
-        await say(channel=channel, text="⚠️ Sessão expirada. Use `/criar-landing` para recomeçar.")
+        await _say(text="⚠️ Sessão expirada. Use `/criar-landing` para recomeçar.")
         return
 
     cliente  = sess.get("cliente", "")
@@ -302,7 +336,7 @@ async def handle_action_gerar(ack, body, say, client):
 
     _clear(user_id)
 
-    await say(channel=channel, text="⏳ Gerando sua landing page com Claude... isso leva ~30 segundos.")
+    await _say(text="⏳ Gerando sua landing page com Claude... isso leva ~30 segundos.")
 
     prompt = f"""Você é um copywriter especialista em landing pages de alta conversão.
 
@@ -353,7 +387,7 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem ```html fen
         html = html.strip()
     except Exception as e:
         logger.exception("Erro ao gerar LP via Claude: %s", e)
-        await say(channel=channel, text=f"❌ Erro ao gerar landing page: {e}")
+        await _say(text=f"❌ Erro ao gerar landing page: {e}")
         return
 
     # Salva como arquivo temporário e sobe no canal de LPs
@@ -378,14 +412,13 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem ```html fen
         )
         # Avisa no canal de origem se for diferente
         if channel != LP_CHANNEL:
-            await say(
-                channel=channel,
+            await _say(
                 text=f"✅ Landing Page *{cliente}* gerada e enviada em <#{LP_CHANNEL}>!",
             )
     except Exception as e:
         logger.exception("Erro ao enviar arquivo LP: %s", e)
         preview = html[:3000] + ("\n\n_... (truncado)_" if len(html) > 3000 else "")
-        await say(channel=channel, text=f"✅ LP gerada (falha no upload):\n```html\n{preview}\n```")
+        await _say(text=f"✅ LP gerada (falha no upload):\n```html\n{preview}\n```")
     finally:
         try:
             fpath.unlink()
@@ -393,12 +426,16 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem ```html fen
             pass
 
 
-async def handle_action_cancelar(ack, body, say):
+async def handle_action_cancelar(ack, body, say, client):
     await ack()
-    user_id = body["user"]["id"]
-    channel = body["container"]["channel_id"]
+    user_id   = body["user"]["id"]
+    channel   = body["container"]["channel_id"]
+    thread_ts = _thread_ts_from_body(body)
     _clear(user_id)
-    await say(channel=channel, text="🚫 Criação de landing page cancelada.")
+    payload = {"channel": channel, "text": "🚫 Criação de landing page cancelada."}
+    if thread_ts:
+        payload["thread_ts"] = thread_ts
+    await client.chat_postMessage(**payload)
 
 
 # ── Tutorial ──────────────────────────────────────────────────────────────────

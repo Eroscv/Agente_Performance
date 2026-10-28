@@ -105,7 +105,7 @@ async def _interceptar_slash(text: str, user_id: str, channel: str,
         "tutorial":              lambda: _run_tut_performance(_respond),
         "tutorial-transcricao": lambda: _cmd_tut_transcricao(_ack, _respond),
         "tutorial-landing":     lambda: _cmd_tut_landing(_ack, _respond),
-        "criar-landing":        lambda: _cmd_criar_landing(_ack, _command, say or _say_anchored),
+        "criar-landing":        lambda: _cmd_criar_landing(_ack, _command, _say_anchored),
         "ajuda":                lambda: client.chat_postMessage(
                                     channel=channel, thread_ts=thread_ts,
                                     text=AJUDA_TEXTO, mrkdwn=True),
