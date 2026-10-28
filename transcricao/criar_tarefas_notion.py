@@ -23,6 +23,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 from tz import hoje_brt, agora_utc_iso
+from card_validacao import validar_card, sugerir_area
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
@@ -486,6 +487,23 @@ def criar_card_notion(
             }
         ]
     }
+
+    # ── Validação antes de criar ──────────────────────────────────────────────
+    ok_valido, erros_valid = validar_card(tarefa, area, reuniao_titulo)
+    if not ok_valido:
+        logger.error(
+            "  [VALIDACAO-FALHA] Pulando card inválido: %s | erros: %s",
+            tarefa.get("titulo", ""), erros_valid,
+        )
+        return False  # card inválido — não cria no Notion
+
+    # Sugere correção de área se inconsistente
+    area_sugerida = sugerir_area(tarefa.get("titulo", ""))
+    if area_sugerida and area_sugerida != area:
+        logger.warning(
+            "  [VALIDACAO-AREA] Título sugere área '%s' mas foi passado '%s' para '%s'",
+            area_sugerida, area, tarefa.get("titulo", "")[:60],
+        )
 
     if dry_run:
         logger.info(

@@ -50,6 +50,7 @@ from card_handlers import (
     cmd_tutorial_transcricao as _cmd_tut_transcricao,
     cmd_status_cards as _cmd_status_cards,
 )
+from slack_status_atas import cmd_status_atas as _cmd_status_atas, cmd_reprocessar_ata as _cmd_reprocessar_ata
 from card_flow import (
     handle_message_criar_card as _handle_criar_card_msg,
 )
@@ -122,6 +123,8 @@ async def _interceptar_slash(text: str, user_id: str, channel: str,
         "minhas-refs":          lambda: _cmd_minhas_refs(_ack, _command, _say_anchored),
         "variar-lp":            lambda: _cmd_variar_lp(_ack, _command, _say_anchored),
         "status-cards":         lambda: _cmd_status_cards(_ack, _command, _say_anchored),
+        "status-atas":          lambda: _cmd_status_atas(_ack, _command, _say_anchored),
+        "reprocessar-ata":      lambda: _cmd_reprocessar_ata(_ack, _command, _say_anchored),
         "ajuda":                lambda: client.chat_postMessage(
                                     channel=channel, thread_ts=thread_ts,
                                     text=AJUDA_TEXTO, mrkdwn=True),
