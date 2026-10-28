@@ -21,6 +21,8 @@ DB_PATH = Path(__file__).parent / "landing_page.db"
 _SCHEMA = """
 PRAGMA journal_mode=WAL;
 PRAGMA foreign_keys=ON;
+-- Migrations seguras (idempotentes)
+CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY);
 
 -- ── Projetos gerados ──────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS projetos (
@@ -41,8 +43,10 @@ CREATE TABLE IF NOT EXISTS projetos (
     arquivo_nome    TEXT,
     slack_channel   TEXT,
     slack_ts        TEXT,
-    status          TEXT    NOT NULL DEFAULT 'gerado',  -- gerado | falha | cancelado
-    observacao      TEXT
+    status          TEXT    NOT NULL DEFAULT 'gerado',  -- gerado | falha | cancelado | gerando
+    observacao      TEXT,
+    html_content    TEXT,                         -- HTML completo salvo para recuperação
+    job_id          TEXT                          -- ID do job assíncrono (quando geração em background)
 );
 
 -- ── Histórico de mensagens por sessão ─────────────────────────────────────────

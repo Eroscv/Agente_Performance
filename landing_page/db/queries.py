@@ -144,3 +144,40 @@ def refs_como_texto(user_id: str) -> tuple[str, str]:
     boas_str  = " | ".join(r["descricao"] for r in boas)  if boas  else ""
     ruins_str = " | ".join(r["descricao"] for r in ruins) if ruins else ""
     return boas_str, ruins_str
+
+
+# ── Recuperação de HTML ───────────────────────────────────────────────────────
+
+def salvar_html(projeto_id: int, html: str) -> None:
+    conn().execute(
+        "UPDATE projetos SET html_content=? WHERE id=?",
+        (html, projeto_id),
+    )
+    conn().commit()
+
+
+def get_html(projeto_id: int) -> str | None:
+    row = conn().execute(
+        "SELECT html_content FROM projetos WHERE id=?", (projeto_id,)
+    ).fetchone()
+    return row["html_content"] if row else None
+
+
+def atualizar_status_projeto(projeto_id: int, status: str, observacao: str = "") -> None:
+    conn().execute(
+        "UPDATE projetos SET status=?, observacao=? WHERE id=?",
+        (status, observacao, projeto_id),
+    )
+    conn().commit()
+
+
+# ── Gestão de refs visuais ────────────────────────────────────────────────────
+
+def desativar_ref(ref_id: int, user_id: str) -> bool:
+    """Desativa (soft delete) uma ref. Retorna True se encontrou e desativou."""
+    cur = conn().execute(
+        "UPDATE refs_visuais SET ativo=0 WHERE id=? AND user_id=?",
+        (ref_id, user_id),
+    )
+    conn().commit()
+    return cur.rowcount > 0

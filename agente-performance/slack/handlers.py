@@ -61,6 +61,11 @@ from landing_page import (
     handle_message_landing as _handle_landing_msg,
     cmd_tutorial_landing as _cmd_tut_landing,
     cmd_criar_landing as _cmd_criar_landing,
+    handle_message_minhas_refs as _handle_minhas_refs_msg,
+    handle_message_variar_lp as _handle_variar_lp_msg,
+    cmd_meus_projetos as _cmd_meus_projetos,
+    cmd_minhas_refs as _cmd_minhas_refs,
+    cmd_variar_lp as _cmd_variar_lp,
 )
 
 # ── Interceptor de pseudo-slash-commands via mensagem de texto ─────────────────
@@ -113,6 +118,9 @@ async def _interceptar_slash(text: str, user_id: str, channel: str,
         "tutorial-transcricao": lambda: _cmd_tut_transcricao(_ack, _respond),
         "tutorial-landing":     lambda: _cmd_tut_landing(_ack, _respond),
         "criar-landing":        lambda: _cmd_criar_landing(_ack, _command, _say_anchored),
+        "meus-projetos":        lambda: _cmd_meus_projetos(_ack, _command, _say_anchored),
+        "minhas-refs":          lambda: _cmd_minhas_refs(_ack, _command, _say_anchored),
+        "variar-lp":            lambda: _cmd_variar_lp(_ack, _command, _say_anchored),
         "status-cards":         lambda: _cmd_status_cards(_ack, _command, _say_anchored),
         "ajuda":                lambda: client.chat_postMessage(
                                     channel=channel, thread_ts=thread_ts,
@@ -578,6 +586,10 @@ async def handle_mention(event, say, client, ack):
         return
     if await _handle_landing_msg(user_id, text, _say_mention, channel, thread_ts):
         return
+    if await _handle_minhas_refs_msg(user_id, text, _say_mention, channel, thread_ts):
+        return
+    if await _handle_variar_lp_msg(user_id, text, _say_mention, channel, thread_ts):
+        return
     # ─────────────────────────────────────────────────────────────────────────────
 
     # Se tem imagem anexada, processa independente de ter texto ou não
@@ -663,6 +675,10 @@ async def handle_dm(event, client, ack):
     if await _handle_editar_card_msg(user_id, text, _say_dm, channel, thread_ts):
         return
     if await _handle_landing_msg(user_id, text, _say_dm, channel, thread_ts):
+        return
+    if await _handle_minhas_refs_msg(user_id, text, _say_dm, channel, thread_ts):
+        return
+    if await _handle_variar_lp_msg(user_id, text, _say_dm, channel, thread_ts):
         return
     # ─────────────────────────────────────────────────────────────────────────
 

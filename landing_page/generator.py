@@ -14,7 +14,7 @@ from .constants import LP_CHANNEL, clear_session
 from .db.queries import (
     salvar_projeto, upsert_preferencias,
     salvar_ref, encerrar_sessao,
-    salvar_mensagem,
+    salvar_mensagem, salvar_html, atualizar_status_projeto,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,13 +139,28 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
             pass
 
     # ── Persistência no banco ─────────────────────────────────────────────────
-    projeto_id = salvar_projeto(
-        user_id=user_id, cliente=cliente, objetivo=objetivo,
-        publico=publico, tom=tom, extras=extras,
-        refs_boas=refs_boas, refs_ruins=refs_ruins,
-        arquivo_nome=fname, slack_channel=channel,
-        slack_ts=slack_ts_upload, status="gerado",
-    )
+    # Se veio de geração assíncrona, atualiza o projeto pré-criado; senão cria novo
+    projeto_id_pre = sess.get("_projeto_id_pre") if sess else None
+    if projeto_id_pre:
+        atualizar_status_projeto(projeto_id_pre, "gerado")
+        conn_exec = __import__("landing_page.db.database", fromlist=["conn"]).conn()
+        conn_exec.execute(
+            "UPDATE projetos SET arquivo_nome=?, slack_channel=?, slack_ts=? WHERE id=?",
+            (fname, channel, slack_ts_upload, projeto_id_pre),
+        )
+        conn_exec.commit()
+        projeto_id = projeto_id_pre
+    else:
+        projeto_id = salvar_projeto(
+            user_id=user_id, cliente=cliente, objetivo=objetivo,
+            publico=publico, tom=tom, extras=extras,
+            refs_boas=refs_boas, refs_ruins=refs_ruins,
+            arquivo_nome=fname, slack_channel=channel,
+            slack_ts=slack_ts_upload, status="gerado",
+        )
+
+    # Salva HTML completo no banco para recuperação futura
+    salvar_html(projeto_id, html)
 
     # Salva referências acumulativas
     if refs_boas:
