@@ -765,3 +765,83 @@ async def handle_cache_limpar(ack, respond):
         await respond(text=f"🗑️ Cache limpo — {size} entradas removidas. Próximas consultas buscarão dados frescos do banco.", response_type="ephemeral")
     except Exception as e:
         await respond(text=f"⚠️ Erro: `{e}`", response_type="ephemeral")
+
+
+@app.command("/tutorial")
+async def handle_tutorial(ack, respond):
+    """Tutorial interativo de primeiro uso do Agente de Performance."""
+    await ack()
+    texto = """\
+*🎓 Tutorial — Agente de Performance Guará*
+Bem-vindo! Este guia rápido mostra como usar o agente do zero.
+
+──────────────────────────────────────────────────
+*Passo 1 — Como falar com o agente*
+
+Você tem duas formas:
+• Mencione em qualquer canal: `@agente [sua pergunta]`
+• Mande uma DM direto para o bot
+
+:point_right: *Teste agora:* `@agente como foi essa semana?`
+
+──────────────────────────────────────────────────
+*Passo 2 — Consultas de performance*
+
+Pergunte em linguagem natural sobre métricas:
+
+:bar_chart:  *Resumos*
+`@agente resumo de outubro` — investimento, receita, ROAS do mês
+`@agente como foi a semana passada?` — visão geral 7 dias
+
+:trophy:  *Rankings*
+`@agente top 5 campanhas por ROAS esse mês`
+`@agente quais campanhas geraram mais compras em outubro?`
+
+:rotating_light:  *Alertas*
+`@agente tem alguma campanha com ROAS baixo?`
+`@agente campanhas sem conversão nos últimos 7 dias`
+
+:chart_with_upwards_trend:  *Evolução*
+`@agente como evoluiu o ROAS da Advantage dia a dia?`
+
+──────────────────────────────────────────────────
+*Passo 3 — Clientes disponíveis*
+
+O agente cobre 3 clientes ativos:
+
+🔵 *Source OF* (Meta Ads + Google Ads + Shopify)
+🟢 *POD Kombucha* (Meta Ads + Google Ads + Shopify)
+🟠 *Botica Ouro Preto* (Meta Ads + Shopify)
+
+Para consultar um cliente específico, mencione o nome:
+`@agente resumo da POD essa semana`
+`@agente como está a Botica em outubro?`
+
+──────────────────────────────────────────────────
+*Passo 4 — Gerar imagens*
+
+O agente gera imagens criativas via Gemini.
+O resultado sempre aparece em :art: *#image_gen*.
+
+`@agente crie um banner de Black Friday para POD Kombucha, cores vibrantes`
+`@agente gere uma imagem de campanha de verão para Source OF, estilo clean`
+`@agente faça um criativo de beleza natural, fundo branco, elegante`
+
+──────────────────────────────────────────────────
+*Passo 5 — Exportar dados*
+
+Peça dados em planilha, PDF ou Notion:
+`@agente relatório de outubro em Excel`
+`@agente exporta para o Notion o resumo da semana`
+Ou use o slash command: `/relatorio notion`
+
+──────────────────────────────────────────────────
+*⚡ Slash Commands rápidos*
+`/hoje` · `/semana` · `/mes` · `/top` · `/alertas`
+`/campanha [nome]` · `/compare X vs Y` · `/funil`
+`/relatorio` · `/status` · `/exemplos` · `/ajuda`
+
+*💡 Dica final:* Dê 👍 nas respostas que gostar — o agente aprende com isso!
+_Só você está vendo esta mensagem._
+"""
+    await respond(text=texto, response_type="ephemeral")
