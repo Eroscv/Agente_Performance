@@ -522,6 +522,95 @@ def salvar_mongo(dados: dict, nome_arquivo: str, file_id: str) -> bool:
         return False
 
 
+# ── Reformatação de próximas etapas via Claude ────────────────────────────────
+
+_NOMES_TIME = [
+    "Aline Satur", "Aline",
+    "Bianca Garbin", "Bianca",
+    "Eros Vital", "Eros",
+    "Guilherme Oliveira", "Guilherme",
+    "Isabela Rodrigues", "Isabela", "Isa",
+    "Matheus Ferreira", "Matheus",
+    "Miguel Ticianeli", "Miguel",
+]
+
+_REFORMATAR_SYSTEM = """Você converte o texto de próximas etapas de uma reunião de agência de marketing
+em tarefas estruturadas.
+
+Time disponível (únicos que podem ser responsáveis):
+- Aline Satur
+- Bianca Garbin
+- Eros Vital
+- Guilherme Oliveira
+- Isabela Rodrigues
+- Matheus Ferreira
+- Miguel Ticianeli
+
+Clientes possíveis: Source Of, POD, Botica, Liv Up, Bazar, Todos
+
+Frentes possíveis: ADS, Social, Conta, Relatoria, Planejamento, Site, Dados, Gestão
+
+Formato de saída OBRIGATÓRIO para cada tarefa:
+[Nome Completo] CLIENTE: FRENTE - Entrega: Descrição objetiva em uma frase.
+
+Regras de formação do título:
+- CLIENTE: nome exato do cliente mencionado (Source Of, POD, Botica, Liv Up, Bazar). Se for tarefa interna sem cliente, use o nome da empresa principal do contexto ou omita o prefixo.
+- FRENTE: escolha a frente mais adequada ao contexto (ADS = anúncios pagos, Social = redes sociais, Conta = gestão de conta/cliente, Relatoria = relatórios, Planejamento = planejamento estratégico, Site = website/landing page, Dados = analytics/dados, Gestão = tarefas internas de gestão)
+- Entrega: descrição curta da entrega em até 6 palavras, começando com verbo no infinitivo
+
+Exemplos corretos:
+[Bianca Garbin] Botica: ADS - Variação criativos dimples: Criar novas variações de criativos para campanha Dimples.
+[Miguel Ticianeli] Source Of: Social - Postagens semana: Produzir conteúdo para feed da semana.
+[Guilherme Oliveira] POD: Relatoria - Relatório mensal: Consolidar dados de performance do mês.
+[Eros Vital] Gestão: Planejamento - Organizar reunião semanal: Agendar e preparar pauta da reunião.
+
+NUNCA omita os colchetes. NUNCA escreva só o nome sem colchetes.
+
+Regras adicionais:
+- Use APENAS nomes do time listado acima
+- Se a tarefa menciona um nome não listado (ex: Rafa, Nath, Alessandro), atribua a Miguel Ticianeli
+- Se nenhum responsável for mencionado, atribua a Miguel Ticianeli
+- Uma tarefa por linha, sem numeração, sem markdown
+- Retorne APENAS as linhas formatadas, nada mais
+- Se o texto não contiver tarefas reais, retorne exatamente: NÃO_HÁ_TAREFAS
+"""
+
+
+def reformatar_proximas_etapas(texto: str, anthropic_key: str = "") -> str:
+    """
+    Usa Claude Haiku para converter texto livre de próximas etapas
+    no formato estruturado [Nome] Título: Descrição.
+
+    Retorna o texto reformatado, ou o original se falhar.
+    """
+    if not anthropic_key:
+        import os
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not anthropic_key:
+        return texto
+
+    # Se já está no formato correto, não faz nada
+    if re.search(r"\[[A-Z][a-z]+ [A-Z][a-z]+\]", texto):
+        return texto  # já tem [Nome Sobrenome]
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=anthropic_key)
+        msg = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1000,
+            system=_REFORMATAR_SYSTEM,
+            messages=[{"role": "user", "content": texto}],
+        )
+        resultado = msg.content[0].text.strip()
+        if resultado == "NÃO_HÁ_TAREFAS" or not resultado:
+            return texto
+        return resultado
+    except Exception as e:
+        logger.warning("[reformatar] Claude falhou: %s", e)
+        return texto
+
+
 # ── BigQuery ─────────────────────────────────────────────────────────────────
 
 _bq_client = None
