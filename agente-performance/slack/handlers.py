@@ -87,11 +87,14 @@ async def _interceptar_slash(text: str, user_id: str, channel: str,
     # command fake para handlers que precisam de command dict
     _command = {"user_id": user_id, "channel_id": channel, "text": args}
 
+    # ack fake assíncrono (evita 'NoneType not callable' nos handlers)
+    async def _ack(): pass
+
     handlers = {
         "tutorial":              lambda: _run_tut_performance(_respond),
-        "tutorial-transcricao": lambda: _cmd_tut_transcricao(None, _respond),
-        "tutorial-landing":     lambda: _cmd_tut_landing(None, _respond),
-        "criar-landing":        lambda: _cmd_criar_landing(None, _command, say or _make_say(client, channel)),
+        "tutorial-transcricao": lambda: _cmd_tut_transcricao(_ack, _respond),
+        "tutorial-landing":     lambda: _cmd_tut_landing(_ack, _respond),
+        "criar-landing":        lambda: _cmd_criar_landing(_ack, _command, say or _make_say(client, channel)),
         "ajuda":                lambda: client.chat_postMessage(
                                     channel=channel, thread_ts=thread_ts,
                                     text=AJUDA_TEXTO, mrkdwn=True),
@@ -122,11 +125,8 @@ def _make_say(client, channel):
 
 async def _run_tut_performance(respond):
     """Executa o corpo do /tutorial sem depender do decorator @app.command."""
-    # Importa o texto diretamente do módulo já carregado
-    import importlib, sys
-    mod = sys.modules.get(__name__)
-    # Chama handle_tutorial passando ack fake e respond real
-    await handle_tutorial(lambda: None, respond)
+    async def _ack(): pass
+    await handle_tutorial(_ack, respond)
 
 app = AsyncApp(
     token=os.getenv("SLACK_BOT_TOKEN", ""),
