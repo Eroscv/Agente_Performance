@@ -48,6 +48,10 @@ from slack_criar_card import (
     registrar_handlers as _registrar_criar_card,
     handle_message_criar_card as _handle_criar_card_msg,
 )
+from slack_landing_page import (
+    registrar_handlers_landing as _registrar_landing,
+    handle_message_landing as _handle_landing_msg,
+)
 
 app = AsyncApp(
     token=os.getenv("SLACK_BOT_TOKEN", ""),
@@ -56,6 +60,8 @@ app = AsyncApp(
 
 # Registra handlers do fluxo /criar-card
 _registrar_criar_card(app)
+# Registra handlers do Agente de Landing Pages
+_registrar_landing(app)
 
 
 def get_slack_app() -> AsyncApp:
@@ -456,10 +462,12 @@ async def handle_mention(event, say, client, ack):
     thread_ts = event.get("thread_ts") or event["ts"]
     files     = event.get("files", [])
 
-    # ── Intercepta fluxo /criar-card se sessão ativa ─────────────────────────────
+    # ── Intercepta fluxos conversacionais ativos ────────────────────────────────
     if await _handle_criar_card_msg(user_id, text, say, channel):
         return
-    # ───────────────────────────────────────────────────────────────────────
+    if await _handle_landing_msg(user_id, text, say, channel):
+        return
+    # ─────────────────────────────────────────────────────────────────────────────
 
     # Se tem imagem anexada, processa independente de ter texto ou não
     if files and any(f.get("mimetype", "").startswith("image/") for f in files):
@@ -533,8 +541,10 @@ async def handle_dm(event, client, ack):
         await client.chat_postMessage(channel=channel, **kwargs)
 
     if await _handle_criar_card_msg(user_id, text, _say_dm, channel):
-        return  # mensagem foi consumida pelo fluxo de criação
-    # ───────────────────────────────────────────────────────────────────────
+        return
+    if await _handle_landing_msg(user_id, text, _say_dm, channel):
+        return
+    # ─────────────────────────────────────────────────────────────────────────────
 
     files     = event.get("files", [])
 
@@ -913,7 +923,7 @@ Monitora continuamente os dados de mídia paga dos clientes Guará (Meta Ads, Go
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 *Outros agentes*
-`/tutorial-imagem` — criação de criativos com Gemini
+`/tutorial-landing` — geração de landing pages com Claude
 `/tutorial-transcricao` — atas de reunião → Notion
 
 *💡 Dicas*

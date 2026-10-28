@@ -564,6 +564,9 @@ O agente envia alertas no Slack quando detecta:
 `/tutorial-transcricao` — este guia
 `/criar-card` — criar card manual no Notion
 
+*Outros agentes:*
+`/tutorial` — Agente de Performance (métricas)
+`/tutorial-landing` — Agente de Landing Pages
 🔗 *Notion:* Agenda e Registros (cards de Tipo=Reunião)
 _Só você está vendo esta mensagem._
 """
