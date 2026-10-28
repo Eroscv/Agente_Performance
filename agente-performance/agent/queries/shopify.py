@@ -16,6 +16,7 @@ from agent.queries.base import _build_where, _meta_ads_union_source, _meta_ads_w
 def receita_shopify_periodo(
     data_inicio: str,
     data_fim: str,
+    cliente_key: Optional[str] = None,
 ) -> dict:
     """
     Retorna métricas Shopify sincronizadas para o período.
@@ -33,6 +34,46 @@ def receita_shopify_periodo(
         }
     """
     from datetime import date as _date
+
+    # Para clientes diferentes de source_of (ou quando explicitamente passado), usa BQ diretamente
+    _cliente = cliente_key or "source_of"
+
+    if _cliente != "source_of":
+        # Busca diretamente do BQ (shopify_diario)
+        try:
+            rows = query(
+                """
+                SELECT
+                    SUM(receita)         AS receita_total,
+                    SUM(pedidos)         AS total_pedidos,
+                    ROUND(SUM(receita) / NULLIF(SUM(pedidos), 0), 2) AS ticket_medio,
+                    SUM(novos_clientes)  AS novos_clientes,
+                    SUM(recompradores)   AS recompradores
+                FROM shopify_receita_diaria
+                WHERE data_inicio >= ? AND data_fim <= ? AND cliente_key = ?
+                """,
+                (data_inicio, data_fim, _cliente),
+            )
+            row = rows[0] if rows else {}
+            if not row or not row.get("receita_total"):
+                return {"sincronizado": False, "aviso": f"Sem dados Shopify para {_cliente} no período"}
+            rec = float(row.get("receita_total") or 0)
+            ped = int(row.get("total_pedidos") or 0)
+            novos = int(row.get("novos_clientes") or 0)
+            recomp = int(row.get("recompradores") or 0)
+            return {
+                "sincronizado":    True,
+                "receita_total":   rec,
+                "total_pedidos":   ped,
+                "ticket_medio":    float(row.get("ticket_medio") or 0),
+                "novos_clientes":  novos,
+                "recompradores":   recomp,
+                "taxa_recompra_pct": round(recomp / ped * 100, 1) if ped else 0,
+            }
+        except Exception as e:
+            logger.warning("[queries] receita_shopify_periodo (%s): %s", _cliente, e)
+            return {"sincronizado": False, "erro": str(e)}
+
     try:
         from db.shopify_sync import metricas_shopify_periodo as _ms
         d0 = _date.fromisoformat(data_inicio)
@@ -77,6 +118,7 @@ def receita_shopify_periodo(
 def metricas_shopify_diario(
     data_inicio: str,
     data_fim: str,
+    cliente_key: Optional[str] = None,
 ) -> list[dict]:
     """
     Receita Shopify por dia no período (para evolução diária).
@@ -86,9 +128,15 @@ def metricas_shopify_diario(
     """
     from db.connections import query_fed
 
+    extra = ""
+    params: tuple = (data_inicio, data_fim)
+    if cliente_key:
+        extra = "AND cliente_key = ?"
+        params = (data_inicio, data_fim, cliente_key)
+
     try:
         rows = query_fed(
-            """
+            f"""
             SELECT
                 data,
                 receita,
@@ -106,9 +154,10 @@ def metricas_shopify_diario(
                 is_bot_suspect
             FROM shopify_receita_diaria
             WHERE data BETWEEN ? AND ?
+            {extra}
             ORDER BY data ASC
             """,
-            (data_inicio, data_fim),
+            params,
         )
         return rows
     except Exception as e:
