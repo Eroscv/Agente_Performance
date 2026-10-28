@@ -1,209 +1,158 @@
-# 📋 Sistema de Transcrição de Reuniões
+# 🗂️ Agente de Cards — Guia de Uso
 
-Automação para capturar, processar e armazenar reuniões a partir do Google Drive.
-
----
-
-## Como funciona
-
-```
-Google Meet (Gemini)
-       ↓
-  Gera .docx com anotações automáticas
-       ↓
-  Você compartilha o arquivo no Google Drive
-  com a conta de serviço
-       ↓
-  Cron roda a cada hora
-       ↓
-  Script detecta arquivo novo
-       ↓
-  Baixa, extrai e estrutura o conteúdo
-       ↓
-  Salva no banco SQLite (reunioes.db)
-```
+Crie e acompanhe cards no Notion direto pelo Slack, sem precisar abrir o Notion.
 
 ---
 
-## Estrutura de arquivos
+## Comandos disponíveis
 
-```
-transcricao/
-├── README.md                          ← este arquivo
-├── sync_reunioes.py                   ← script principal de sync
-├── run_sync.sh                        ← wrapper shell (usado pelo cron)
-├── sync.log                           ← log de todas as execuções
-├── credentials/
-│   └── gdrive-service-account.json   ← credencial da conta de serviço Google
-└── db/
-    └── reunioes.db                    ← banco SQLite com todas as reuniões
-```
-
----
-
-## Pré-requisitos
-
-- Python 3.10+
-- Venv do agente-performance (já tem as libs necessárias)
-- Credencial Google Drive em `credentials/gdrive-service-account.json`
-
-**Libs usadas:**
-- `google-auth` — autenticação com conta de serviço
-- `google-api-python-client` — acesso à API do Drive
-- `python-docx` — leitura de arquivos .docx
-
----
-
-## Como adicionar uma nova reunião
-
-1. Abra o Google Drive
-2. Vá até a pasta compartilhada (ou qualquer pasta)
-3. Faça upload (ou salve diretamente) o `.docx` gerado pelo Gemini
-4. **Compartilhe o arquivo** com o e-mail da conta de serviço:
-   ```
-   transcricao@transcricao-510015.iam.gserviceaccount.com
-   ```
-   → Permissão: **Leitor** é suficiente
-5. Aguarde até a próxima hora cheia — o sistema detecta e processa automaticamente
-
-> **Dica:** Se quiser processar na hora, rode manualmente:
-> ```bash
-> /home/ubuntu/.openclaw/workspace/transcricao/run_sync.sh
-> ```
-
----
-
-## Cron automático
-
-| Campo | Valor |
+| Comando | O que faz |
 |---|---|
-| Nome | `sync-reunioes-drive` |
-| Frequência | Todo início de hora (`:00`) |
-| Timezone | America/Sao_Paulo (BRT) |
-| ID | `6212f2b6-dc74-4ede-ad4f-357280db9e27` |
+| `/criar-card` | Inicia o fluxo de criação de um novo card |
+| `/status-cards [nome] [filtro]` | Consulta cards em aberto |
+| `/meus-cards [N]` | Lista os últimos N cards que você criou |
+| `/editar-card [título]` | Edita prazo, responsável, revisor ou descrição de um card |
+| `/tutorial-transcricao` | Mostra este guia |
 
 ---
 
-## Banco de dados
+## /criar-card — passo a passo
 
-**Arquivo:** `db/reunioes.db` (SQLite)
+O agente faz **8 perguntas** em sequência. Responda cada uma normalmente.
 
-### Tabela `reunioes`
-
-| Coluna | Tipo | Descrição |
-|---|---|---|
-| `id` | INTEGER | Chave primária auto-incremento |
-| `data` | TEXT | Data da reunião (`YYYY-MM-DD`) |
-| `hora` | TEXT | Hora da reunião (`HH:MM`) |
-| `titulo` | TEXT | Nome da reunião |
-| `participantes` | TEXT | Lista de participantes separada por vírgula |
-| `resumo` | TEXT | Resumo executivo gerado pelo Gemini |
-| `decisoes` | TEXT | Decisões tomadas na reunião |
-| `proximas_etapas` | TEXT | Tarefas e responsáveis |
-| `detalhes` | TEXT | Transcrição completa / detalhes da discussão |
-| `fonte_arquivo` | TEXT | Nome do arquivo `.docx` original |
-| `fonte_id` | TEXT | ID único do arquivo no Google Drive (evita duplicatas) |
-| `criado_em` | TEXT | Timestamp UTC de quando foi salvo |
-
-### Tabela `sync_log`
-
-Registra cada execução do sync para auditoria.
-
-| Coluna | Descrição |
-|---|---|
-| `fonte_id` | ID do arquivo no Drive |
-| `nome` | Nome do arquivo |
-| `status` | `ok` ou `erro` |
-| `mensagem` | Detalhe do resultado ou mensagem de erro |
-| `criado_em` | Timestamp da execução |
-
----
-
-## Consultas úteis no banco
-
-```sql
--- Ver todas as reuniões
-SELECT id, data, hora, titulo, participantes
-FROM reunioes
-ORDER BY data DESC;
-
--- Buscar reuniões por participante
-SELECT data, titulo, proximas_etapas
-FROM reunioes
-WHERE participantes LIKE '%Eros%'
-ORDER BY data DESC;
-
--- Ver próximas etapas de uma data específica
-SELECT titulo, proximas_etapas
-FROM reunioes
-WHERE data = '2026-09-28';
-
--- Ver histórico de syncs
-SELECT nome, status, mensagem, criado_em
-FROM sync_log
-ORDER BY criado_em DESC
-LIMIT 10;
+```
+/criar-card
 ```
 
----
+**Passo 1 — Cliente**
+Digite o nome ou número:
+- `1` Source Of
+- `2` POD
+- `3` Botica
+- `4` Liv Up
+- `5` Bazar
+- `6` Todos
 
-## Execução manual
+**Passo 2 — Frente**
+- `1` ADS
+- `2` Social
+- `3` Conta
+- `4` Relatoria
+- `5` Planejamento
+- `6` Site
+- `7` Dados
+- `8` Gestão
 
-```bash
-# Processar apenas arquivos novos (padrão)
-/home/ubuntu/.openclaw/workspace/agente-performance/venv/bin/python3 \
-  /home/ubuntu/.openclaw/workspace/transcricao/sync_reunioes.py
+**Passo 3 — Entrega**
+Descreva a tarefa com um verbo no infinitivo.
+> Ex: `Criar campanha de Black Friday`
 
-# Forçar reprocessamento de todos os arquivos
-/home/ubuntu/.openclaw/workspace/agente-performance/venv/bin/python3 \
-  /home/ubuntu/.openclaw/workspace/transcricao/sync_reunioes.py --todos
-```
+O título será gerado no formato: **CLIENTE: FRENTE - Entrega**
+> Ex: `Source Of: ADS - Criar campanha de Black Friday`
 
----
+**Passo 4 — Responsável**
+Digite o número ou parte do nome:
+- `1` Aline Satur
+- `2` Bianca Garbin
+- `3` Eros Vital
+- `4` Guilherme Oliveira
+- `5` Isabela Rodrigues
+- `6` Matheus Ferreira
+- `7` Miguel Ticianeli
 
-## Como o parser extrai os dados
+**Passo 5 — Revisor**
+Mesmo formato do responsável. ⚠️ Deve ser uma pessoa diferente do responsável.
 
-O script lê o `.docx` gerado pelo Gemini e identifica automaticamente as seções:
-
-| Seção no .docx | Campo no banco |
+**Passo 6 — Prazo**
+Formatos aceitos:
+| O que digitar | Resultado |
 |---|---|
-| Linha após `convidado` | `participantes` |
-| Data/hora no nome do arquivo | `data` + `hora` |
-| Bloco `Resumo` | `resumo` |
-| Bloco `Decisões` | `decisoes` |
-| Bloco `Próximas etapas` | `proximas_etapas` |
-| Bloco `Detalhes` | `detalhes` |
+| `2026-11-15` | 15 de novembro de 2026 |
+| `15/11/2026` | 15 de novembro de 2026 |
+| `15/11` | 15 de novembro (ano atual) |
+| `amanhã` | Dia seguinte |
+| `hoje` | Hoje |
+| `+7` | Em 7 dias |
+| `pular` | +7 dias a partir de hoje (padrão) |
 
-> O formato esperado é o padrão do **Gemini Notes** gerado automaticamente pelo Google Meet.
-> Arquivos com formato diferente podem precisar de ajuste no parser (`parsear_reuniao()` em `sync_reunioes.py`).
+**Passo 7 — Descrição** _(opcional)_
+Detalhe o que precisa ser feito, ou digite `pular`.
 
----
-
-## Credencial Google Drive
-
-| Campo | Valor |
-|---|---|
-| Projeto GCP | `transcricao-510015` |
-| Conta de serviço | `transcricao@transcricao-510015.iam.gserviceaccount.com` |
-| Escopo | `https://www.googleapis.com/auth/drive` |
-| Arquivo local | `credentials/gdrive-service-account.json` |
-
-> ⚠️ Nunca commite o arquivo `gdrive-service-account.json` em repositórios públicos.
+**Passo 8 — Confirmação**
+Revise o resumo e confirme com:
+- `confirmar` — cria o card no Notion ✅
+- `cancelar` — descarta tudo ❌
 
 ---
 
-## Troubleshooting
+## /status-cards — consultas
 
-**Arquivo não está sendo detectado**
-→ Verifique se o arquivo foi compartilhado com `transcricao@transcricao-510015.iam.gserviceaccount.com`
-
-**Erro de autenticação**
-→ Verifique se `credentials/gdrive-service-account.json` existe e está válido
-
-**Dados extraídos incompletos**
-→ O arquivo pode ter formato diferente do Gemini Notes padrão — ajuste a função `parsear_reuniao()` em `sync_reunioes.py`
-
-**Ver logs da última execução**
-```bash
-tail -50 /home/ubuntu/.openclaw/workspace/transcricao/sync.log
 ```
+/status-cards
+```
+Sem argumento: mostra a lista de responsáveis disponíveis.
+
+```
+/status-cards Bianca
+```
+Todos os cards abertos da Bianca.
+
+```
+/status-cards Bianca em andamento
+```
+Só os cards em andamento da Bianca.
+
+```
+/status-cards todos bloqueado
+```
+Todos os cards bloqueados de todos os responsáveis.
+
+**Status disponíveis para filtro:**
+`a fazer` · `em andamento` · `em revisão` · `bloqueado` · `concluído`
+
+> 💡 Dica: o nome pode ser parcial. `Bian` encontra `Bianca Garbin`.
+
+---
+
+## /meus-cards
+
+```
+/meus-cards
+```
+Mostra seus últimos 10 cards criados via Slack com título, responsável, prazo e link do Notion.
+
+```
+/meus-cards 20
+```
+Mostra os últimos 20.
+
+---
+
+## /editar-card
+
+```
+/editar-card
+```
+Lista seus cards recentes para escolher qual editar.
+
+```
+/editar-card Black Friday
+```
+Busca diretamente pelo título parcial.
+
+Campos editáveis:
+- `1` Prazo
+- `2` Responsável
+- `3` Revisor
+- `4` Descrição
+
+Após alterar um campo, você pode continuar editando outros ou digitar `cancelar` para sair.
+
+---
+
+## Dicas gerais
+
+- A qualquer momento durante um fluxo, digite `cancelar` para sair
+- Se demorar mais de **60 minutos** sem responder, a sessão expira automaticamente
+- O agente aceita o **nome parcial** em qualquer campo de pessoa (ex: `Guil` → Guilherme Oliveira)
+- Cards criados pelo Slack ficam salvos no histórico — use `/meus-cards` para consultar depois
