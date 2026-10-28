@@ -53,6 +53,9 @@ from card_handlers import (
 from card_flow import (
     handle_message_criar_card as _handle_criar_card_msg,
 )
+from card_editar import (
+    handle_message_editar_card as _handle_editar_card_msg,
+)
 from landing_page import (
     registrar_handlers_landing as _registrar_landing,
     handle_message_landing as _handle_landing_msg,
@@ -571,6 +574,8 @@ async def handle_mention(event, say, client, ack):
     # ── Intercepta fluxos conversacionais ativos ────────────────────────────────
     if await _handle_criar_card_msg(user_id, text, _say_mention, channel, thread_ts):
         return
+    if await _handle_editar_card_msg(user_id, text, _say_mention, channel, thread_ts):
+        return
     if await _handle_landing_msg(user_id, text, _say_mention, channel, thread_ts):
         return
     # ─────────────────────────────────────────────────────────────────────────────
@@ -654,6 +659,8 @@ async def handle_dm(event, client, ack):
 
     # ── Intercepta fluxos conversacionais ativos ──────────────────────────────
     if await _handle_criar_card_msg(user_id, text, _say_dm, channel, thread_ts):
+        return
+    if await _handle_editar_card_msg(user_id, text, _say_dm, channel, thread_ts):
         return
     if await _handle_landing_msg(user_id, text, _say_dm, channel, thread_ts):
         return

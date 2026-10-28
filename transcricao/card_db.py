@@ -177,3 +177,14 @@ def set_cache(cache_key: str, cards: list[dict]) -> None:
 def invalidar_cache() -> None:
     conn().execute("DELETE FROM cards_cache")
     conn().commit()
+
+
+def invalidar_cache_por_usuario(responsavel_id: str) -> None:
+    """Invalida cache de um usuário específico (ex: quando Notion notifica mudança)."""
+    conn().execute(
+        "DELETE FROM cards_cache WHERE cache_key LIKE ?",
+        (f"uid:{responsavel_id}%",),
+    )
+    # Invalida cache 'all' também
+    conn().execute("DELETE FROM cards_cache WHERE cache_key LIKE 'all:%'")
+    conn().commit()
