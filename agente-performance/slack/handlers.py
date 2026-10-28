@@ -48,6 +48,7 @@ from slack_criar_card import (
     registrar_handlers as _registrar_criar_card,
     handle_message_criar_card as _handle_criar_card_msg,
     cmd_tutorial_transcricao as _cmd_tut_transcricao,
+    cmd_status_cards as _cmd_status_cards,
 )
 from slack_landing_page import (
     registrar_handlers_landing as _registrar_landing,
@@ -106,6 +107,7 @@ async def _interceptar_slash(text: str, user_id: str, channel: str,
         "tutorial-transcricao": lambda: _cmd_tut_transcricao(_ack, _respond),
         "tutorial-landing":     lambda: _cmd_tut_landing(_ack, _respond),
         "criar-landing":        lambda: _cmd_criar_landing(_ack, _command, _say_anchored),
+        "status-cards":         lambda: _cmd_status_cards(_ack, _command, _say_anchored),
         "ajuda":                lambda: client.chat_postMessage(
                                     channel=channel, thread_ts=thread_ts,
                                     text=AJUDA_TEXTO, mrkdwn=True),
