@@ -44,13 +44,15 @@ from slack.responder import _processar_e_responder
 # ── Fluxo de criação manual de cards no Notion via Slack ─────────────────────
 import sys as _sys
 _sys.path.insert(0, "/home/ubuntu/.openclaw/workspace/transcricao")
-from slack_criar_card import (
+from card_handlers import (
     registrar_handlers as _registrar_criar_card,
-    handle_message_criar_card as _handle_criar_card_msg,
     cmd_tutorial_transcricao as _cmd_tut_transcricao,
     cmd_status_cards as _cmd_status_cards,
 )
-from slack_landing_page import (
+from card_flow import (
+    handle_message_criar_card as _handle_criar_card_msg,
+)
+from landing_page import (
     registrar_handlers_landing as _registrar_landing,
     handle_message_landing as _handle_landing_msg,
     cmd_tutorial_landing as _cmd_tut_landing,
