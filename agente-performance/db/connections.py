@@ -250,17 +250,33 @@ def reset_federated_conn() -> None:
 
 def query_fed(sql: str, params: tuple = ()) -> list[dict]:
     """
-    Query analítica via DuckDB (v_performance, campanhas_unificada, shopify_receita_diaria).
+    Query analítica — FONTE PRIMÁRIA: BigQuery.
+    Fallback para DuckDB/SQLite se BQ indisponível.
+
+    Aceita SQL escrito para campanhas_unificada/v_performance/shopify_receita_diaria
+    (DuckDB/SQLite) — traduz automaticamente para BigQuery via bq_translator.
     Mesma assinatura de antes — drop-in para todo agent/queries/, relatorio/, scripts/.
     """
+    try:
+        from db.bq_reader import enabled as _bq_enabled, query_bq as _query_bq
+        from db.bq_translator import translate as _translate
+        if _bq_enabled():
+            bq_sql, bq_params = _translate(sql, params)
+            return _query_bq(bq_sql, bq_params if bq_params else None)
+    except Exception as _bq_exc:
+        logger.warning("[query_fed] BQ falhou (%s) — fallback DuckDB", _bq_exc)
+    # Fallback: DuckDB local
     from db.duck import query_duck
     return query_duck(sql, params)
 
 
 def query_fed_one(sql: str, params: tuple = ()) -> Optional[dict]:
-    """Query analítica via DuckDB — retorna primeiro resultado ou None."""
-    from db.duck import query_duck_one
-    return query_duck_one(sql, params)
+    """
+    Query analítica — retorna primeiro resultado ou None.
+    FONTE PRIMÁRIA: BigQuery. Fallback: DuckDB/SQLite.
+    """
+    rows = query_fed(sql, params)
+    return rows[0] if rows else None
 
 
 def query_db(

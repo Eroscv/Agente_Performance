@@ -49,6 +49,26 @@ def _client():
     return _BQ_CLIENT
 
 
+def _normalize_row(row: dict) -> dict:
+    """
+    Converte campos Decimal e datetime do BigQuery para tipos Python nativos.
+    Garante compatibilidade com código que faz aritmética float nos resultados.
+    """
+    import decimal
+    import datetime
+    result = {}
+    for k, v in row.items():
+        if isinstance(v, decimal.Decimal):
+            result[k] = float(v)
+        elif isinstance(v, datetime.date) and not isinstance(v, datetime.datetime):
+            result[k] = v.isoformat()
+        elif isinstance(v, datetime.datetime):
+            result[k] = v.isoformat()
+        else:
+            result[k] = v
+    return result
+
+
 def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
     """
     Executa query no BigQuery e retorna lista de dicts.
@@ -72,7 +92,7 @@ def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
             ]
 
         rows = list(bq.query(sql, job_config=job_config).result())
-        return [dict(r) for r in rows]
+        return [_normalize_row(dict(r)) for r in rows]
     except Exception as exc:
         logger.error("[BQReader] Erro na query: %s\nSQL: %.300s", exc, sql)
         return []
