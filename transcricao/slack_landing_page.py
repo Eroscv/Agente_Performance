@@ -98,13 +98,19 @@ def _botoes(opcoes: list[str], prefix: str) -> dict:
 
 async def cmd_criar_landing(ack, command, say):
     await ack()
-    user_id = command["user_id"]
-    channel = command["channel_id"]
+    user_id   = command["user_id"]
+    channel   = command["channel_id"]
+    thread_ts = command.get("thread_ts")  # injetado pelo interceptor pseudo-slash
     _clear(user_id)
-    _session(user_id).update({"step": "cliente", "channel": channel})
+    _session(user_id).update({"step": "cliente", "channel": channel, "thread_ts": thread_ts})
 
-    await say(
-        channel=channel,
+    async def _say_anchored(**kwargs):
+        kwargs.setdefault("channel", channel)
+        if thread_ts:
+            kwargs.setdefault("thread_ts", thread_ts)
+        await say(**kwargs)
+
+    await _say_anchored(
         blocks=[
             _texto("🚀 *Criar Landing Page* — vamos montar o briefing!"),
             _divisor(),
@@ -226,7 +232,8 @@ async def _mostrar_briefing(say, channel: str, sess: dict):
 
 # ── Handler de texto ──────────────────────────────────────────────────────────
 
-async def handle_message_landing(user_id: str, text: str, say, channel: str) -> bool:
+async def handle_message_landing(user_id: str, text: str, say, channel: str,
+                                  thread_ts: str | None = None) -> bool:
     """Retorna True se a mensagem foi consumida pelo fluxo de landing page."""
     sess = _sessions.get(user_id)
     if not sess:
@@ -235,25 +242,34 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str) -> 
     step = sess.get("step")
     text = text.strip()
 
+    # Usa thread_ts da sessão (gravado em cmd_criar_landing) se não veio como arg
+    effective_ts = thread_ts or sess.get("thread_ts")
+
+    async def _say(**kwargs):
+        kwargs.setdefault("channel", channel)
+        if effective_ts:
+            kwargs.setdefault("thread_ts", effective_ts)
+        await say(**kwargs)
+
     if step == "cliente":
         if not text:
-            await say(channel=channel, text="⚠️ Informe o cliente/produto. Tente novamente.")
+            await _say(text="⚠️ Informe o cliente/produto. Tente novamente.")
             return True
         sess["cliente"] = text
         sess["step"]    = "objetivo"
-        await _pedir_objetivo(say, channel, text)
+        await _pedir_objetivo(_say, channel, text)
         return True
 
     if step == "publico":
         sess["publico"] = text
         sess["step"]    = "tom"
-        await _pedir_tom(say, channel, text)
+        await _pedir_tom(_say, channel, text)
         return True
 
     if step == "extras":
         sess["extras"] = "" if text.lower() in ("pular", "skip", "-") else text
         sess["step"]   = "confirmar"
-        await _mostrar_briefing(say, channel, sess)
+        await _mostrar_briefing(_say, channel, sess)
         return True
 
     return False

@@ -89,7 +89,7 @@ async def _interceptar_slash(text: str, user_id: str, channel: str,
     _respond = _Respond()
 
     # command fake para handlers que precisam de command dict
-    _command = {"user_id": user_id, "channel_id": channel, "text": args}
+    _command = {"user_id": user_id, "channel_id": channel, "text": args, "thread_ts": thread_ts}
 
     # ack fake assíncrono
     async def _ack(): pass
@@ -560,7 +560,7 @@ async def handle_mention(event, say, client, ack):
     # ── Intercepta fluxos conversacionais ativos ────────────────────────────────
     if await _handle_criar_card_msg(user_id, text, say, channel):
         return
-    if await _handle_landing_msg(user_id, text, say, channel):
+    if await _handle_landing_msg(user_id, text, _say_anchored, channel, thread_ts):
         return
     # ─────────────────────────────────────────────────────────────────────────────
 
