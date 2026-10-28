@@ -564,7 +564,7 @@ async def handle_mention(event, say, client, ack):
             return
 
     # ── Intercepta fluxos conversacionais ativos ────────────────────────────────
-    if await _handle_criar_card_msg(user_id, text, say, channel):
+    if await _handle_criar_card_msg(user_id, text, _say_mention, channel, thread_ts):
         return
     if await _handle_landing_msg(user_id, text, _say_mention, channel, thread_ts):
         return
@@ -648,7 +648,7 @@ async def handle_dm(event, client, ack):
             return
 
     # ── Intercepta fluxos conversacionais ativos ──────────────────────────────
-    if await _handle_criar_card_msg(user_id, text, _say_dm, channel):
+    if await _handle_criar_card_msg(user_id, text, _say_dm, channel, thread_ts):
         return
     if await _handle_landing_msg(user_id, text, _say_dm, channel, thread_ts):
         return
