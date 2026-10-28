@@ -407,12 +407,20 @@ def _notion_headers() -> dict:
 
 
 def _buscar_cards(responsavel_id: str | None = None, limit: int = 20) -> list[dict]:
-    payload: dict = {"page_size": limit, "sorts": [{"property": "Data", "direction": "ascending"}]}
+    payload: dict = {
+        "page_size": limit,
+        "sorts": [{"property": "Data", "direction": "ascending"}],
+    }
     if responsavel_id:
         payload["filter"] = {
-            "property": "Responsável atual",
-            "people": {"contains": responsavel_id},
+            "and": [
+                {"property": "Responsável atual", "people": {"contains": responsavel_id}},
+                {"property": "Feito", "checkbox": {"equals": False}},
+            ]
         }
+    else:
+        payload["filter"] = {"property": "Feito", "checkbox": {"equals": False}}
+
     resp = _requests.post(
         f"https://api.notion.com/v1/databases/{_NOTION_DB_ID}/query",
         headers=_notion_headers(),
@@ -422,30 +430,71 @@ def _buscar_cards(responsavel_id: str | None = None, limit: int = 20) -> list[di
     if resp.status_code != 200:
         logger.warning("[status-cards] Notion %s: %s", resp.status_code, resp.text[:120])
         return []
+
     cards = []
     for r in resp.json().get("results", []):
         props        = r.get("properties", {})
         titulo       = "".join(t["text"]["content"] for t in props.get("Tarefa", {}).get("title", []))
         status       = (props.get("Status", {}).get("select") or {}).get("name", "—")
+        situacao     = (props.get("Situação", {}).get("formula") or {}).get("string", "")
         prazo        = (props.get("Data", {}).get("date") or {}).get("start", "—")
         clientes     = [c["name"] for c in props.get("Cliente", {}).get("multi_select", [])]
         cliente_str  = ", ".join(clientes) if clientes else "—"
-        url          = r.get("url", "")
+        area         = (props.get("Área", {}).get("select") or {}).get("name", "—")
+        revisores    = props.get("Revisor", {}).get("people", [])
+        revisor_nome = revisores[0].get("name", "—") if revisores else "—"
         resp_pessoas = props.get("Responsável atual", {}).get("people", [])
         resp_nome    = resp_pessoas[0].get("name", "—") if resp_pessoas else "—"
-        cards.append({"titulo": titulo, "status": status, "prazo": prazo,
-                      "cliente": cliente_str, "url": url, "responsavel": resp_nome})
+        url          = r.get("url", "")
+        cards.append({
+            "titulo":    titulo,
+            "status":    status,
+            "situacao":  situacao,
+            "prazo":     prazo,
+            "cliente":   cliente_str,
+            "area":      area,
+            "revisor":   revisor_nome,
+            "responsavel": resp_nome,
+            "url":       url,
+        })
     return cards
 
 
 _STATUS_EMOJI = {
-    "A fazer": "🔵", "Em andamento": "🟡", "Em revisão": "🟠",
-    "Concluído": "✅", "Bloqueado": "🔴",
+    "A fazer":     "🔵",
+    "Em andamento": "🟡",
+    "Em revisão":  "🟠",
+    "Concluído":   "✅",
+    "Bloqueado":   "🔴",
 }
 
 
+def _formatar_cards(cards: list[dict], mostrar_responsavel: bool = False) -> str:
+    """Monta o texto formatado de uma lista de cards."""
+    blocos = []
+    for c in cards:
+        emoji    = _STATUS_EMOJI.get(c["status"], "⚪")
+        situacao = f"  {c['situacao']}" if c["situacao"] and "Atrasad" in c["situacao"] else ""
+        linhas = [f"{emoji} *{c['titulo']}*"]
+        linhas.append(f"   📌 Status: {c['status']}{situacao}")
+        if c["prazo"] != "—":
+            linhas.append(f"   📅 Prazo: {c['prazo']}")
+        if c["cliente"] != "—":
+            linhas.append(f"   🏢 Cliente: {c['cliente']}")
+        if c["area"] != "—":
+            linhas.append(f"   🗂️ Área: {c['area']}")
+        if mostrar_responsavel and c["responsavel"] != "—":
+            linhas.append(f"   👤 Responsável: {c['responsavel']}")
+        if c["revisor"] != "—":
+            linhas.append(f"   🔍 Revisor: {c['revisor']}")
+        if c["url"]:
+            linhas.append(f"   🔗 {c['url']}")
+        blocos.append("\n".join(linhas))
+    return "\n\n".join(blocos)
+
+
 async def cmd_status_cards(ack, command, say):
-    """Slash /status-cards [nome] — lista cards do Notion por responsável."""
+    """Slash /status-cards [nome] — lista cards abertos do Notion por responsável."""
     await ack()
     channel   = command["channel_id"]
     thread_ts = command.get("thread_ts")
@@ -459,16 +508,19 @@ async def cmd_status_cards(ack, command, say):
 
     if not arg:
         await _say(text=(
-            "🗂️ *Consulta de cards* — posso filtrar por responsável.\n\n"
+            "🗂️ *Consulta de cards* — mostra cards *não concluídos*, filtrado por responsável.\n\n"
             "*Responsáveis disponíveis:*\n"
             + "\n".join(f"  {i+1}. {n}" for i, n in enumerate(USUARIOS_UNICOS.keys()))
-            + "\n\nUso: `/status-cards [nome]` ou `/status-cards todos`"
+            + "\n\nUso:\n"
+            "• `/status-cards Bianca` — cards da Bianca\n"
+            "• `/status-cards todos` — todos os cards em aberto"
         ))
         return
 
     if arg.lower() in ("todos", "all", "tudo"):
         nome_exibido = "todos os responsáveis"
         cards = _buscar_cards(responsavel_id=None, limit=25)
+        mostrar_resp = True
     else:
         nome = _match_usuario(arg)
         if not nome:
@@ -480,21 +532,22 @@ async def cmd_status_cards(ack, command, say):
         nome_exibido = nome
         uid   = USUARIOS_UNICOS[nome]
         cards = _buscar_cards(responsavel_id=uid, limit=20)
+        mostrar_resp = False
 
     if not cards:
-        await _say(text=f"📭 Nenhum card encontrado para *{nome_exibido}*.")
+        await _say(text=f"✅ Nenhum card em aberto para *{nome_exibido}*.")
         return
 
-    linhas = [f"📋 *Cards de {nome_exibido}* ({len(cards)}):"]
-    for c in cards:
-        emoji  = _STATUS_EMOJI.get(c["status"], "⚪")
-        prazo  = f" │ 📅 {c['prazo']}" if c["prazo"] != "—" else ""
-        client = f" │ 🏢 {c['cliente']}" if c["cliente"] != "—" else ""
-        resp   = f" │ 👤 {c['responsavel']}" if nome_exibido == "todos os responsáveis" else ""
-        link   = f"\n   🔗 {c['url']}" if c["url"] else ""
-        linhas.append(f"{emoji} *{c['titulo']}* — _{c['status']}_{prazo}{client}{resp}{link}")
+    atrasados = sum(1 for c in cards if "Atrasad" in c.get("situacao", ""))
+    header = (
+        f"📋 *Cards em aberto — {nome_exibido}*\n"
+        f"Total: *{len(cards)}* card(s)"
+        + (f" │ ⚠️ *{atrasados} atrasado(s)*" if atrasados else "")
+        + "\n" + "─" * 30
+    )
 
-    await _say(text="\n".join(linhas))
+    corpo = _formatar_cards(cards, mostrar_responsavel=mostrar_resp)
+    await _say(text=f"{header}\n\n{corpo}")
 
 
 def registrar_handlers(app):
