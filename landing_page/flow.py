@@ -1,6 +1,7 @@
 """
 landing_page/flow.py
 Fluxo conversacional do /criar-landing — 7 steps, 100% texto.
+Integrado com SQLite: histórico, sessões, referências acumulativas.
 
 Steps:
   cliente → objetivo → publico → tom → extras
@@ -9,6 +10,12 @@ Steps:
 import logging
 from .constants import get_session, clear_session
 from .generator import gerar_lp
+from .db.queries import (
+    abrir_sessao, encerrar_sessao,
+    salvar_mensagem,
+    get_preferencias, refs_como_texto,
+    salvar_ref,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +26,22 @@ async def cmd_criar_landing(ack, command, say):
     channel   = command["channel_id"]
     thread_ts = command.get("thread_ts")
     clear_session(user_id)
-    get_session(user_id).update({"step": "cliente", "channel": channel, "thread_ts": thread_ts})
+
+    # Abre sessão no banco e carrega preferências anteriores
+    sid  = abrir_sessao(user_id)
+    pref = get_preferencias(user_id)
+    refs_boas_hist, refs_ruins_hist = refs_como_texto(user_id)
+
+    get_session(user_id).update({
+        "step":            "cliente",
+        "channel":         channel,
+        "thread_ts":       thread_ts,
+        "sessao_id":       sid,
+        "refs_boas_hist":  refs_boas_hist,
+        "refs_ruins_hist": refs_ruins_hist,
+        "pref_tom":        pref.get("tom_favorito", ""),
+        "pref_cliente":    pref.get("cliente_padrao", ""),
+    })
 
     async def _say(**kwargs):
         kwargs.setdefault("channel", channel)
@@ -27,9 +49,14 @@ async def cmd_criar_landing(ack, command, say):
             kwargs.setdefault("thread_ts", thread_ts)
         await say(**kwargs)
 
+    salvar_mensagem(user_id, sid, "agent", "/criar-landing iniciado")
+
+    dica_tom    = f" _(seu tom favorito: *{pref['tom_favorito']}*)_" if pref.get("tom_favorito") else ""
+    dica_cliente = f" _(último cliente: *{pref['cliente_padrao']}*)_" if pref.get("cliente_padrao") else ""
+
     await _say(text=(
         "🚀 *Criar Landing Page* — vou fazer 7 perguntas para montar o briefing.\n\n"
-        "1️⃣ *Para qual cliente e produto é a landing page?*\n"
+        f"1️⃣ *Para qual cliente e produto é a landing page?*{dica_cliente}\n"
         "Ex: `Source OF — Colágeno Verisol 300g`\n"
         "Ex: `POD Kombucha — Kit Iniciante 6 sabores`"
     ))
@@ -43,9 +70,10 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str,
     if not sess:
         return False
 
-    step = sess.get("step")
-    text = text.strip()
+    step         = sess.get("step")
+    text         = text.strip()
     effective_ts = thread_ts or sess.get("thread_ts")
+    sid          = sess.get("sessao_id", "")
 
     async def _say(**kwargs):
         kwargs.setdefault("channel", channel)
@@ -53,91 +81,108 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str,
             kwargs.setdefault("thread_ts", effective_ts)
         await say(**kwargs)
 
+    # Registra mensagem do usuário
+    if sid:
+        salvar_mensagem(user_id, sid, "user", text)
+
+    async def _agent_say(texto: str, **kwargs):
+        if sid:
+            salvar_mensagem(user_id, sid, "agent", texto)
+        await _say(text=texto, **kwargs)
+
     if text.lower() in ("cancelar", "cancel", "sair"):
+        if sid:
+            encerrar_sessao(sid, step or "cancelar", "cancelado")
         clear_session(user_id)
-        await _say(text="🚫 Criação de landing page cancelada.")
+        await _agent_say("🚫 Criação de landing page cancelada.")
         return True
 
     if step == "cliente":
         if not text:
-            await _say(text="⚠️ Informe o cliente/produto. Tente novamente.")
+            await _agent_say("⚠️ Informe o cliente/produto. Tente novamente.")
             return True
         sess["cliente"] = text
         sess["step"]    = "objetivo"
-        await _say(text=(
+        await _agent_say(
             f"✅ Cliente/Produto: *{text}*\n\n"
             "2️⃣ *Qual é o objetivo principal desta landing page?*\n"
             "Opções: `captação de leads`, `venda direta`, `lançamento de produto`, `evento/webinar`, `teste A/B`\n"
             "Ou descreva livremente."
-        ))
+        )
         return True
 
     if step == "objetivo":
         if not text:
-            await _say(text="⚠️ Informe o objetivo. Tente novamente.")
+            await _agent_say("⚠️ Informe o objetivo. Tente novamente.")
             return True
         sess["objetivo"] = text
         sess["step"]     = "publico"
-        await _say(text=(
+        await _agent_say(
             f"✅ Objetivo: *{text}*\n\n"
             "3️⃣ *Quem é o público-alvo?*\n"
             "Ex: `Mulheres 30–50 anos, interessadas em saúde e bem-estar`"
-        ))
+        )
         return True
 
     if step == "publico":
         if not text:
-            await _say(text="⚠️ Informe o público-alvo. Tente novamente.")
+            await _agent_say("⚠️ Informe o público-alvo. Tente novamente.")
             return True
         sess["publico"] = text
         sess["step"]    = "tom"
-        await _say(text=(
+        dica = f" _(você costuma usar: *{sess['pref_tom']}*)_" if sess.get("pref_tom") else ""
+        await _agent_say(
             f"✅ Público: *{text}*\n\n"
-            "4️⃣ *Qual é o tom de voz?*\n"
+            f"4️⃣ *Qual é o tom de voz?*{dica}\n"
             "Opções: `urgente e direto`, `empático e educativo`, `aspiracional/premium`, `descontraído e jovem`, `técnico/especialista`\n"
             "Ou descreva livremente."
-        ))
+        )
         return True
 
     if step == "tom":
         if not text:
-            await _say(text="⚠️ Informe o tom de voz. Tente novamente.")
+            await _agent_say("⚠️ Informe o tom de voz. Tente novamente.")
             return True
         sess["tom"]  = text
         sess["step"] = "extras"
-        await _say(text=(
+        await _agent_say(
             f"✅ Tom: *{text}*\n\n"
             "5️⃣ *Informações extras* (opcional)\n"
             "Inclua: promoção, preço, benefícios, depoimentos, garantia...\n"
             "Ou `pular`."
-        ))
+        )
         return True
 
     if step == "extras":
         sess["extras"] = "" if text.lower() in ("pular", "skip", "-") else text
         sess["step"]   = "refs_boas"
-        await _say(text=(
+        hist = f"\n_Suas referências anteriores: {sess['refs_boas_hist']}_" if sess.get("refs_boas_hist") else ""
+        await _agent_say(
             "6️⃣ *Referências visuais — o que você GOSTA* (opcional)\n"
-            "Sites, marcas ou estilos que você considera referência positiva.\n"
+            "Sites, marcas ou estilos que você considera referência positiva."
+            f"{hist}\n"
             "Ex: `Apple.com — clean, espaço em branco, tipografia grande`\n"
             "Ou `pular`."
-        ))
+        )
         return True
 
     if step == "refs_boas":
         sess["refs_boas"] = "" if text.lower() in ("pular", "skip", "-") else text
         sess["step"]      = "refs_ruins"
-        await _say(text=(
+        hist = f"\n_Suas referências anteriores a evitar: {sess['refs_ruins_hist']}_" if sess.get("refs_ruins_hist") else ""
+        await _agent_say(
             "7️⃣ *Referências visuais — o que você NÃO QUER* (opcional)\n"
-            "Estilos ou elementos a evitar no site.\n"
+            "Estilos ou elementos a evitar."
+            f"{hist}\n"
             "Ex: `Fundo escuro, countdown fake, visual gritante de info-produto`\n"
             "Ou `pular`."
-        ))
+        )
         return True
 
     if step == "refs_ruins":
         sess["refs_ruins"] = "" if text.lower() in ("pular", "skip", "-") else text
         sess["step"]       = "confirmar"
+
         cliente    = sess.get("cliente", "")
         objetivo   = sess.get("objetivo", "")
         publico    = sess.get("publico", "")
@@ -145,7 +190,8 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str,
         extras     = sess.get("extras", "") or "agente usará melhores práticas"
         refs_boas  = sess.get("refs_boas", "") or "não informado"
         refs_ruins = sess.get("refs_ruins", "") or "não informado"
-        await _say(text=(
+
+        await _agent_say(
             "📋 *Briefing completo — revise antes de gerar:*\n\n"
             f"• *Cliente/Produto:* {cliente}\n"
             f"• *Objetivo:* {objetivo}\n"
@@ -155,7 +201,7 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str,
             f"• *Referências positivas:* {refs_boas}\n"
             f"• *A evitar:* {refs_ruins}\n\n"
             "Digite *confirmar* para gerar ou *cancelar* para abortar."
-        ))
+        )
         return True
 
     if step == "confirmar":
@@ -164,11 +210,13 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str,
             await gerar_lp(user_id, sess, _say, channel, effective_ts)
             return True
         elif text.lower() in ("cancelar", "cancel"):
+            if sid:
+                encerrar_sessao(sid, "confirmar", "cancelado")
             clear_session(user_id)
-            await _say(text="🚫 Criação de landing page cancelada.")
+            await _agent_say("🚫 Criação de landing page cancelada.")
             return True
         else:
-            await _say(text="Digite *confirmar* para gerar ou *cancelar* para abortar.")
+            await _agent_say("Digite *confirmar* para gerar ou *cancelar* para abortar.")
             return True
 
     return False

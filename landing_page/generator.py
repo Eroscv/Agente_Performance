@@ -1,6 +1,7 @@
 """
 landing_page/generator.py
 Geração do HTML via Claude e upload para o Slack.
+Salva projeto, preferências e referências no banco após gerar.
 """
 import logging
 import os
@@ -10,13 +11,18 @@ from datetime import datetime
 from pathlib import Path
 
 from .constants import LP_CHANNEL, clear_session
+from .db.queries import (
+    salvar_projeto, upsert_preferencias,
+    salvar_ref, encerrar_sessao,
+    salvar_mensagem,
+)
 
 logger = logging.getLogger(__name__)
 
 
 async def gerar_lp(user_id: str, sess: dict, say, channel: str,
                    thread_ts: str | None = None) -> None:
-    """Gera a landing page HTML via Claude e envia no Slack."""
+    """Gera a landing page HTML via Claude, salva no banco e envia no Slack."""
     cliente    = sess.get("cliente", "")
     objetivo   = sess.get("objetivo", "")
     publico    = sess.get("publico", "")
@@ -24,9 +30,13 @@ async def gerar_lp(user_id: str, sess: dict, say, channel: str,
     extras     = sess.get("extras", "")
     refs_boas  = sess.get("refs_boas", "")
     refs_ruins = sess.get("refs_ruins", "")
+    sid        = sess.get("sessao_id", "")
+
     clear_session(user_id)
 
     await say(text="⏳ Gerando sua landing page com Claude... isso leva ~30 segundos.")
+    if sid:
+        salvar_mensagem(user_id, sid, "agent", "⏳ Gerando landing page...")
 
     refs_section = ""
     if refs_boas:
@@ -64,6 +74,7 @@ Requisitos técnicos OBRIGATÓRIOS:
 
 Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."""
 
+    html = None
     try:
         import anthropic
         api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("AWS_CLAUDE_KEY", "")
@@ -79,15 +90,26 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
         html = html.strip()
     except Exception as e:
         logger.exception("Erro ao gerar LP via Claude: %s", e)
+        # Salva projeto com status falha
+        salvar_projeto(
+            user_id=user_id, cliente=cliente, objetivo=objetivo,
+            publico=publico, tom=tom, extras=extras,
+            refs_boas=refs_boas, refs_ruins=refs_ruins,
+            status="falha", observacao=str(e),
+        )
+        if sid:
+            encerrar_sessao(sid, "gerando", "cancelado")
         await say(text=f"❌ Erro ao gerar landing page: {e}")
         return
 
+    # Monta nome do arquivo
     slug  = re.sub(r"[^a-z0-9]", "-", cliente.lower())[:40].strip("-")
     ts    = datetime.now().strftime("%Y%m%d-%H%M")
     fname = f"landing-{slug}-{ts}.html"
     fpath = Path(tempfile.gettempdir()) / fname
     fpath.write_text(html, encoding="utf-8")
 
+    slack_ts_upload = ""
     try:
         from slack_sdk.web.async_client import AsyncWebClient as _WC
         slack = _WC(token=os.getenv("SLACK_BOT_TOKEN", ""))
@@ -104,7 +126,8 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
         )
         if thread_ts:
             upload_kwargs["thread_ts"] = thread_ts
-        await slack.files_upload_v2(**upload_kwargs)
+        result = await slack.files_upload_v2(**upload_kwargs)
+        slack_ts_upload = str(result.get("ts", ""))
     except Exception as e:
         logger.exception("Erro ao enviar arquivo LP: %s", e)
         preview = html[:3000] + ("\n\n_... (truncado)_" if len(html) > 3000 else "")
@@ -114,3 +137,32 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
             fpath.unlink()
         except Exception:
             pass
+
+    # ── Persistência no banco ─────────────────────────────────────────────────
+    projeto_id = salvar_projeto(
+        user_id=user_id, cliente=cliente, objetivo=objetivo,
+        publico=publico, tom=tom, extras=extras,
+        refs_boas=refs_boas, refs_ruins=refs_ruins,
+        arquivo_nome=fname, slack_channel=channel,
+        slack_ts=slack_ts_upload, status="gerado",
+    )
+
+    # Salva referências acumulativas
+    if refs_boas:
+        salvar_ref(user_id, "boa",  refs_boas,  projeto_id)
+    if refs_ruins:
+        salvar_ref(user_id, "ruim", refs_ruins, projeto_id)
+
+    # Atualiza preferências do usuário
+    upsert_preferencias(
+        user_id,
+        tom_favorito=tom,
+        cliente_padrao=cliente,
+    )
+
+    # Encerra sessão
+    if sid:
+        encerrar_sessao(sid, "gerado", "gerado")
+        salvar_mensagem(user_id, sid, "agent", f"✅ LP gerada: {fname}")
+
+    logger.info("[LP] Projeto #%d salvo — %s para %s", projeto_id, fname, user_id)
