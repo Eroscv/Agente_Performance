@@ -209,7 +209,7 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str,
     if step == "confirmar":
         if text.lower() == "confirmar":
             sess["step"] = "gerando"
-            await _gerar_lp(user_id, sess, _say, channel)
+            await _gerar_lp(user_id, sess, _say, channel, effective_ts)
             return True
         elif text.lower() in ("cancelar", "cancel"):
             _clear(user_id)
@@ -224,7 +224,7 @@ async def handle_message_landing(user_id: str, text: str, say, channel: str,
 
 # ── Geração da LP ─────────────────────────────────────────────────────────────
 
-async def _gerar_lp(user_id: str, sess: dict, say, channel: str):
+async def _gerar_lp(user_id: str, sess: dict, say, channel: str, thread_ts: str | None = None):
     cliente    = sess.get("cliente", "")
     objetivo   = sess.get("objetivo", "")
     publico    = sess.get("publico", "")
@@ -301,8 +301,8 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
     try:
         from slack_sdk.web.async_client import AsyncWebClient as _WC
         _client = _WC(token=os.getenv("SLACK_BOT_TOKEN", ""))
-        await _client.files_upload_v2(
-            channel=LP_CHANNEL,
+        upload_kwargs = dict(
+            channel=channel,
             file=str(fpath),
             filename=fname,
             title=f"Landing Page — {cliente}",
@@ -312,8 +312,9 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
                 f"_Baixe o `.html`, abra no browser. Para publicar: arraste para netlify.com/drop_"
             ),
         )
-        if channel != LP_CHANNEL:
-            await say(text=f"✅ Landing Page *{cliente}* gerada e enviada em <#{LP_CHANNEL}>!")
+        if thread_ts:
+            upload_kwargs["thread_ts"] = thread_ts
+        await _client.files_upload_v2(**upload_kwargs)
     except Exception as e:
         logger.exception("Erro ao enviar arquivo LP: %s", e)
         preview = html[:3000] + ("\n\n_... (truncado)_" if len(html) > 3000 else "")
