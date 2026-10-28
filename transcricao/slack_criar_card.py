@@ -52,6 +52,9 @@ USUARIOS_UNICOS = {
 
 CLIENTES_LISTA = ["Source Of", "POD", "Botica", "Liv Up", "Bazar", "Todos"]
 
+FRENTES_LISTA = ["ADS", "Social", "Conta", "Relatoria", "Planejamento", "Site", "Dados", "Gestão"]
+_FRENTES_STR  = "\n".join(f"  {i+1}. {f}" for i, f in enumerate(FRENTES_LISTA))
+
 # Lista formatada para exibição
 _USUARIOS_STR = "\n".join(f"  {i+1}. {n}" for i, n in enumerate(USUARIOS_UNICOS.keys()))
 _CLIENTES_STR = "  " + "  ·  ".join(CLIENTES_LISTA)
@@ -120,6 +123,22 @@ def _match_cliente(texto: str) -> Optional[str]:
             return c
     return None
 
+
+def _match_frente(texto: str) -> Optional[str]:
+    """Resolve frente digitada (número ou nome parcial)."""
+    t = texto.strip()
+    try:
+        idx = int(t) - 1
+        if 0 <= idx < len(FRENTES_LISTA):
+            return FRENTES_LISTA[idx]
+    except ValueError:
+        pass
+    t_lower = t.lower()
+    for f in FRENTES_LISTA:
+        if t_lower in f.lower():
+            return f
+    return None
+
 # ── Step 1: /criar-card ───────────────────────────────────────────────────────
 
 async def cmd_criar_card(ack, command, say):
@@ -128,7 +147,7 @@ async def cmd_criar_card(ack, command, say):
     channel   = command["channel_id"]
     thread_ts = command.get("thread_ts")
     _clear(user_id)
-    _session(user_id).update({"step": "titulo", "channel": channel, "thread_ts": thread_ts})
+    _session(user_id).update({"step": "cliente_card", "channel": channel, "thread_ts": thread_ts})
 
     async def _say(**kwargs):
         kwargs.setdefault("channel", channel)
@@ -137,8 +156,10 @@ async def cmd_criar_card(ack, command, say):
         await say(**kwargs)
 
     await _say(text=(
-        "🗂️ *Criar card no Notion* — vou fazer algumas perguntas.\n\n"
-        "1️⃣ *Qual é o título da tarefa?*"
+        "🗂️ *Criar card no Notion* — formato: `Cliente: Frente - Entrega`\n\n"
+        "1️⃣ *Para qual cliente é a tarefa?*\n"
+        + "\n".join(f"  {i+1}. {c}" for i, c in enumerate(CLIENTES_LISTA))
+        + "\n\nDigite o número ou parte do nome."
     ))
 
 # ── Handler de mensagens de texto ─────────────────────────────────────────────
@@ -167,15 +188,49 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         await _say(text="🚫 Criação de card cancelada.")
         return True
 
-    if step == "titulo":
-        if not text:
-            await _say(text="⚠️ O título não pode ser vazio. Tente novamente.")
+    if step == "cliente_card":
+        cliente_card = _match_cliente(text)
+        if not cliente_card:
+            clientes_num = "\n".join(f"  {i+1}. {c}" for i, c in enumerate(CLIENTES_LISTA))
+            await _say(text=f"⚠️ Não reconheci. Escolha:\n{clientes_num}")
             return True
-        sess["titulo"] = text
+        sess["cliente_card"] = cliente_card
+        sess["step"]         = "frente"
+        await _say(text=(
+            f"✅ Cliente: *{cliente_card}*\n\n"
+            f"2️⃣ *Qual é a frente de trabalho?*\n{_FRENTES_STR}\n\n"
+            "Digite o número ou parte do nome."
+        ))
+        return True
+
+    if step == "frente":
+        frente = _match_frente(text)
+        if not frente:
+            await _say(text=f"⚠️ Frente não reconhecida. Opções:\n{_FRENTES_STR}")
+            return True
+        sess["frente"] = frente
+        sess["step"]   = "entrega"
+        await _say(text=(
+            f"✅ Frente: *{frente}*\n\n"
+            f"3️⃣ *Qual é a entrega?*\n"
+            f"Descreva o que precisa ser feito.\n"
+            f"Ex: `Variação campeão Dimples`\n\n"
+            f"O título será gerado como: *{sess['cliente_card']}: {frente} - [sua entrega]*"
+        ))
+        return True
+
+    if step == "entrega":
+        if not text:
+            await _say(text="⚠️ Informe a entrega. Tente novamente.")
+            return True
+        cliente_card = sess.get("cliente_card", "")
+        frente       = sess.get("frente", "")
+        titulo       = f"{cliente_card}: {frente} - {text}"
+        sess["titulo"] = titulo
         sess["step"]   = "responsavel"
         await _say(text=(
-            f"✅ Título: *{text}*\n\n"
-            f"2️⃣ *Quem é o responsável?*\n{_USUARIOS_STR}\n\n"
+            f"✅ Título gerado: *{titulo}*\n\n"
+            f"4️⃣ *Quem é o responsável?*\n{_USUARIOS_STR}\n\n"
             "Digite o número ou parte do nome."
         ))
         return True
@@ -189,7 +244,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         sess["step"]        = "revisor"
         await _say(text=(
             f"✅ Responsável: *{nome}*\n\n"
-            f"3️⃣ *Quem revisa?*\n{_USUARIOS_STR}\n\n"
+            f"5️⃣ *Quem revisa?*\n{_USUARIOS_STR}\n\n"
             "Digite o número ou parte do nome."
         ))
         return True
@@ -203,7 +258,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         sess["step"]    = "prazo"
         await _say(text=(
             f"✅ Revisor: *{nome}*\n\n"
-            "4️⃣ *Qual é o prazo?*\n"
+            "6️⃣ *Qual é o prazo?*\n"
             "Ex: `2026-11-10`, `10/11/2026`, `amanhã`, `+7` (em 7 dias)\n"
             "Ou `pular` para usar +7 dias a partir de hoje."
         ))
@@ -221,42 +276,30 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         sess["step"]  = "descricao"
         await _say(text=(
             f"✅ Prazo: *{prazo}*\n\n"
-            "5️⃣ *Descrição da tarefa* (opcional)\n"
+            "7️⃣ *Descrição da tarefa* (opcional)\n"
             "Detalhe o que precisa ser feito, ou `pular` para deixar em branco."
         ))
         return True
 
     if step == "descricao":
         sess["descricao"] = "" if text.lower() in ("pular", "skip", "-") else text
-        sess["step"]      = "cliente"
-        clientes_num = "\n".join(f"  {i+1}. {c}" for i, c in enumerate(CLIENTES_LISTA))
-        await _say(text=(
-            "6️⃣ *Para qual cliente?*\n"
-            f"{clientes_num}\n\n"
-            "Digite o número ou parte do nome."
-        ))
-        return True
-
-    if step == "cliente":
-        cliente = _match_cliente(text)
-        if not cliente:
-            clientes_num = "\n".join(f"  {i+1}. {c}" for i, c in enumerate(CLIENTES_LISTA))
-            await _say(text=f"⚠️ Não reconheci. Escolha:\n{clientes_num}")
-            return True
-        sess["cliente"] = cliente
-        sess["step"]    = "confirmar"
+        sess["step"]      = "confirmar"
+        sess.setdefault("cliente", sess.get("cliente_card", ""))
         titulo      = sess.get("titulo", "")
         responsavel = sess.get("responsavel", "")
         revisor     = sess.get("revisor", "")
         prazo       = sess.get("prazo", "")
+        cliente     = sess.get("cliente", "")
+        frente      = sess.get("frente", "")
         descricao   = sess.get("descricao", "") or "_sem descrição_"
         await _say(text=(
             "📋 *Resumo do card — revise:*\n\n"
             f"• *Título:* {titulo}\n"
+            f"• *Cliente:* {cliente}\n"
+            f"• *Frente:* {frente}\n"
             f"• *Responsável:* {responsavel}\n"
             f"• *Revisor:* {revisor}\n"
             f"• *Prazo:* {prazo}\n"
-            f"• *Cliente:* {cliente}\n"
             f"• *Descrição:* {descricao}\n\n"
             "Digite *confirmar* para criar o card ou *cancelar* para abortar."
         ))
