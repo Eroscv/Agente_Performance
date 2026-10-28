@@ -13,14 +13,22 @@ def parse_prazo(texto: str) -> Optional[str]:
     hoje = datetime.now().date()
     if t in ("amanhã", "amanha"):
         return (hoje + timedelta(days=1)).isoformat()
+    if t == "hoje":
+        return hoje.isoformat()
     if t.startswith("+"):
         try:
             return (hoje + timedelta(days=int(t[1:]))).isoformat()
         except ValueError:
             pass
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d/%m"):
         try:
-            return datetime.strptime(texto.strip(), fmt).date().isoformat()
+            parsed = datetime.strptime(texto.strip(), fmt).date()
+            # Formato sem ano: usa ano corrente (ou próximo se data já passou)
+            if fmt == "%d/%m":
+                parsed = parsed.replace(year=hoje.year)
+                if parsed < hoje:
+                    parsed = parsed.replace(year=hoje.year + 1)
+            return parsed.isoformat()
         except ValueError:
             continue
     return None
@@ -29,6 +37,8 @@ def parse_prazo(texto: str) -> Optional[str]:
 def match_usuario(texto: str) -> Optional[str]:
     """Resolve nome digitado (número ou nome parcial) para nome exato."""
     t = texto.strip()
+    if not t:
+        return None
     try:
         idx = int(t) - 1
         if 0 <= idx < len(USUARIOS_UNICOS):

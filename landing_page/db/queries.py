@@ -45,7 +45,7 @@ def salvar_mensagem(user_id: str, sessao_id: str, papel: str, texto: str) -> Non
 
 def historico_recente(user_id: str, limite: int = 20) -> list[dict]:
     rows = conn().execute(
-        "SELECT criado_em, papel, texto FROM mensagens WHERE user_id=? ORDER BY criado_em DESC LIMIT ?",
+        "SELECT criado_em, papel, texto FROM mensagens WHERE user_id=? ORDER BY id DESC LIMIT ?",
         (user_id, limite),
     ).fetchall()
     return [dict(r) for r in reversed(rows)]

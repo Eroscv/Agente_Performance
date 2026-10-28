@@ -134,12 +134,12 @@ def salvar_card(
 def listar_cards(user_id: str | None = None, limite: int = 10) -> list[dict]:
     if user_id:
         rows = conn().execute(
-            "SELECT * FROM cards_criados WHERE user_id=? ORDER BY criado_em DESC LIMIT ?",
+            "SELECT * FROM cards_criados WHERE user_id=? ORDER BY id DESC LIMIT ?",
             (user_id, limite),
         ).fetchall()
     else:
         rows = conn().execute(
-            "SELECT * FROM cards_criados ORDER BY criado_em DESC LIMIT ?",
+            "SELECT * FROM cards_criados ORDER BY id DESC LIMIT ?",
             (limite,),
         ).fetchall()
     return [dict(r) for r in rows]
@@ -159,7 +159,7 @@ def get_cache(cache_key: str, ttl_minutos: int = 5) -> list[dict] | None:
     if not row:
         return None
     atualizado = datetime.fromisoformat(row["atualizado_em"])
-    agora = datetime.utcnow()
+    agora = datetime.now(timezone.utc).replace(tzinfo=None)
     if (agora - atualizado).total_seconds() > ttl_minutos * 60:
         return None  # expirado
     return json.loads(row["payload_json"])

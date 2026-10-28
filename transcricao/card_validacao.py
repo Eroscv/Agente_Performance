@@ -22,7 +22,7 @@ _REGRAS_TITULO_AREA = [
     # palavras no título  →  área esperada
     (re.compile(r"\b(roas|cpc|ctr|budget|verba|campanha|meta ads|google ads|tráfego|mídia paga)", re.I), "Performance"),
     (re.compile(r"\b(arte|criativo|criativos|copy|peça|banner|video|vídeo|roteiro)", re.I),             "3P"),
-    (re.compile(r"\b(gestão|processo|pipeline|reunião|squad|okr|kpi|metas)", re.I),                     "Gestão"),
+    (re.compile(r"\b(gestão|processo|pipeline|squad|okr|kpi|metas)", re.I),                     "Gestão"),
     (re.compile(r"\b(landing page|lp |email|disparo|comunicação|newsletter)", re.I),                    "3P"),
 ]
 
