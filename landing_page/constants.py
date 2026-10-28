@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-BASE_DIR = Path(__file__).parent.parent
+BASE_DIR = Path(__file__).parent
 load_dotenv(BASE_DIR.parent / "agente-performance" / ".env")
 
 LP_CHANNEL = (
