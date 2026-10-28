@@ -22,6 +22,100 @@ from slack.formatter import markdown_to_blocks, truncar_blocos
 
 logger = logging.getLogger(__name__)
 
+# ── Detecção e processamento de imagem ───────────────────────────────────────
+
+import re as _re
+
+_IMAGEM_RE = _re.compile(
+    r"\b(ger(a|e|ar?|ou|ando)|cr(ia|ie|iar?|iou|iando)|fa(z|ça|zer?|ça)|draw|creat|generat)"
+    r".{0,40}\b(imagem|image|foto|ilustra|banner|criativo|arte|design|visual|thumbnail)\b"
+    r"|\b(imagem|image|banner|criativo|arte|visual|thumbnail)\b.{0,40}"
+    r"\b(ger(a|e|ar?)|cr(ia|ie|iar?)|fa(z|ça)|do|make|creat|generat)\b",
+    _re.IGNORECASE | _re.DOTALL,
+)
+
+
+def _e_pedido_imagem(text: str) -> bool:
+    """Detecta se a mensagem é um pedido de geração de imagem."""
+    return bool(_IMAGEM_RE.search(text))
+
+
+async def _processar_imagem(
+    text:      str,
+    channel:   str,
+    thread_ts: str,
+    client,
+) -> None:
+    """
+    Pipeline de geração de imagem:
+    1. Extrai o prompt da mensagem (remove verbos de comando)
+    2. Chama image_agent.gerar_imagem()
+    3. Faz upload da imagem no Slack via files_upload_v2
+    """
+    import io
+    from agent.image_agent import gerar_imagem
+
+    # Extrai o prompt: remove triggers de comando
+    prompt = _re.sub(
+        r"^(ger(a|e|ar?|ou)|cr(ia|ie|iar?)|fa(z|ça|zer?)|gere?|crie?|faça?|draw|create?|generat\w*)\s+"
+        r"(uma?\s+)?(imagem|foto|banner|criativo|arte|visual|thumbnail|ilustração)?\s*",
+        "",
+        text,
+        flags=_re.IGNORECASE,
+    ).strip() or text
+
+    logger.info("[image] Pedido recebido | prompt=%s", prompt[:80])
+
+    await client.chat_postMessage(
+        channel=channel, thread_ts=thread_ts,
+        text=":art: Gerando imagem\u2026 isso pode levar alguns segundos.",
+    )
+
+    try:
+        resultado = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: gerar_imagem(prompt)
+        )
+
+        img_bytes = resultado.bytes_png
+        filename  = resultado.filename
+
+        await client.files_upload_v2(
+            channel=channel,
+            thread_ts=thread_ts,
+            content=img_bytes,
+            filename=filename,
+            title=f"\U0001f5bc {prompt[:60]}",
+        )
+
+        await client.chat_postMessage(
+            channel=channel,
+            thread_ts=thread_ts,
+            text=(
+                f":white_check_mark: Imagem gerada via *{resultado.provider}*"
+                f" ({resultado.size_kb} KB)\n"
+                f"> :pencil: _Prompt refinado:_ {resultado.prompt_refinado[:120]}"
+            ),
+            mrkdwn=True,
+        )
+        logger.info("[image] Enviada | provider=%s size_kb=%d", resultado.provider, resultado.size_kb)
+
+    except RuntimeError as e:
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=(
+                f":x: Não consegui gerar a imagem.\n"
+                f"> {e}\n\n"
+                f"Configure `FAL_KEY` ou `STABILITY_API_KEY` no `.env` para habilitar."
+            ),
+            mrkdwn=True,
+        )
+    except Exception as e:
+        logger.exception("[image] Erro inesperado")
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=f":x: Erro ao gerar imagem: {e}",
+        )
+
 _HANDLER_TIMEOUT = int(os.getenv("SLACK_HANDLER_TIMEOUT", "60"))
 
 async def _processar_e_responder(
@@ -46,6 +140,13 @@ async def _processar_e_responder(
             append_history(thread_ts, channel, "user", text)
             # Constrói contexto uma única vez e reutiliza em consultar() e gerar_resposta()
             contexto = build_context_summary(thread_ts)
+
+            # ── Intercept: geração de imagem ─────────────────────────────────
+            if _e_pedido_imagem(text):
+                await _processar_imagem(text, channel, thread_ts, client)
+                resposta_final = "[imagem gerada]"
+                return
+            # ──────────────────────────────────────────────────────────────
 
             resultado   = consultar(text, thread_ts=thread_ts, channel=channel, user_id=user_id)
             dados       = resultado["dados"]
