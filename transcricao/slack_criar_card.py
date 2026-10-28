@@ -213,9 +213,9 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         await _say(text=(
             f"✅ Frente: *{frente}*\n\n"
             f"3️⃣ *Qual é a entrega?*\n"
-            f"Descreva o que precisa ser feito.\n"
-            f"Ex: `Variação campeão Dimples`\n\n"
-            f"O título será gerado como: *{sess['cliente_card']}: {frente} - [sua entrega]*"
+            f"Descreva o que precisa ser feito (verbo no infinitivo, até 6 palavras).\n"
+            f"Ex: `Variação campeão Dimples` / `Relatório mensal` / `Postagens da semana`\n\n"
+            f"📌 Título que será criado: *{sess['cliente_card']}: {frente} - [sua entrega]*"
         ))
         return True
 
