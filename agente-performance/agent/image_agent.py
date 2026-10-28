@@ -17,6 +17,10 @@ Modelos (em ordem): gemini-2.5-flash-image → gemini-3.1-flash-image → gemini
 
 Uso standalone:
   python3 -m agent.image_agent "banner horizontal Source OF, Black Friday"
+
+Recebimento de imagem (edição/análise):
+  editar_imagem(img_bytes, instrucao, user_id, channel, texto_slack)
+  analisar_imagem(img_bytes, pergunta)
 """
 
 import base64
@@ -401,6 +405,151 @@ def gerar_imagem(
         width=width,
         height=height,
     )
+
+# ── Recebimento: edição e análise de imagem recebida ──────────────────────────
+
+# Detecta se o usuário quer analisar/descrever (sem gerar nova imagem)
+_ANALISAR_RE = re.compile(
+    r"\b(analisa?r?|analis[ae]|descrev[ea]r?|descri[cç]|interpreta?r?|identifica?r?|avalia?r?|avali[ae]"
+    r"|o\s+que|me\s+diz|me\s+fala|me\s+conta"
+    r"|explica?r?|resume?|avalia?r?|critica?r?|feedback"
+    r"|quais?\s+(cores?|elementos?|texto|produto|marca|estilo))\b",
+    re.IGNORECASE,
+)
+
+# Detecta pedido de edição/alteração
+_EDITAR_RE = re.compile(
+    r"\b(muda?r?|altera?r?|troca?r?|coloca?r?|adiciona?r?|remov[ea]r?|apaga?r?"
+    r"|deixa?r?|torna?r?|faça?|refaz|recria?r?|gera?r?|cria?r?|transforma?r?"
+    r"|converte?r?|ajusta?r?|melhora?r?|otimiza?r?)\b",
+    re.IGNORECASE,
+)
+
+
+def e_pedido_edicao_imagem(text: str) -> bool:
+    """Detecta pedido de edição com imagem anexada (tem verbo de ação)."""
+    return bool(_EDITAR_RE.search(text))
+
+
+def e_pedido_analise_imagem(text: str) -> bool:
+    """Detecta pedido de análise/descrição de imagem."""
+    return bool(_ANALISAR_RE.search(text))
+
+
+def analisar_imagem(img_bytes: bytes, pergunta: str = "", mime_type: str = "image/png") -> str:
+    """
+    Usa Gemini vision para analisar/descrever uma imagem recebida.
+    Retorna texto em português.
+    """
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=GEMINI_KEY)
+    instrucao = pergunta.strip() if pergunta.strip() else (
+        "Descreva esta imagem em detalhes: elementos visuais, cores, estilo, "
+        "texto presente, produto ou marca identificada, e sua opinião sobre "
+        "a qualidade como criativo de marketing digital. Responda em português."
+    )
+    response = client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=[
+            types.Part.from_bytes(data=img_bytes, mime_type=mime_type),
+            instrucao,
+        ],
+    )
+    return response.text.strip()
+
+
+def editar_imagem(
+    img_bytes:   bytes,
+    instrucao:   str,
+    user_id:     str = "",
+    channel:     str = "",
+    texto_slack: str = "",
+    mime_type:   str = "image/png",
+) -> "ImagemGerada":
+    """
+    Recebe imagem + instrução, envia ao Gemini vision+gen para reinterpretar
+    com as modificações pedidas. Retorna ImagemGerada.
+    Nota: Gemini reinterpreta (não faz inpainting pixel a pixel).
+    """
+    if not GEMINI_KEY:
+        raise RuntimeError("GEMINI_API_KEY não configurada")
+
+    from google import genai
+    from google.genai import types
+
+    texto_ref = texto_slack or instrucao
+    width, height, fmt_label = detectar_formato(texto_ref)
+    instrucao_en = _refinar_prompt(instrucao, texto_ref) if ANTHROPIC_KEY else instrucao
+
+    proporcao = ""
+    if width != height:
+        proporcao = f", {'landscape' if width > height else 'portrait'} orientation {width}x{height}"
+
+    prompt_edicao = (
+        f"Based on this image, create a new version with the following changes: "
+        f"{instrucao_en}{proporcao}. "
+        f"Keep the overall style, brand, and composition similar unless the change requires otherwise. "
+        f"High quality, professional marketing creative."
+    )
+
+    client_g  = genai.Client(api_key=GEMINI_KEY)
+    last_err  = None
+
+    for model_name in GEMINI_IMAGE_MODELS:
+        try:
+            logger.info("[image:edit] modelo=%s", model_name)
+            response = client_g.models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Part.from_bytes(data=img_bytes, mime_type=mime_type),
+                    prompt_edicao,
+                ],
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"]
+                ),
+            )
+            for part in response.candidates[0].content.parts:
+                if part.inline_data and part.inline_data.data:
+                    raw     = part.inline_data.data
+                    img_out = bytes(raw) if isinstance(raw, (bytes, bytearray)) else base64.b64decode(raw)
+
+                    from agent.tz import hoje_brt
+                    hoje_str = hoje_brt().strftime("%Y-%m-%d")
+                    hora_str = datetime.now(timezone(timedelta(hours=-3))).strftime("%H-%M")
+                    cliente_m    = _CLIENTE_RE.search(texto_ref)
+                    cliente_slug = ""
+                    if cliente_m:
+                        nome = cliente_m.group(1).lower().replace(" ", "_")
+                        if "source" in nome:   cliente_slug = "source_of_"
+                        elif "pod" in nome:    cliente_slug = "pod_"
+                        elif "botica" in nome: cliente_slug = "botica_"
+                    slug     = re.sub(r"[^a-z0-9]+", "_", instrucao_en.lower())[:25].strip("_")
+                    filename = f"{hoje_str}_{hora_str}_{cliente_slug}edit_{slug}.png"
+
+                    _registrar_log(user_id, channel,
+                                   f"[EDIT] {instrucao}", instrucao_en,
+                                   model_name, len(img_out) // 1024)
+                    return ImagemGerada(
+                        bytes_png=img_out,
+                        prompt_original=instrucao,
+                        prompt_refinado=instrucao_en,
+                        modelo=model_name,
+                        filename=filename,
+                        formato_label=fmt_label,
+                        width=width,
+                        height=height,
+                    )
+            raise ValueError(f"{model_name} não retornou imagem")
+        except Exception as e:
+            logger.warning("[image:edit] %s falhou: %s", model_name, str(e)[:100])
+            last_err = e
+
+    _registrar_log(user_id, channel, f"[EDIT] {instrucao}", instrucao_en,
+                   "", 0, "erro", str(last_err))
+    raise RuntimeError(f"Gemini não conseguiu editar a imagem: {last_err}")
+
 
 
 # ── Standalone ────────────────────────────────────────────────────────────────

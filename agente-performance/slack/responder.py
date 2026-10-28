@@ -25,7 +25,12 @@ logger = logging.getLogger(__name__)
 # ── Detecção e processamento de imagem ───────────────────────────────────────
 # Funções de detecção delegadas ao image_agent (fonte única de verdade)
 import re as _re
-from agent.image_agent import e_pedido_imagem as _e_pedido_imagem, e_pedido_variacao as _e_pedido_variacao
+from agent.image_agent import (
+    e_pedido_imagem as _e_pedido_imagem,
+    e_pedido_variacao as _e_pedido_variacao,
+    e_pedido_edicao_imagem as _e_pedido_edicao,
+    e_pedido_analise_imagem as _e_pedido_analise,
+)
 
 
 async def _processar_imagem(
@@ -149,6 +154,143 @@ async def _processar_imagem(
             text=f":x: Erro ao gerar imagem: {e}",
         )
 
+
+async def _baixar_imagem_slack(file_info: dict, client) -> tuple[bytes, str]:
+    """
+    Baixa uma imagem do Slack usando url_private.
+    Retorna (bytes, mime_type).
+    """
+    import aiohttp
+    url       = file_info.get("url_private") or file_info.get("url_private_download", "")
+    mime_type = file_info.get("mimetype", "image/png")
+    token     = os.getenv("SLACK_BOT_TOKEN", "")
+
+    # Tenta aiohttp primeiro, fallback para requests síncrono
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers={"Authorization": f"Bearer {token}"}) as resp:
+                resp.raise_for_status()
+                return await resp.read(), mime_type
+    except Exception:
+        import requests
+        r = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        r.raise_for_status()
+        return r.content, mime_type
+
+
+async def _processar_imagem_recebida(
+    text:      str,
+    files:     list,
+    channel:   str,
+    thread_ts: str,
+    client,
+    user_id:   str = "",
+) -> None:
+    """
+    Fluxo quando usuário envia imagem + texto:
+    - Se pedir análise/descrição  → Gemini vision (só texto)
+    - Se pedir edição/alteração   → Gemini vision+gen → #image_gen
+    - Se só imagem sem texto       → descreve automaticamente
+    """
+    from agent.image_agent import analisar_imagem, editar_imagem, verificar_rate_limit
+
+    IMAGE_GEN_CHANNEL = os.getenv("SLACK_IMAGE_GEN_CHANNEL", "image_gen")
+
+    # Filtra apenas imagens (ignora PDFs, etc.)
+    imagens = [
+        f for f in files
+        if f.get("mimetype", "").startswith("image/")
+    ]
+    if not imagens:
+        return  # nenhuma imagem real, ignora
+
+    file_info = imagens[0]  # usa a primeira imagem
+    texto     = text.strip()
+    eh_edicao  = _e_pedido_edicao(texto)
+    eh_analise = _e_pedido_analise(texto) or not texto  # sem texto = descreve
+
+    # Feedback imediato
+    if eh_edicao:
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=":art: Processando sua imagem\u2026 resultado em <#{IMAGE_GEN_CHANNEL}>.",
+        )
+    else:
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=":eyes: Analisando a imagem\u2026",
+        )
+
+    try:
+        img_bytes, mime_type = await _baixar_imagem_slack(file_info, client)
+    except Exception as e:
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=f":x: Não consegui acessar a imagem: {e}",
+        )
+        return
+
+    # ── EDITAR ──
+    if eh_edicao:
+        pode_gerar, contagem = verificar_rate_limit(user_id)
+        if not pode_gerar:
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=f":no_entry: Limite atingido ({contagem} imagens/hora). Tente mais tarde.",
+            )
+            return
+        try:
+            resultado = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: editar_imagem(
+                    img_bytes, texto,
+                    user_id=user_id, channel=channel,
+                    texto_slack=text, mime_type=mime_type,
+                )
+            )
+            await client.files_upload_v2(
+                channel=IMAGE_GEN_CHANNEL,
+                content=resultado.bytes_png,
+                filename=resultado.filename,
+                title=f"\U0001f5bc Edit: {texto[:50]}",
+            )
+            await client.chat_postMessage(
+                channel=IMAGE_GEN_CHANNEL,
+                text=(
+                    f":pencil2: *Edição:* {texto[:80]}\n"
+                    f"> :frame_with_picture: {resultado.formato_label} · {resultado.modelo} · {resultado.size_kb} KB"
+                ),
+                mrkdwn=True,
+            )
+            if channel != IMAGE_GEN_CHANNEL:
+                await client.chat_postMessage(
+                    channel=channel, thread_ts=thread_ts,
+                    text=f":white_check_mark: Imagem editada enviada em <#{IMAGE_GEN_CHANNEL}>!",
+                )
+        except Exception as e:
+            logger.exception("[image:edit] erro")
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=f":x: Não consegui editar: {e}",
+            )
+        return
+
+    # ── ANALISAR ──
+    try:
+        descricao = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: analisar_imagem(img_bytes, texto, mime_type)
+        )
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=f":mag: {descricao}",
+        )
+    except Exception as e:
+        logger.exception("[image:analyze] erro")
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=f":x: Não consegui analisar a imagem: {e}",
+        )
+
+
 _HANDLER_TIMEOUT = int(os.getenv("SLACK_HANDLER_TIMEOUT", "60"))
 
 async def _processar_e_responder(
@@ -157,8 +299,9 @@ async def _processar_e_responder(
     thread_ts: str,
     client,
     user_id:   str = None,
-    formato_export: str = None,  # "excel" | "pdf" | "notion" | "excel+notion" | None
-    cliente_notion: str = None,  # chave do DATABASES do Notion (ex: 'source_of')
+    formato_export: str = None,
+    cliente_notion: str = None,
+    files:     list = None,   # arquivos anexados ao evento Slack
 ):
     """Núcleo: NLP → query banco → Claude → posta no Slack → salva histórico + log."""
     import asyncio
@@ -174,12 +317,21 @@ async def _processar_e_responder(
             # Constrói contexto uma única vez e reutiliza em consultar() e gerar_resposta()
             contexto = build_context_summary(thread_ts)
 
+            # ── Intercept: imagem recebida (arquivos anexados) ─────────────────
+            if files:
+                await _processar_imagem_recebida(
+                    text, files, channel, thread_ts, client, user_id=user_id or ""
+                )
+                resposta_final = "[imagem recebida]"
+                return
+            # ─────────────────────────────────────────────────────────────
+
             # ── Intercept: geração de imagem ─────────────────────────────────
             if _e_pedido_imagem(text):
                 await _processar_imagem(text, channel, thread_ts, client, user_id=user_id or "")
                 resposta_final = "[imagem gerada]"
                 return
-            # ──────────────────────────────────────────────────────────────
+            # ─────────────────────────────────────────────────────────────
 
             resultado   = consultar(text, thread_ts=thread_ts, channel=channel, user_id=user_id)
             dados       = resultado["dados"]

@@ -442,6 +442,23 @@ async def handle_mention(event, say, client, ack):
     text      = _limpar_mencao(event.get("text", ""), event.get("user"))
     channel   = event["channel"]
     thread_ts = event.get("thread_ts") or event["ts"]
+    files     = event.get("files", [])
+
+    # Se tem imagem anexada, processa independente de ter texto ou não
+    if files and any(f.get("mimetype", "").startswith("image/") for f in files):
+        try:
+            await client.reactions_add(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
+        except Exception:
+            pass
+        await _processar_e_responder(
+            text, channel, thread_ts, client,
+            user_id=event.get("user"), files=files,
+        )
+        try:
+            await client.reactions_remove(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
+        except Exception:
+            pass
+        return
 
     if not text:
         await client.chat_postMessage(
@@ -492,6 +509,23 @@ async def handle_dm(event, client, ack):
     text      = event.get("text", "").strip()
     channel   = event["channel"]
     thread_ts = event.get("thread_ts") or event["ts"]
+    files     = event.get("files", [])
+
+    # Se tem imagem anexada, processa independente de ter texto ou não
+    if files and any(f.get("mimetype", "").startswith("image/") for f in files):
+        try:
+            await client.reactions_add(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
+        except Exception:
+            pass
+        await _processar_e_responder(
+            text, channel, thread_ts, client,
+            user_id=event.get("user"), files=files,
+        )
+        try:
+            await client.reactions_remove(channel=channel, timestamp=event["ts"], name="hourglass_flowing_sand")
+        except Exception:
+            pass
+        return
 
     if not text:
         return
