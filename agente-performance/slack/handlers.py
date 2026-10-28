@@ -552,6 +552,12 @@ async def handle_mention(event, say, client, ack):
 
     logger.info("[mention] user=%s text=%r", user_id, text[:80])
 
+    # say ancorado na thread da menção
+    async def _say_mention(**kwargs):
+        kwargs.setdefault("channel", channel)
+        kwargs.setdefault("thread_ts", thread_ts)
+        await client.chat_postMessage(**kwargs)
+
     # ── Pseudo-slash PRIMEIRO: /comando digitado como menção ──────────────────────
     if text.startswith("/"):
         if await _interceptar_slash(text, user_id, channel, thread_ts, client, say):
@@ -560,7 +566,7 @@ async def handle_mention(event, say, client, ack):
     # ── Intercepta fluxos conversacionais ativos ────────────────────────────────
     if await _handle_criar_card_msg(user_id, text, say, channel):
         return
-    if await _handle_landing_msg(user_id, text, _say_anchored, channel, thread_ts):
+    if await _handle_landing_msg(user_id, text, _say_mention, channel, thread_ts):
         return
     # ─────────────────────────────────────────────────────────────────────────────
 
@@ -644,7 +650,7 @@ async def handle_dm(event, client, ack):
     # ── Intercepta fluxos conversacionais ativos ──────────────────────────────
     if await _handle_criar_card_msg(user_id, text, _say_dm, channel):
         return
-    if await _handle_landing_msg(user_id, text, _say_dm, channel):
+    if await _handle_landing_msg(user_id, text, _say_dm, channel, thread_ts):
         return
     # ─────────────────────────────────────────────────────────────────────────
 
