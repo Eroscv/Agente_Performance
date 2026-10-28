@@ -10,8 +10,9 @@ Fluxo:
   4. Retorna bytes PNG + metadados para o responder.py enviar no Slack
 
 Providers suportados (ordem de prioridade):
-  1. fal.ai       → FAL_KEY no .env          (FLUX.1-schnell / dev)
-  2. Stability AI → STABILITY_API_KEY no .env (SDXL)
+  1. Gemini       → GEMINI_API_KEY no .env   (gemini-2.5-flash-image / 3-pro-image)
+  2. fal.ai       → FAL_KEY no .env          (FLUX.1-schnell / dev)
+  3. Stability AI → STABILITY_API_KEY no .env (SDXL)
 
 Uso standalone:
   python3 -m agent.image_agent "campanha de verão para Source OF, estilo vibrante"
@@ -29,18 +30,25 @@ logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
+GEMINI_KEY       = os.getenv("GEMINI_API_KEY", "")
 FAL_KEY          = os.getenv("FAL_KEY", "")
 STABILITY_KEY    = os.getenv("STABILITY_API_KEY", "")
 ANTHROPIC_KEY    = os.getenv("ANTHROPIC_API_KEY", "")
 
-# Modelo fal.ai padrão — schnell é rápido e gratuito no free tier
-FAL_MODEL_DEFAULT   = os.getenv("FAL_MODEL", "fal-ai/flux/schnell")
-FAL_MODEL_QUALITY   = "fal-ai/flux/dev"        # qualidade superior (pago)
-STABILITY_ENGINE    = "stable-diffusion-xl-1024-v1-0"
+# Modelos Gemini para geração de imagem (em ordem de preferência)
+GEMINI_IMAGE_MODELS = [
+    os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image"),
+    "gemini-3.1-flash-image",
+    "gemini-3-pro-image",
+]
+
+# Modelo fal.ai padrão
+FAL_MODEL_DEFAULT = os.getenv("FAL_MODEL", "fal-ai/flux/schnell")
+STABILITY_ENGINE  = "stable-diffusion-xl-1024-v1-0"
 
 IMAGE_WIDTH  = int(os.getenv("IMAGE_WIDTH",  "1024"))
 IMAGE_HEIGHT = int(os.getenv("IMAGE_HEIGHT", "1024"))
-IMAGE_STEPS  = int(os.getenv("IMAGE_STEPS",  "4"))   # schnell funciona bem com 4
+IMAGE_STEPS  = int(os.getenv("IMAGE_STEPS",  "4"))
 
 
 # ── Prompt refinement via Claude ──────────────────────────────────────────────
@@ -87,6 +95,42 @@ def _refinar_prompt(prompt_usuario: str) -> str:
 
 
 # ── Providers ─────────────────────────────────────────────────────────────────
+
+
+def _gerar_gemini(prompt_en: str) -> bytes:
+    """
+    Gera imagem via Gemini (gemini-2.5-flash-image ou superior).
+    Tenta cada modelo em GEMINI_IMAGE_MODELS até um funcionar.
+    Retorna bytes PNG.
+    """
+    from google import genai
+    from google.genai import types
+
+    client = genai.Client(api_key=GEMINI_KEY)
+    last_err = None
+
+    for model_name in GEMINI_IMAGE_MODELS:
+        try:
+            logger.info("[image] Gemini → modelo=%s", model_name)
+            response = client.models.generate_content(
+                model=model_name,
+                contents=f"Generate an image: {prompt_en}",
+                config=types.GenerateContentConfig(
+                    response_modalities=["TEXT", "IMAGE"]
+                ),
+            )
+            for part in response.candidates[0].content.parts:
+                if part.inline_data and part.inline_data.data:
+                    raw = part.inline_data.data
+                    if isinstance(raw, (bytes, bytearray)):
+                        return bytes(raw)
+                    return base64.b64decode(raw)
+            raise ValueError(f"Gemini {model_name} não retornou imagem nos parts")
+        except Exception as e:
+            logger.warning("[image] Gemini %s falhou: %s", model_name, str(e)[:120])
+            last_err = e
+
+    raise RuntimeError(f"Todos os modelos Gemini falharam. Último erro: {last_err}")
 
 def _gerar_fal(prompt_en: str, width: int, height: int, steps: int) -> bytes:
     """Gera imagem via fal.ai (FLUX). Retorna bytes PNG."""
@@ -190,7 +234,22 @@ def gerar_imagem(
 
     errors = []
 
-    # Provider 1: fal.ai
+    # Provider 1: Gemini (já configurado, provider padrão)
+    if GEMINI_KEY:
+        try:
+            img_bytes = _gerar_gemini(prompt_en)
+            return ImagemGerada(
+                bytes_png=img_bytes,
+                prompt_original=prompt_original,
+                prompt_refinado=prompt_en,
+                provider="Gemini (gemini-2.5-flash-image)",
+                filename=f"imagem_{slug}.png",
+            )
+        except Exception as e:
+            logger.warning("[image] Gemini falhou: %s", e)
+            errors.append(f"Gemini: {e}")
+
+    # Provider 2: fal.ai
     if FAL_KEY:
         try:
             img_bytes = _gerar_fal(prompt_en, width, height, steps)
@@ -205,7 +264,7 @@ def gerar_imagem(
             logger.warning("[image] fal.ai falhou: %s", e)
             errors.append(f"fal.ai: {e}")
 
-    # Provider 2: Stability AI
+    # Provider 3: Stability AI
     if STABILITY_KEY:
         try:
             img_bytes = _gerar_stability(prompt_en, width, height)
@@ -220,10 +279,10 @@ def gerar_imagem(
             logger.warning("[image] Stability falhou: %s", e)
             errors.append(f"Stability: {e}")
 
-    if not FAL_KEY and not STABILITY_KEY:
+    if not any([GEMINI_KEY, FAL_KEY, STABILITY_KEY]):
         raise RuntimeError(
             "Nenhum provider de imagem configurado.\n"
-            "Adicione FAL_KEY ou STABILITY_API_KEY no .env"
+            "Configure GEMINI_API_KEY (já disponível), FAL_KEY ou STABILITY_API_KEY no .env"
         )
 
     raise RuntimeError(
