@@ -35,7 +35,8 @@ def _parse_arg(arg: str) -> tuple[str, str | None]:
     Ex: 'Bianca'              → ('Bianca', None)
     """
     arg_lower = arg.lower()
-    for kw, status in _STATUS_VALIDOS.items():
+    # Ordena por comprimento decrescente para evitar que 'andamento' capture antes de 'em andamento'
+    for kw, status in sorted(_STATUS_VALIDOS.items(), key=lambda x: -len(x[0])):
         if arg_lower.endswith(kw):
             nome = arg[:-(len(kw))].strip()
             return nome or arg, status
