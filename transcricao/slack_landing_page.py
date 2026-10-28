@@ -33,6 +33,9 @@ load_dotenv(BASE_DIR.parent / "agente-performance" / ".env")
 
 logger = logging.getLogger(__name__)
 
+# Canal de entrega (mesmo do agente de imagem) — usa ID quando disponível
+LP_CHANNEL = os.getenv("SLACK_IMAGE_GEN_CHANNEL_ID") or os.getenv("SLACK_IMAGE_GEN_CHANNEL", "image_gen")
+
 # ── Opções ────────────────────────────────────────────────────────────────────
 
 OBJETIVOS = [
@@ -353,7 +356,7 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem ```html fen
         await say(channel=channel, text=f"❌ Erro ao gerar landing page: {e}")
         return
 
-    # Salva como arquivo temporário e sobe no Slack
+    # Salva como arquivo temporário e sobe no canal de LPs
     slug  = re.sub(r"[^a-z0-9]", "-", cliente.lower())[:40].strip("-")
     ts    = datetime.now().strftime("%Y%m%d-%H%M")
     fname = f"landing-{slug}-{ts}.html"
@@ -362,7 +365,7 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem ```html fen
 
     try:
         await client.files_upload_v2(
-            channel=channel,
+            channel=LP_CHANNEL,
             file=str(fpath),
             filename=fname,
             title=f"Landing Page — {cliente}",
@@ -373,9 +376,14 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem ```html fen
                 f"Para publicar: arraste para o Netlify Drop ou suba no GitHub Pages._"
             ),
         )
+        # Avisa no canal de origem se for diferente
+        if channel != LP_CHANNEL:
+            await say(
+                channel=channel,
+                text=f"✅ Landing Page *{cliente}* gerada e enviada em <#{LP_CHANNEL}>!",
+            )
     except Exception as e:
         logger.exception("Erro ao enviar arquivo LP: %s", e)
-        # Fallback: posta preview
         preview = html[:3000] + ("\n\n_... (truncado)_" if len(html) > 3000 else "")
         await say(channel=channel, text=f"✅ LP gerada (falha no upload):\n```html\n{preview}\n```")
     finally:

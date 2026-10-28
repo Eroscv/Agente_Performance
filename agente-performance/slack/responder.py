@@ -51,7 +51,7 @@ async def _processar_imagem(
     """
     from agent.image_agent import gerar_imagem, verificar_rate_limit
 
-    IMAGE_GEN_CHANNEL = os.getenv("SLACK_IMAGE_GEN_CHANNEL", "image_gen")
+    IMAGE_GEN_CHANNEL = os.getenv("SLACK_IMAGE_GEN_CHANNEL_ID") or os.getenv("SLACK_IMAGE_GEN_CHANNEL", "image_gen")
 
     # ── Rate limit ──
     pode_gerar, contagem = verificar_rate_limit(user_id)
@@ -194,7 +194,7 @@ async def _processar_imagem_recebida(
     """
     from agent.image_agent import analisar_imagem, editar_imagem, verificar_rate_limit
 
-    IMAGE_GEN_CHANNEL = os.getenv("SLACK_IMAGE_GEN_CHANNEL", "image_gen")
+    IMAGE_GEN_CHANNEL = os.getenv("SLACK_IMAGE_GEN_CHANNEL_ID") or os.getenv("SLACK_IMAGE_GEN_CHANNEL", "image_gen")
 
     # Filtra apenas imagens (ignora PDFs, etc.)
     imagens = [
