@@ -23,21 +23,9 @@ from slack.formatter import markdown_to_blocks, truncar_blocos
 logger = logging.getLogger(__name__)
 
 # ── Detecção e processamento de imagem ───────────────────────────────────────
-
+# Funções de detecção delegadas ao image_agent (fonte única de verdade)
 import re as _re
-
-_IMAGEM_RE = _re.compile(
-    r"\b(ger(a|e|ar?|ou|ando)|cr(ia|ie|iar?|iou|iando)|fa(z|ça|zer?|ça)|draw|creat|generat)"
-    r".{0,40}\b(imagem|image|foto|ilustra|banner|criativo|arte|design|visual|thumbnail)\b"
-    r"|\b(imagem|image|banner|criativo|arte|visual|thumbnail)\b.{0,40}"
-    r"\b(ger(a|e|ar?)|cr(ia|ie|iar?)|fa(z|ça)|do|make|creat|generat)\b",
-    _re.IGNORECASE | _re.DOTALL,
-)
-
-
-def _e_pedido_imagem(text: str) -> bool:
-    """Detecta se a mensagem é um pedido de geração de imagem."""
-    return bool(_IMAGEM_RE.search(text))
+from agent.image_agent import e_pedido_imagem as _e_pedido_imagem, e_pedido_variacao as _e_pedido_variacao
 
 
 async def _processar_imagem(
@@ -45,31 +33,64 @@ async def _processar_imagem(
     channel:   str,
     thread_ts: str,
     client,
+    user_id:   str = "",
 ) -> None:
     """
     Pipeline de geração de imagem:
-    1. Extrai o prompt da mensagem (remove verbos de comando)
-    2. Chama image_agent.gerar_imagem()
-    3. Faz upload da imagem SEMPRE no canal #image_gen
-    4. Avisa o usuário no canal de origem (se diferente)
+    1. Verifica rate limit do usuário
+    2. Extrai prompt limpo (remove verbos de comando)
+    3. Detecta se é pedido de variação da última imagem
+    4. Chama image_agent.gerar_imagem() em executor (não bloqueia)
+    5. Upload sempre em #image_gen
+    6. Confirma no canal de origem
     """
-    import io
-    from agent.image_agent import gerar_imagem
+    from agent.image_agent import gerar_imagem, verificar_rate_limit
 
     IMAGE_GEN_CHANNEL = os.getenv("SLACK_IMAGE_GEN_CHANNEL", "image_gen")
 
-    # Extrai o prompt: remove triggers de comando
+    # ── Rate limit ──
+    pode_gerar, contagem = verificar_rate_limit(user_id)
+    if not pode_gerar:
+        await client.chat_postMessage(
+            channel=channel, thread_ts=thread_ts,
+            text=(
+                f":no_entry: Limite atingido: você já gerou *{contagem} imagens* na última hora.\n"
+                f"> Máximo: {os.getenv('IMAGE_RATE_LIMIT_MAX', '10')} por hora. Tente novamente mais tarde."
+            ),
+            mrkdwn=True,
+        )
+        return
+
+    # ── Extrai prompt ──
     prompt = _re.sub(
-        r"^(ger(a|e|ar?|ou)|cr(ia|ie|iar?)|fa(z|ça|zer?)|gere?|crie?|faça?|draw|create?|generat\w*)\s+"
-        r"(uma?\s+)?(imagem|foto|banner|criativo|arte|visual|thumbnail|ilustração)?\s*",
+        r"^(ger(?:a|e|ar?|ou)|cr(?:ia|ie|iar?)|fa(?:z|ça|zer?)|gere?|crie?|faça?|draw|create?|generat\w*|produz\w*)\s+"
+        r"(?:uma?\s+)?(?:imagem|foto|banner|criativo|arte|visual|thumbnail|ilustração|story|stories|reels|capa)?\s*",
         "",
         text,
         flags=_re.IGNORECASE,
     ).strip() or text
 
-    logger.info("[image] Pedido recebido | prompt=%s", prompt[:80])
+    # ── Variação: adiciona contexto da última imagem gerada na thread ──
+    if _e_pedido_variacao(text):
+        try:
+            import sqlite3
+            from pathlib import Path
+            db = Path(__file__).resolve().parent.parent / "agente.db"
+            conn = sqlite3.connect(db)
+            row = conn.execute(
+                "SELECT prompt_refinado FROM image_log WHERE channel=? AND status='ok' ORDER BY criado_em DESC LIMIT 1",
+                (channel,)
+            ).fetchone()
+            conn.close()
+            if row and row[0]:
+                prompt = f"{row[0]}, but {prompt}"  # contexto da geração anterior
+                logger.info("[image] Variação detectada — base: %s", row[0][:60])
+        except Exception as e_var:
+            logger.debug("[image] Falha ao buscar variação: %s", e_var)
 
-    # Feedback imediato no canal de origem
+    logger.info("[image] Pedido | user=%s | prompt=%s", user_id, prompt[:80])
+
+    # Feedback imediato
     await client.chat_postMessage(
         channel=channel, thread_ts=thread_ts,
         text=f":art: Gerando imagem\u2026 será enviada em <#{IMAGE_GEN_CHANNEL}>.",
@@ -77,17 +98,19 @@ async def _processar_imagem(
 
     try:
         resultado = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: gerar_imagem(prompt)
+            None, lambda: gerar_imagem(
+                prompt,
+                user_id=user_id,
+                channel=channel,
+                texto_slack=text,
+            )
         )
 
-        img_bytes = resultado.bytes_png
-        filename  = resultado.filename
-
-        # Upload SEMPRE em #image_gen (sem thread — canal dedicado)
+        # Upload em #image_gen
         await client.files_upload_v2(
             channel=IMAGE_GEN_CHANNEL,
-            content=img_bytes,
-            filename=filename,
+            content=resultado.bytes_png,
+            filename=resultado.filename,
             title=f"\U0001f5bc {prompt[:60]}",
         )
 
@@ -96,21 +119,22 @@ async def _processar_imagem(
             channel=IMAGE_GEN_CHANNEL,
             text=(
                 f":white_check_mark: *{prompt[:80]}*\n"
-                f"> :pencil: _Prompt refinado:_ {resultado.prompt_refinado[:120]}\n"
-                f"> :gear: {resultado.provider} · {resultado.size_kb} KB"
+                f"> :pencil: _Prompt:_ {resultado.prompt_refinado[:120]}\n"
+                f"> :frame_with_picture: {resultado.formato_label} · {resultado.modelo} · {resultado.size_kb} KB"
             ),
             mrkdwn=True,
         )
 
-        # Confirma no canal de origem apenas se for diferente
+        # Confirma no canal de origem
         if channel != IMAGE_GEN_CHANNEL:
             await client.chat_postMessage(
                 channel=channel, thread_ts=thread_ts,
-                text=f":white_check_mark: Imagem gerada e enviada em <#{IMAGE_GEN_CHANNEL}>!",
+                text=f":white_check_mark: Imagem *{resultado.formato_label}* gerada em <#{IMAGE_GEN_CHANNEL}>!",
+                mrkdwn=True,
             )
 
-        logger.info("[image] Enviada para #%s | provider=%s size_kb=%d",
-                    IMAGE_GEN_CHANNEL, resultado.provider, resultado.size_kb)
+        logger.info("[image] OK | modelo=%s fmt=%s size_kb=%d",
+                    resultado.modelo, resultado.formato_label, resultado.size_kb)
 
     except RuntimeError as e:
         await client.chat_postMessage(
@@ -152,7 +176,7 @@ async def _processar_e_responder(
 
             # ── Intercept: geração de imagem ─────────────────────────────────
             if _e_pedido_imagem(text):
-                await _processar_imagem(text, channel, thread_ts, client)
+                await _processar_imagem(text, channel, thread_ts, client, user_id=user_id or "")
                 resposta_final = "[imagem gerada]"
                 return
             # ──────────────────────────────────────────────────────────────
