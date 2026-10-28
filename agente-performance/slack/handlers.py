@@ -830,22 +830,22 @@ async def handle_cache_limpar(ack, respond):
 
 @app.command("/tutorial")
 async def handle_tutorial(ack, respond):
-    """Tutorial completo do Agente de Performance Guará."""
+    """Tutorial do Agente de Performance Guará."""
     await ack()
     texto = """\
 *🎓 Tutorial — Agente de Performance Guará*
-_Tudo que você precisa saber para usar o agente do zero._
+_Consultas de mídia paga em linguagem natural._
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 *O que é este agente?*
 
-O Agente de Performance monitora continuamente os dados de mídia paga dos clientes Guará (Meta Ads, Google Ads e Shopify), responde perguntas em linguagem natural, gera alertas proativos e cria criativos de imagem.
+Monitora continuamente os dados de mídia paga dos clientes Guará (Meta Ads, Google Ads e Shopify) e responde perguntas sobre métricas, campanhas, alertas e resultados.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 *🗣️ Como falar com o agente*
 
 • Em qualquer canal: `@agente [sua pergunta]`
-• DM direto para o bot (sem precisar mencionar)
+• DM direto para o bot
 
 *Teste agora:* `@agente como foi essa semana?`
 
@@ -854,25 +854,27 @@ O Agente de Performance monitora continuamente os dados de mídia paga dos clien
 
 *Resumos por período*
 `@agente resumo de outubro` — investimento, receita, ROAS do mês
-`@agente como foi a semana passada?` — visão geral 7 dias
-`@agente resultado de hoje` — dados do dia atual
+`@agente como foi a semana passada?`
+`@agente resultado de hoje`
+`/hoje` · `/semana` · `/mes`
 
-*Rankings e melhores campanhas*
+*Rankings*
 `@agente top 5 campanhas por ROAS esse mês`
 `@agente quais campanhas geraram mais compras em outubro?`
 `@agente qual anúncio tem melhor CTR na Source OF?`
+`/top`
 
 *Comparações*
 `@agente compara outubro vs setembro`
 `@agente POD vs Source OF em novembro`
+`/compare X vs Y`
 
 *Funil de conversão*
 `@agente mostra o funil de outubro para Source OF`
-`/funil` — funil rápido do mês corrente
+`/funil`
 
 *Evolução temporal*
 `@agente como evoluiu o ROAS da Advantage dia a dia?`
-`@agente gráfico de investimento semanal`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 *🚨 Alertas e diagnósticos*
@@ -889,67 +891,34 @@ O Agente de Performance monitora continuamente os dados de mídia paga dos clien
 🟢 *POD Kombucha* — Meta Ads + Google Ads + Shopify
 🟠 *Botica Ouro Preto* — Meta Ads + Shopify
 
-Mencione o nome para filtrar:
 `@agente resumo da POD essa semana`
 `@agente como está a Botica em outubro?`
 `/pod` — resumo rápido da POD
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-*🎨 Geração de imagens*
-
-O agente cria criativos via Gemini. Resultado aparece em :art: *#image_gen*.
-
-*Formatos suportados:*
-`banner` / `horizontal` — 1344×768 (16:9)
-`story` / `reels` — 768×1344 (9:16)
-`post` / `feed` / `quadrado` — 1024×1024 (1:1)
-
-*Exemplos:*
-`@agente banner de Black Friday para POD, cores vibrantes`
-`@agente story de campanha de verão para Source OF, estilo clean`
-`@agente post de beleza natural, fundo branco, elegante`
-`@agente gere uma variação do último criativo com fundo preto`
-
-*Análise de imagem:* envie uma imagem com a mensagem
-`@agente o que você acha desse criativo?`
-
-Limite: 10 imagens por hora por usuário.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 *📤 Exportar dados*
 
-`@agente relatório de outubro em Excel` — gera planilha .xlsx
+`@agente relatório de outubro em Excel`
 `@agente exporta resumo da semana em PDF`
 `@agente exporta para o Notion o relatório de outubro`
-`/relatorio` — abre menu de exportação
-`/relatorio notion` — exporta direto para o Notion
+`/relatorio` · `/relatorio notion`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-*⚡ Todos os slash commands*
-
-`/tutorial` — este guia
-`/ajuda` — referência rápida de comandos
-`/exemplos` — exemplos de perguntas por categoria
-`/hoje` — resumo do dia
-`/semana` — resumo da semana
-`/mes` — resumo do mês
-`/top` — top campanhas
-`/alertas` — alertas ativos
-`/campanha [nome]` — dados de uma campanha específica
-`/compare X vs Y` — comparação entre períodos/clientes
-`/funil` — funil de conversão
-`/pod` — resumo POD Kombucha
-`/campanhas` — lista todas as campanhas ativas
-`/metricas` — métricas detalhadas
-`/relatorio` — exportar dados
-`/status` — status do sistema e última atualização
-`/kb` — base de conhecimento (aprendizados salvos)
+*⚡ Slash Commands*
+`/tutorial` · `/ajuda` · `/exemplos`
+`/hoje` · `/semana` · `/mes` · `/top` · `/alertas`
+`/campanha [nome]` · `/compare X vs Y` · `/funil`
+`/pod` · `/campanhas` · `/metricas` · `/relatorio`
+`/status` · `/kb`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+*Outros agentes*
+`/tutorial-imagem` — criação de criativos com Gemini
+`/tutorial-transcricao` — atas de reunião → Notion
+
 *💡 Dicas*
-• Dê 👍 nas respostas certas — o agente aprende com isso
-• Os dados são atualizados automaticamente a cada 6h
-• Dúvida sobre cobertura? `/status` mostra a última sincronização
+• Dê 👍 nas respostas certas — o agente aprende
+• Dados atualizados a cada 6h — `/status` mostra a última sync
 _Só você está vendo esta mensagem._
 """
     await respond(text=texto, response_type="ephemeral")
