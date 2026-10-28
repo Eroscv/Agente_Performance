@@ -72,29 +72,40 @@ async def _interceptar_slash(text: str, user_id: str, channel: str,
     cmd  = m.group(1).lower()
     args = (m.group(2) or "").strip()
 
-    # respond fake: posta no canal, visível a todos e ancorado na thread
+    # respond fake: posta no canal, ancorado na thread (visível a todos)
     class _Respond:
         async def __call__(self_, text="", blocks=None, response_type="", **kw):
-            await client.chat_postMessage(
-                channel=channel,
-                thread_ts=thread_ts,
-                text=text,
-                blocks=blocks or [],
-                mrkdwn=True,
-            )
+            payload = {
+                "channel":    channel,
+                "thread_ts":  thread_ts,
+                "mrkdwn":     True,
+            }
+            if blocks:
+                payload["blocks"] = blocks
+                payload["text"]   = text or "."
+            else:
+                payload["text"]   = text
+            await client.chat_postMessage(**payload)
     _respond = _Respond()
 
     # command fake para handlers que precisam de command dict
     _command = {"user_id": user_id, "channel_id": channel, "text": args}
 
-    # ack fake assíncrono (evita 'NoneType not callable' nos handlers)
+    # ack fake assíncrono
     async def _ack(): pass
+
+    # say ancorado na thread
+    async def _say_anchored(**kwargs):
+        if "channel" not in kwargs:
+            kwargs["channel"]   = channel
+        kwargs.setdefault("thread_ts", thread_ts)
+        await client.chat_postMessage(**kwargs)
 
     handlers = {
         "tutorial":              lambda: _run_tut_performance(_respond),
         "tutorial-transcricao": lambda: _cmd_tut_transcricao(_ack, _respond),
         "tutorial-landing":     lambda: _cmd_tut_landing(_ack, _respond),
-        "criar-landing":        lambda: _cmd_criar_landing(_ack, _command, say or _make_say(client, channel)),
+        "criar-landing":        lambda: _cmd_criar_landing(_ack, _command, say or _say_anchored),
         "ajuda":                lambda: client.chat_postMessage(
                                     channel=channel, thread_ts=thread_ts,
                                     text=AJUDA_TEXTO, mrkdwn=True),
