@@ -157,3 +157,65 @@ def test_31_validacao_titulo_exatamente_5_chars():
     tarefa = {"titulo": "Abcde", "responsavel_nome": "Bianca"}  # 5 chars — limite
     ok, _ = validar_card(tarefa, "Performance")
     assert ok is True
+
+
+# ── Testes adicionais: nome parcial + status ──────────────────────────────────
+
+def test_32_parse_arg_nome_parcial_com_status():
+    from card_status import _parse_arg, _STATUS_VALIDOS
+    from card_helpers import match_usuario
+
+    # "Bian em andamento" → nome_parcial="Bian", status="Em andamento"
+    nome, status = _parse_arg("Bian em andamento")
+    assert status == "Em andamento", f"status={status}"
+    # match_usuario deve resolver "Bian" → "Bianca Garbin"
+    resolvido = match_usuario(nome)
+    assert resolvido is not None, f"match_usuario('{nome}') retornou None"
+    assert "Bianca" in resolvido, f"Esperado Bianca, got {resolvido}"
+
+def test_33_parse_arg_nome_parcial_a_fazer():
+    from card_status import _parse_arg
+    from card_helpers import match_usuario
+    nome, status = _parse_arg("Guilherme a fazer")
+    assert status == "A fazer"
+    resolvido = match_usuario(nome)
+    assert resolvido is not None
+    assert "Guilherme" in resolvido
+
+def test_34_parse_arg_nome_parcial_bloqueado():
+    from card_status import _parse_arg
+    from card_helpers import match_usuario
+    nome, status = _parse_arg("Isab bloqueado")
+    assert status == "Bloqueado"
+    resolvido = match_usuario(nome)
+    assert resolvido is not None
+    assert "Isabela" in resolvido
+
+def test_35_revisor_igual_responsavel_nao_aceito():
+    """Testa que revisor == responsável é bloqueado no fluxo."""
+    import asyncio
+    import sys
+    sys.path.insert(0, __import__('os').path.join(__import__('os').path.dirname(__file__), '..'))
+    from card_constants import get_session, clear_session, _sessions
+    from unittest.mock import AsyncMock
+
+    async def run():
+        from card_flow import cmd_criar_card, handle_message_criar_card
+        msgs = []
+        async def say(**kw): msgs.append(kw.get("text", ""))
+        ack = AsyncMock()
+        clear_session("U_REV")
+        await cmd_criar_card(ack, {"user_id": "U_REV", "channel_id": "C001", "thread_ts": None}, say)
+        # Preenche até revisor
+        for t in ["Source OF", "ADS", "Campanha teste", "Bianca"]:
+            await handle_message_criar_card("U_REV", t, say, "C001")
+        # Tenta colocar Bianca como revisor também
+        await handle_message_criar_card("U_REV", "Bianca", say, "C001")
+        step = _sessions.get("U_REV", {}).get("step", "")
+        # Deve manter step=revisor (não avançar)
+        assert step == "revisor", f"step={step} — deveria ser 'revisor'"
+        assert any("revisor" in m.lower() or "diferente" in m.lower() or "já é" in m.lower()
+                   for m in msgs), f"Aviso não encontrado nas msgs: {msgs[-3:]}"
+
+    asyncio.run(run())
+

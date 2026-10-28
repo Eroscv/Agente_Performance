@@ -150,13 +150,22 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         if not nome:
             await _say(text=f"⚠️ Não reconheci. Escolha:\n{_USUARIOS_STR}")
             return True
+        # Aviso se revisor == responsável (erro silencioso de workflow)
+        responsavel = sess.get("responsavel", "")
+        if nome == responsavel:
+            await _say(text=(
+                f"⚠️ *{nome}* já é o responsável deste card.\n"
+                "O revisor deve ser outra pessoa. Escolha um revisor diferente:\n"
+                f"{_USUARIOS_STR}"
+            ))
+            return True
         sess["revisor"] = nome
         sess["step"]    = "prazo"
         atualizar_step(user_id, "prazo")
         await _say(text=(
             f"✅ Revisor: *{nome}*\n\n"
             "6️⃣ *Qual é o prazo?*\n"
-            "Ex: `2026-11-10`, `10/11/2026`, `amanhã`, `+7` (em 7 dias)\n"
+            "Ex: `2026-11-10`, `10/11/2026`, `10/11`, `amanhã`, `hoje`, `+7` (em 7 dias)\n"
             "Ou `pular` para usar +7 dias a partir de hoje."
         ))
         return True
