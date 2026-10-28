@@ -222,9 +222,9 @@ def _calcular_delta(resultado: dict, data_inicio: date, data_fim: date, cliente_
 def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> list[str]:
     """
     Checa se há campanhas abaixo do threshold de ROAS.
-    Usa a data_maxima do banco como data_fim real (dado mais recente disponível),
-    ignorando o data_fim passado caso o banco ainda não tenha dados de hoje.
-    Retorna lista de mensagens de alerta (vazia = tudo OK).
+    FONTE: BigQuery (ads_diario / v_alertas_campanha) — fonte oficial de dados.
+    Fallback para SQLite local apenas se BQ indisponível.
+    Retorna lista de dicts de alerta (vazia = tudo OK).
     """
     alertas = []
     try:
@@ -236,44 +236,89 @@ def verificar_alertas(cliente_key: str, data_inicio: date, data_fim: date) -> li
         is_gads   = plats_cfg.get("google_ads", {}).get("ativo", False) and not plats_cfg.get("meta_ads", {}).get("ativo", False)
         threshold = ALERTA_ROAS_MIN_GADS if is_gads else ALERTA_ROAS_MIN
 
-        # Usa data_maxima do banco filtrada por cliente — reflete dado mais recente após sync
-        from db.connections import query_fed_one
-        row_max = query_fed_one(
-            "SELECT MAX(data_fim) AS dm FROM campanhas_unificada WHERE cliente_key = ?",
-            (cliente_key,)
-        )
-        data_max_banco = row_max.get("dm") if row_max else None
-        if data_max_banco:
-            data_fim = date.fromisoformat(str(data_max_banco)[:10])
-        # Alerta sempre referente ao dia mais recente disponível
-        data_inicio = data_fim
+        from db.bq_reader import enabled as bq_enabled, alertas_roas_bq, data_maxima_bq
 
-        from db.connections import query_fed
-        rows = query_fed("""
-            SELECT campanha,
-                   SUM(investimento)  AS invest,
-                   SUM(valor_compras) AS receita,
-                   CASE WHEN SUM(investimento) > 0
-                        THEN SUM(valor_compras) / SUM(investimento) END AS roas
-            FROM campanhas_unificada
-            WHERE cliente_key = ?
-              AND data_inicio = ?
-              AND investimento > 0
-            GROUP BY campanha
-            HAVING roas < ? OR roas IS NULL
-            ORDER BY invest DESC
-            LIMIT 5
-        """, (cliente_key, str(data_fim), threshold))
+        if bq_enabled():
+            # ── Fonte primária: BigQuery ──────────────────────────────────────
+            # Usa cliente_key → BQ usa campo 'cliente' com mesmo valor
+            data_max_bq = data_maxima_bq(cliente_key)
+            if data_max_bq:
+                data_fim = date.fromisoformat(data_max_bq)
+            data_inicio = data_fim  # alerta sempre no dia mais recente
 
-        if rows:
-            alertas.append({
-                "cliente_key": cliente_key,
-                "nome":        nome,
-                "emoji":       emoji,
-                "threshold":   threshold,
-                "periodo":     data_fim.strftime('%d/%m/%Y'),
-                "campanhas":   [dict(r) for r in rows],
-            })
+            rows = alertas_roas_bq(
+                cliente_key=cliente_key,
+                threshold=threshold,
+                janela_dias=1,
+                invest_min=100.0,
+            )
+
+            if rows:
+                # Normaliza campos para o formato esperado por postar_alerta_ancorado
+                campanhas_fmt = [
+                    {
+                        "campanha": r["campanha"],
+                        "invest":   r["investimento"],
+                        "receita":  r["receita"],
+                        "compras":  r.get("compras", 0),
+                        "roas":     r["roas"],
+                        "roas_media_7d": r.get("roas_media_7d"),
+                        "status_alerta": r.get("status_alerta"),
+                        "plataforma":    r.get("plataforma"),
+                    }
+                    for r in rows
+                ]
+                alertas.append({
+                    "cliente_key": cliente_key,
+                    "nome":        nome,
+                    "emoji":       emoji,
+                    "threshold":   threshold,
+                    "periodo":     data_fim.strftime('%d/%m/%Y'),
+                    "campanhas":   campanhas_fmt,
+                    "fonte":       "bigquery",
+                })
+            else:
+                logger.info("[Alertas][BQ] %s — nenhuma campanha abaixo de %.2f em %s",
+                            cliente_key, threshold, data_fim)
+        else:
+            # ── Fallback: SQLite/DuckDB local ─────────────────────────────────
+            logger.warning("[Alertas] BQ indisponível — usando SQLite local para %s", cliente_key)
+            from db.connections import query_fed_one, query_fed
+            row_max = query_fed_one(
+                "SELECT MAX(data_fim) AS dm FROM campanhas_unificada WHERE cliente_key = ?",
+                (cliente_key,)
+            )
+            data_max_banco = row_max.get("dm") if row_max else None
+            if data_max_banco:
+                data_fim = date.fromisoformat(str(data_max_banco)[:10])
+            data_inicio = data_fim
+
+            rows = query_fed("""
+                SELECT campanha,
+                       SUM(investimento)  AS invest,
+                       SUM(valor_compras) AS receita,
+                       CASE WHEN SUM(investimento) > 0
+                            THEN SUM(valor_compras) / SUM(investimento) END AS roas
+                FROM campanhas_unificada
+                WHERE cliente_key = ?
+                  AND data_inicio = ?
+                  AND investimento > 0
+                GROUP BY campanha
+                HAVING roas < ? OR roas IS NULL
+                ORDER BY invest DESC
+                LIMIT 5
+            """, (cliente_key, str(data_fim), threshold))
+
+            if rows:
+                alertas.append({
+                    "cliente_key": cliente_key,
+                    "nome":        nome,
+                    "emoji":       emoji,
+                    "threshold":   threshold,
+                    "periodo":     data_fim.strftime('%d/%m/%Y'),
+                    "campanhas":   [dict(r) for r in rows],
+                    "fonte":       "sqlite_fallback",
+                })
 
     except Exception as e:
         logger.warning("[Alertas] Erro ao verificar alertas para %s: %s", cliente_key, e)
@@ -309,27 +354,45 @@ def postar_alerta_ancorado(alerta: dict, channel: str = None) -> bool:
     logger.info("[Alerta] Âncora postada: ts=%s", thread_ts)
 
     # ── 2. Detalhes na thread ───────────────────────────────────────────────
+    fonte = alerta.get("fonte", "sqlite_fallback")
+    tem_media_7d = fonte == "bigquery" and any(c.get("roas_media_7d") for c in camps)
+
     rows_tabela = []
     for c in camps:
         roas_str = f"{c['roas']:.2f}x" if c.get("roas") is not None else "—"
-        rows_tabela.append([
-            c["campanha"][:35],
-            _fmt_brl(c.get("invest")),
-            _fmt_brl(c.get("receita")),
-            roas_str,
-        ])
+        status_icon = {"critico": "🔴", "alerta": "🟡", "destaque": "🟢", "novo": "⚪"}.get(
+            c.get("status_alerta", ""), "⚠️"
+        )
+        if tem_media_7d:
+            media_str = f"{c['roas_media_7d']:.2f}x" if c.get("roas_media_7d") else "—"
+            rows_tabela.append([
+                f"{status_icon} {c['campanha'][:30]}",
+                _fmt_brl(c.get("invest")),
+                roas_str,
+                media_str,
+            ])
+        else:
+            rows_tabela.append([
+                c["campanha"][:35],
+                _fmt_brl(c.get("invest")),
+                _fmt_brl(c.get("receita")),
+                roas_str,
+            ])
+
+    cabecalhos = ["Campanha", "Invest.", "ROAS", "Média 7d"] if tem_media_7d else ["Campanha", "Invest.", "Receita", "ROAS"]
+    fonte_label = "BigQuery ✅" if fonte == "bigquery" else "SQLite (fallback)"
 
     blocks = [
         _bloco_header(f"⚠️ Alerta ROAS — {nome} · {periodo}"),
         _bloco_divider(),
         _bloco_section(f"*Campanhas com ROAS abaixo de {thresh}x:*"),
         _bloco_section(_tabela_txt(
-            ["Campanha", "Invest.", "Receita", "ROAS"],
+            cabecalhos,
             rows_tabela,
         )),
         _bloco_divider(),
         _bloco_context(
-            f"_Threshold configurado: {thresh}x · "
+            f"_Threshold: {thresh}x · Fonte: {fonte_label} · "
             f"Verifique criativos, segmentação e orçamento das campanhas acima._"
         ),
     ]
