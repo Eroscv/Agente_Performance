@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 load_dotenv(BASE_DIR.parent / "agente-performance" / ".env")
 
 from card_constants import USUARIOS_UNICOS, CLIENTES_LISTA, FRENTES_LISTA
+from card_db import salvar_card, encerrar_sessao, invalidar_cache
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +162,15 @@ async def criar_no_notion(user_id: str, sess: dict, say):
         return
 
     if url:
+        salvar_card(
+            user_id=user_id, titulo=titulo, cliente=cliente,
+            frente=sess.get("frente", ""), responsavel=responsavel,
+            revisor=revisor, prazo=prazo, descricao=descricao,
+            url_notion=url if isinstance(url, str) else "",
+            status="criado",
+        )
+        encerrar_sessao(user_id, "criado")
+        invalidar_cache()
         await say(text=(
             f"✅ *Card criado com sucesso!*\n"
             f"• *{titulo}*\n"
@@ -168,4 +178,6 @@ async def criar_no_notion(user_id: str, sess: dict, say):
             f"🔗 {url}"
         ))
     else:
+        salvar_card(user_id=user_id, titulo=titulo, status="falha")
+        encerrar_sessao(user_id, "falha")
         await say(text="❌ Falha ao criar o card no Notion. Tente novamente.")

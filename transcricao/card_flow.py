@@ -12,6 +12,7 @@ from card_constants import (
 )
 from card_helpers import parse_prazo, match_usuario, match_cliente, match_frente
 from card_notion import criar_no_notion
+from card_db import abrir_sessao, atualizar_step, encerrar_sessao as _enc_sessao, sessoes_timeout
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ async def cmd_criar_card(ack, command, say):
     channel   = command["channel_id"]
     thread_ts = command.get("thread_ts")
     clear_session(user_id)
+    abrir_sessao(user_id)
     get_session(user_id).update({"step": "cliente_card", "channel": channel, "thread_ts": thread_ts})
 
     async def _say(**kwargs):
@@ -42,6 +44,24 @@ async def cmd_criar_card(ack, command, say):
 async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
                                      thread_ts: str | None = None) -> bool:
     """Retorna True se a mensagem foi consumida pelo fluxo de criação de card."""
+    # Limpa sessões com timeout (>60 min sem resposta)
+    for uid_timeout in sessoes_timeout(minutos=60):
+        _enc_sessao(uid_timeout, "timeout")
+        clear_session(uid_timeout)
+        if uid_timeout == user_id:
+            # Avisa o usuário que a sessão expirou
+            effective_ts_t = thread_ts
+            async def _say_timeout(**kwargs):
+                kwargs.setdefault("channel", channel)
+                if effective_ts_t:
+                    kwargs.setdefault("thread_ts", effective_ts_t)
+                await say(**kwargs)
+            await _say_timeout(text=(
+                "⏱️ Sua sessão de criação de card expirou (60 min sem resposta).\n"
+                "Digite `/criar-card` para começar novamente."
+            ))
+            return True
+
     sess = _sessions.get(user_id)
     if not sess:
         return False
@@ -57,6 +77,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         await say(**kwargs)
 
     if text.lower() in ("cancelar", "cancel", "sair"):
+        _enc_sessao(user_id, "cancelado")
         clear_session(user_id)
         await _say(text="🚫 Criação de card cancelada.")
         return True
@@ -69,6 +90,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
             return True
         sess["cliente_card"] = cliente_card
         sess["step"]         = "frente"
+        atualizar_step(user_id, "frente")
         await _say(text=(
             f"✅ Cliente: *{cliente_card}*\n\n"
             f"2️⃣ *Qual é a frente de trabalho?*\n{_FRENTES_STR}\n\n"
@@ -83,6 +105,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
             return True
         sess["frente"] = frente
         sess["step"]   = "entrega"
+        atualizar_step(user_id, "entrega")
         await _say(text=(
             f"✅ Frente: *{frente}*\n\n"
             f"3️⃣ *Qual é a entrega?*\n"
@@ -99,6 +122,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
         titulo = f"{sess.get('cliente_card', '')}: {sess.get('frente', '')} - {text}"
         sess["titulo"] = titulo
         sess["step"]   = "responsavel"
+        atualizar_step(user_id, "responsavel")
         await _say(text=(
             f"✅ Título: *{titulo}*\n\n"
             f"4️⃣ *Quem é o responsável?*\n{_USUARIOS_STR}\n\n"
@@ -113,6 +137,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
             return True
         sess["responsavel"] = nome
         sess["step"]        = "revisor"
+        atualizar_step(user_id, "revisor")
         await _say(text=(
             f"✅ Responsável: *{nome}*\n\n"
             f"5️⃣ *Quem revisa?*\n{_USUARIOS_STR}\n\n"
@@ -127,6 +152,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
             return True
         sess["revisor"] = nome
         sess["step"]    = "prazo"
+        atualizar_step(user_id, "prazo")
         await _say(text=(
             f"✅ Revisor: *{nome}*\n\n"
             "6️⃣ *Qual é o prazo?*\n"
@@ -145,6 +171,7 @@ async def handle_message_criar_card(user_id: str, text: str, say, channel: str,
                 return True
         sess["prazo"] = prazo
         sess["step"]  = "descricao"
+        atualizar_step(user_id, "descricao")
         await _say(text=(
             f"✅ Prazo: *{prazo}*\n\n"
             "7️⃣ *Descrição da tarefa* (opcional)\n"
