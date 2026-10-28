@@ -226,6 +226,25 @@ async def _processar_e_responder(
             if aviso_cobertura:
                 resposta_final = aviso_cobertura + "\n\n" + resposta_final
 
+            # ── Fact-check + Confidence + Evidence stamp ──────────────────────
+            try:
+                from agent.data_verifier import verificar_resposta as _verificar
+                _dv = _verificar(
+                    resposta_final,
+                    dados,
+                    meta,
+                    dados_brutos_extras={
+                        "delta":   resultado.get("delta", {}),
+                        "shopify": resultado.get("shopify", {}),
+                    },
+                )
+                if _dv.prefixo_aviso:
+                    resposta_final = _dv.prefixo_aviso + resposta_final
+                if _dv.evidence_stamp:
+                    resposta_final = resposta_final + _dv.evidence_stamp
+            except Exception as _dv_err:
+                logger.debug("[responder] data_verifier falhou (não crítico): %s", _dv_err)
+
             append_history(thread_ts, channel, "agent", resposta_final[:500], meta)
 
             blocks = truncar_blocos(markdown_to_blocks(resposta_final))
