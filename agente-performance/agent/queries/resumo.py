@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 from agent.queries.base import _build_where, _meta_ads_union_source, _meta_ads_where, _ROAS_EXPR, _FREQ_EXPR, AWARENESS_PATTERNS, data_range_disponivel
 from agent.tz import hoje_brt
+from agent.queries.ranking import top_campanhas_roas, top_campanhas_compras, top_campanhas_receita
+from agent.queries.alertas import alertas_roas_baixo, campanhas_sem_conversao
 
 def resumo_por_campanha(
     data_inicio: Optional[str] = None,
@@ -254,7 +256,7 @@ def historico_mensal(
     import calendar as _cal
     from datetime import date as _date
 
-    hoje = _hoje_brt()
+    hoje = hoje_brt()
     resultado = []
 
     for i in range(meses - 1, -1, -1):

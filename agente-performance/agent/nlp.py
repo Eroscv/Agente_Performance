@@ -467,7 +467,7 @@ def _verificar_cobertura_dados(
     try:
         from datetime import date as _date
         df  = _date.fromisoformat(data_fim)
-        hoje = _hoje_brt()
+        hoje = hoje_brt()
         # Só alertar para períodos recentes (dentro dos últimos 7 dias)
         if (hoje - df).days > 7:
             return None
