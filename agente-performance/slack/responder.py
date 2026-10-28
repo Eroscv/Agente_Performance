@@ -50,10 +50,13 @@ async def _processar_imagem(
     Pipeline de geração de imagem:
     1. Extrai o prompt da mensagem (remove verbos de comando)
     2. Chama image_agent.gerar_imagem()
-    3. Faz upload da imagem no Slack via files_upload_v2
+    3. Faz upload da imagem SEMPRE no canal #image_gen
+    4. Avisa o usuário no canal de origem (se diferente)
     """
     import io
     from agent.image_agent import gerar_imagem
+
+    IMAGE_GEN_CHANNEL = os.getenv("SLACK_IMAGE_GEN_CHANNEL", "image_gen")
 
     # Extrai o prompt: remove triggers de comando
     prompt = _re.sub(
@@ -66,9 +69,10 @@ async def _processar_imagem(
 
     logger.info("[image] Pedido recebido | prompt=%s", prompt[:80])
 
+    # Feedback imediato no canal de origem
     await client.chat_postMessage(
         channel=channel, thread_ts=thread_ts,
-        text=":art: Gerando imagem\u2026 isso pode levar alguns segundos.",
+        text=f":art: Gerando imagem\u2026 será enviada em <#{IMAGE_GEN_CHANNEL}>.",
     )
 
     try:
@@ -79,34 +83,39 @@ async def _processar_imagem(
         img_bytes = resultado.bytes_png
         filename  = resultado.filename
 
+        # Upload SEMPRE em #image_gen (sem thread — canal dedicado)
         await client.files_upload_v2(
-            channel=channel,
-            thread_ts=thread_ts,
+            channel=IMAGE_GEN_CHANNEL,
             content=img_bytes,
             filename=filename,
             title=f"\U0001f5bc {prompt[:60]}",
         )
 
+        # Mensagem de resultado em #image_gen
         await client.chat_postMessage(
-            channel=channel,
-            thread_ts=thread_ts,
+            channel=IMAGE_GEN_CHANNEL,
             text=(
-                f":white_check_mark: Imagem gerada via *{resultado.provider}*"
-                f" ({resultado.size_kb} KB)\n"
-                f"> :pencil: _Prompt refinado:_ {resultado.prompt_refinado[:120]}"
+                f":white_check_mark: *{prompt[:80]}*\n"
+                f"> :pencil: _Prompt refinado:_ {resultado.prompt_refinado[:120]}\n"
+                f"> :gear: {resultado.provider} · {resultado.size_kb} KB"
             ),
             mrkdwn=True,
         )
-        logger.info("[image] Enviada | provider=%s size_kb=%d", resultado.provider, resultado.size_kb)
+
+        # Confirma no canal de origem apenas se for diferente
+        if channel != IMAGE_GEN_CHANNEL:
+            await client.chat_postMessage(
+                channel=channel, thread_ts=thread_ts,
+                text=f":white_check_mark: Imagem gerada e enviada em <#{IMAGE_GEN_CHANNEL}>!",
+            )
+
+        logger.info("[image] Enviada para #%s | provider=%s size_kb=%d",
+                    IMAGE_GEN_CHANNEL, resultado.provider, resultado.size_kb)
 
     except RuntimeError as e:
         await client.chat_postMessage(
             channel=channel, thread_ts=thread_ts,
-            text=(
-                f":x: Não consegui gerar a imagem.\n"
-                f"> {e}\n\n"
-                f"Configure `FAL_KEY` ou `STABILITY_API_KEY` no `.env` para habilitar."
-            ),
+            text=f":x: Não consegui gerar a imagem.\n> {e}",
             mrkdwn=True,
         )
     except Exception as e:
