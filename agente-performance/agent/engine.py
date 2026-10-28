@@ -607,6 +607,21 @@ def consultar(
         cliente_key = canal_cliente
         logger.debug("[consultar] cliente_key inferido pelo canal '%s': %s", channel, cliente_key)
 
+    # Fallback: herda cliente_key/plataforma do contexto da thread (se NLP não extraiu)
+    # Isso garante que "e a semana passada?" continue no mesmo cliente da pergunta anterior
+    if (not cliente_key or not plataforma) and thread_ts and contexto:
+        import re as _re
+        if not cliente_key:
+            _m = _re.search(r"\[contexto ativo:.*?cliente=([\w_]+)", contexto)
+            if _m:
+                cliente_key = _m.group(1)
+                logger.debug("[consultar] cliente_key herdado do contexto da thread: %s", cliente_key)
+        if not plataforma:
+            _m = _re.search(r"\[contexto ativo:.*?plataforma=([\w_]+)", contexto)
+            if _m:
+                plataforma = _m.group(1)
+                logger.debug("[consultar] plataforma herdada do contexto da thread: %s", plataforma)
+
     # Se cliente_key não foi detectado pelo NLP nem pelo canal,
     # NÃO assume source_of — ativa modo segmentado para retornar
     # seções distintas por cliente (sem misturar dados).

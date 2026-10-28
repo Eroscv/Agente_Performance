@@ -196,6 +196,7 @@ Analise a pergunta e detecte qual plataforma está sendo mencionada:
 8. Para comparar_antes_depois: campo "data_virada" (YYYY-MM-DD)
 9. Use SOMENTE intents da lista acima. Nunca invente novas.
 10. Para "essa semana"/"esta semana"/"semana atual": use segunda-feira da semana corrente (calculada a partir de {hoje}) até {hoje} — NUNCA uma janela rolante dos últimos 7 dias. "semana passada"/"última semana" = segunda a domingo da semana anterior. Essa é a mesma regra usada em agent/synonyms.py — mantenha consistência.
+11. Herança de contexto: se o [contexto ativo] no histórico indicar cliente= e/ou plataforma=, e a pergunta atual NÃO mencionar explicitamente outro cliente ou plataforma, herde esses valores no JSON de resposta. Da mesma forma, se a pergunta for de acompanhamento ("e a semana passada?", "compare com ontem", "e o mês?") sem mencionar datas absolutas, herde o cliente/plataforma do contexto ativo.
 
 ## Exemplos (few-shot)
 

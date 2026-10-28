@@ -256,7 +256,27 @@ def build_context_summary(thread_ts: str) -> str:
     if not history:
         return ""
 
+    # Extrai contexto estruturado da última resposta do agente (para herança de cliente/período)
+    ultimo_meta: dict = {}
+    for msg in reversed(history):
+        if msg["role"] == "agent" and msg.get("meta"):
+            ultimo_meta = msg["meta"]
+            break
+
     linhas = ["Histórico da conversa (thread atual):"]
+
+    # Linha de contexto estruturado — usada pelo NLP para herdar cliente/plataforma/período
+    ctx_parts = []
+    if ultimo_meta.get("cliente_key") or ultimo_meta.get("cliente"):
+        ck = ultimo_meta.get("cliente_key") or ultimo_meta.get("cliente")
+        ctx_parts.append(f"cliente={ck}")
+    if ultimo_meta.get("plataforma"):
+        ctx_parts.append(f"plataforma={ultimo_meta['plataforma']}")
+    if ultimo_meta.get("data_inicio"):
+        ctx_parts.append(f"período={ultimo_meta['data_inicio']} a {ultimo_meta.get('data_fim', '?')}")
+    if ctx_parts:
+        linhas.append(f"  [contexto ativo: {', '.join(ctx_parts)}]")
+
     for msg in history[-6:]:  # últimos 6 turnos
         role  = "Usuário" if msg["role"] == "user" else "Agente"
         texto = msg["text"][:200]
