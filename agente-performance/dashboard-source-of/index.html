@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Relatoria Source Of</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="nav">
+        <div class="brand">Relatoria</div>
+        <div class="client">Source Of</div>
+        <div class="tabs" id="tabs"></div>
+      </nav>
+
+      <div class="main">
+        <div class="filterbar">
+          <div class="periods" id="periods"></div>
+          <div class="rangewrap">
+            <div class="field"><label for="dateFrom">De</label><input type="date" id="dateFrom" /></div>
+            <div class="field"><label for="dateTo">Até</label><input type="date" id="dateTo" /></div>
+          </div>
+          <div class="meta-line" id="metaLine"></div>
+        </div>
+        <div class="content" id="content"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
