@@ -86,11 +86,34 @@ BEGIN
     WHERE status = 'paid'
     GROUP BY cliente_id, data_brt, canal
   ),
+  pedidos_yampi_dedup AS (
+    -- 'dooki' é o nome legado da loja pod_kombucha (antes de separarmos por
+    -- loja) — normaliza pra 'dooki_pod_kombucha' antes de deduplicar, senão
+    -- a mesma venda conta 2x (uma vez como 'dooki', outra como
+    -- 'dooki_pod_kombucha'). Mantém só a linha mais recente por (data, loja).
+    -- Critério "mais pedidos primeiro" (não "mais recente primeiro"): a API
+    -- da Dooki pode retornar, numa sincronização incremental, só 1 pedido
+    -- "atualizado" pra um dia antigo que já tinha N pedidos completos — usar
+    -- só o mais recente perderia os outros N-1. Fica sempre com a linha mais
+    -- completa já vista pra aquele dia/loja.
+    SELECT * EXCEPT(rn) FROM (
+      SELECT * EXCEPT(fonte),
+        IF(fonte = 'dooki', 'dooki_pod_kombucha', fonte) AS fonte,
+        ROW_NUMBER() OVER (
+          PARTITION BY data, IF(fonte = 'dooki', 'dooki_pod_kombucha', fonte)
+          ORDER BY pedidos DESC, atualizado_em DESC
+        ) AS rn
+      FROM `guara-db.guara_performance.dooki_pedidos_diario`
+      WHERE fonte = 'dooki' OR fonte LIKE 'dooki_%'
+    )
+    WHERE rn = 1
+  ),
   pedidos_yampi AS (
+    -- Soma as lojas Yampi/Dooki da POD Kombucha (histórico fonte='dooki' +
+    -- lojas separadas poddi/pod_kombucha/pod8 com fonte='dooki_<loja>').
     SELECT 'pod_kombucha' AS cliente_id, data, 'yampi_checkout' AS canal,
-      MAX(pedidos) AS pedidos, MAX(CAST(receita AS FLOAT64)) AS receita, 0 AS novos_clientes
-    FROM `guara-db.guara_performance.dooki_pedidos_diario`
-    WHERE fonte = 'dooki'
+      SUM(pedidos) AS pedidos, SUM(CAST(receita AS FLOAT64)) AS receita, 0 AS novos_clientes
+    FROM pedidos_yampi_dedup
     GROUP BY data
   ),
   pedidos AS (SELECT * FROM pedidos_shopify UNION ALL SELECT * FROM pedidos_yampi)
