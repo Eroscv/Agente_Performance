@@ -10,9 +10,13 @@ A POD Kombucha vende em 3 lojas Yampi/Dooki separadas (poddi, pod_kombucha,
 pod8) que precisam ser somadas no gold, mas mantidas distintas no bronze
 (coluna `fonte`) para poder auditar cada loja isoladamente.
 
-Regra de receita paga:
-  Apenas pedidos com status.alias = 'paid' são contabilizados como receita.
-  Pedidos 'invoiced', 'on_carriage', 'cancelled' etc. são ignorados no totalizador.
+Regra de receita confirmada:
+  Pedidos com status.alias em {paid, on_carriage, delivered} contam como
+  receita confirmada (o pedido já avançou no fluxo, não foi cancelado).
+  Um pedido passa por esses status ao longo do tempo (paid → on_carriage →
+  delivered) — contar só 'paid' faz o pedido desaparecer pra sempre do
+  histórico se o sync não rodar antes dele mudar de status. 'cancelled' e
+  outros são ignorados.
 
 Uso:
   python3 -m dooki.sync --dias 30
@@ -74,7 +78,7 @@ LOJAS = [
 ]
 
 # Apenas estes status contam como receita paga
-STATUS_RECEITA_PAGA = {"paid"}
+STATUS_RECEITA_PAGA = {"paid", "on_carriage", "delivered"}
 
 logging.basicConfig(
     level=logging.INFO,
