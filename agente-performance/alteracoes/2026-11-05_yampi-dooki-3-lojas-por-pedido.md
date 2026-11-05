@@ -64,14 +64,20 @@ pod-kombucha (84) + poddi (12) **com frete** contra Shopify (90) + poddi (12) **
 Outubro: 2.359 pedidos e R$ 658.177 (iguais), investimento R$ 205.144,07 (igual), novos 1.482 contra
 1.479 (CAC R$ 138,42 contra R$ 138,70).
 
+## Fechado
+
+- **Shopify-only reembolsado:** conferi os 250 pedidos sem par na Yampi dos últimos 58 dias na Shopify:
+  todos continuam `paid`. Sem impacto, sem código.
+- **Conta Meta "Nova loja":** está carregada nos 4 dias de 01–04/11 (R$ 1.016,72 contra R$ 26.884,53 da
+  conta principal; soma R$ 27.901,25).
+
 ## Em aberto
 
+- **Token Meta da POD inválido (ação sua):** `META_POD_ACCESS_TOKEN` retorna erro 190 "Bad signature" nas duas
+  contas (também no `debug_token`), então o sync de mídia da POD está parado desde ~00h de 05/11 (sem mídia
+  de 05/11). Gerar um token novo de longa duração e colocá-lo no `.env`; depois rodar
+  `python3 scripts/sync_meta_diario.py --dias 8` e `python3 scripts/rebuild_bq_layers.py`. O resíduo de
+  R$ 7 no investimento de 01–04/11 deve ser revisão de gasto da Meta; reconferir depois do token novo.
 - **Dashboard (fora do repo):** ler `investimento_ajustado` (1,1215) em vez de aplicar 1,12.
-- **Resíduos pequenos:** 3 novos clientes em outubro e R$ 7 de investimento em 01–04/11. O primeiro
-  se fecha com o `pod_historico_clientes.csv` da Bia (histórico completo, que a API não dá); o segundo
-  provavelmente é a conta Meta "Nova loja" (`act_1136775015453788`) — conferir o spend por conta.
-- **Cliente novo antes de 06/09:** a flag só é confiável a partir de 2026-09-06 (primeiro dia da carga
-  inicial de 60 dias).
-- **pod8:** continua no bronze mas fica fora do gold até a Bia dizer o que é (0 pedidos hoje).
-- **Shopify-only reembolsado:** pedido sem par na Yampi que depois é reembolsado na Shopify continua
-  `paid` no BQ (a carga só busca `financial_status=paid`). Raro (6 pedidos em 01/11).
+- **Com a Bia:** `pod_historico_clientes.csv` (fecha os 3 novos de outubro e a flag antes de 06/09) e o
+  que é a pod8 (continua no bronze, fora do gold; 0 pedidos).
