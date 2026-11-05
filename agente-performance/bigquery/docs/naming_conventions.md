@@ -24,9 +24,9 @@ cada entidade já é inequívoca: `shopify_diario`, `ads_diario`,
 
 `ing_<entidade>`, mesmo nome de entidade do bronze, prefixado com `ing_`
 para deixar explícito a camada ao ler o nome da tabela isolado (ex: num
-JOIN). Sem renomear colunas em relação ao bronze — a única adição permitida
-é uma coluna derivada quando ela é reutilizada por múltiplas consultas
-gold (caso de `ing_ads_diario.nivel`).
+JOIN). Sem renomear colunas em relação ao bronze. Colunas derivadas só entram quando
+reutilizadas por mais de uma consulta gold (`ing_ads_diario.nivel`) ou para
+marcar qualidade (`dq_<regra>`, ex: `dq_cliques_todos_ausente`).
 
 | Bronze | Silver |
 |---|---|
@@ -37,6 +37,10 @@ gold (caso de `ing_ads_diario.nivel`).
 | `abandoned_checkout_detail` | `ing_checkout_abandonado_detalhe` |
 | `meta_campaign_totals` | `ing_meta_campaign_totals` |
 | `novos_clientes_semanal` | `ing_novos_clientes_semanal` |
+| `dooki_pedidos` | `ing_yampi_pedidos` |
+| `shopify_clientes_historico` | `ing_shopify_clientes_historico` |
+| `tickets_alerta` | `ing_tickets` |
+| `metricas_sla` | `ing_metricas_sla` |
 
 ## Gold (`correlacao`)
 

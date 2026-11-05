@@ -2,22 +2,18 @@
 -- Stored Procedure: Load Gold Layer (Silver -> Gold)
 -- =============================================================================
 -- Schema: `guara-db.correlacao` (gold)
--- Source: `guara-db.ingestao` (silver) and `guara-db.guara_performance` (bronze,
---         for the Dooki/Yampi POD channel which has no silver mirror yet)
+-- Source: `guara-db.ingestao` (silver) only. Gold never reads bronze.
 --
 -- Purpose:
 --   fato_pedidos  — incremental: MERGEs new paid orders from
---                   guara_performance.pedidos_diario (bronze; the silver
---                   mirror ing_shopify_pedidos is read-aligned with it,
---                   kept as bronze source here to preserve the existing
---                   incremental key/watermark behavior). Derives `canal`
+--                   ing_shopify_pedidos (silver). Derives `canal`
 --                   from utm_source. Never UPDATEs existing rows — matches
 --                   the original historical correction that can't be
 --                   reverse-engineered from the schema alone (see
 --                   bigquery/docs/data_catalog_gold.md).
 --   fato_pedidos_pod — full rebuild, um pedido por linha, metodologia do Colab
 --                   da Bia (tutorial "Como calculamos o CAC — Pod Kombucha"):
---                   pod.com.br = pedidos Shopify (pedidos_diario) ligados aos
+--                   pod.com.br = pedidos Shopify (ing_shopify_pedidos) ligados aos
 --                   pedidos da Yampi pod-kombucha por order_name =
 --                   shopify_order_number; a Yampi só dá o status de pagamento
 --                   (não soma receita por cima). Sem par na Yampi, vale
@@ -78,7 +74,7 @@ BEGIN
         WHEN LOWER(utm_source) = 'google' THEN 'google'
         ELSE 'outros'
       END AS canal
-    FROM `guara-db.guara_performance.pedidos_diario`
+    FROM `guara-db.ingestao.ing_shopify_pedidos`
     WHERE status = 'paid'
   ) S
   ON T.order_id = S.order_id AND T.cliente_id = S.cliente_id
@@ -97,7 +93,7 @@ BEGIN
   AS
   WITH hist AS (
     SELECT customer_id, email, primeiro_pedido_em
-    FROM `guara-db.guara_performance.shopify_clientes_historico`
+    FROM `guara-db.ingestao.ing_shopify_clientes_historico`
     WHERE cliente = 'pod_kombucha'
   ),
   hist_cliente AS (
@@ -110,13 +106,13 @@ BEGIN
     SELECT order_id, order_name, data_brt, created_at_utc, status, valor_pago, frete,
            current_subtotal_price, customer_id, customer_email,
            utm_source, utm_medium, utm_campaign, utm_content
-    FROM `guara-db.guara_performance.pedidos_diario`
+    FROM `guara-db.ingestao.ing_shopify_pedidos`
     WHERE cliente = 'pod_kombucha'
       -- Pedido Shopify sem order_name, dentro do período coberto pela Yampi, é linha
       -- obsoleta: a Shopify parou de devolvê-lo como pago (cancelado/estornado depois)
       -- e ele não pareia com a Yampi. Antes da cobertura da Yampi, vale o histórico.
       AND (order_name IS NOT NULL
-           OR data_brt < (SELECT MIN(data) FROM `guara-db.guara_performance.dooki_pedidos`
+           OR data_brt < (SELECT MIN(data) FROM `guara-db.ingestao.ing_yampi_pedidos`
                           WHERE loja = 'pod_kombucha'))
   ),
   yampi_pod AS (
@@ -125,7 +121,7 @@ BEGIN
       SELECT *, ROW_NUMBER() OVER (
         PARTITION BY shopify_order_number ORDER BY pago DESC, created_at_utc DESC
       ) AS rn
-      FROM `guara-db.guara_performance.dooki_pedidos`
+      FROM `guara-db.ingestao.ing_yampi_pedidos`
       WHERE loja = 'pod_kombucha' AND shopify_order_number IS NOT NULL
     ) WHERE rn = 1
   ),
@@ -164,7 +160,7 @@ BEGIN
     SELECT y.*,
       he.primeiro AS primeiro_pod_com_br,
       MIN(y.created_at_utc) OVER (PARTITION BY y.customer_email) AS primeiro_poddi
-    FROM `guara-db.guara_performance.dooki_pedidos` y
+    FROM `guara-db.ingestao.ing_yampi_pedidos` y
     LEFT JOIN hist_email he ON he.email = y.customer_email
     WHERE y.loja = 'poddi' AND y.data >= DATE '2026-10-01'
   )
