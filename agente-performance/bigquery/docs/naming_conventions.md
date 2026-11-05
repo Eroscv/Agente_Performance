@@ -12,6 +12,21 @@ em uso** nas três camadas — este arquivo formaliza, não renomeia nada.
   `ingestao` (silver), `correlacao` (gold).
 - Evitar nomes reservados do GoogleSQL.
 
+## Mapeamento camada → dataset
+
+| Camada | Dataset | Nome na metodologia de referência |
+|---|---|---|
+| Bronze | `guara_performance` | `bronze` |
+| Silver | `ingestao` | `silver` |
+| Gold | `correlacao` | `gold` |
+
+Os datasets mantêm os nomes históricos de propósito: renomear (o BigQuery não
+renomeia dataset, só copia) quebraria procedures, views, scripts de sync, o agente
+e o dashboard. A camada é identificada por este mapeamento, e as tabelas
+carregam a camada no prefixo (`ing_` na silver, `dim_`/`fato_` no gold).
+`guara_performance` também guarda as views `v_*` e as tabelas do pipeline de
+transcrição (`tickets_alerta`, `metricas_sla`, `analise_reunioes`, `transcricao`).
+
 ## Bronze (`guara_performance`)
 
 `<entidade>`, nome da entidade como a fonte a expõe, sem prefixo de

@@ -32,8 +32,11 @@
   `fato_performance_diaria`.
 - **Atualização:** `correlacao.load_gold()` — **MERGE incremental**, só
   insere `order_id` novos (nunca faz UPDATE em linhas existentes).
-- **Fonte:** `guara_performance.pedidos_diario` (bronze), filtrado por
-  `status = 'paid'`.
+- **Fonte:** `ingestao.ing_shopify_pedidos` filtrado por `status = 'paid'`, mais os
+  pedidos pagos da poddi (Yampi) classificados por `fato_pedidos_pod`
+  (`order_id = 'poddi-<id>'`, `cliente_id = 'pod_kombucha'`, `source_name = 'yampi'`).
+  Para métricas da POD (receita sem frete, status atual, Yampi pod-kombucha) use
+  `fato_pedidos_pod`: aqui o MERGE é insert-only e não reflete mudança posterior de status.
 - **Nota de qualidade conhecida:** o histórico anterior a esta
   reestruturação tem uma divergência de <1% entre `novo_cliente` e
   `novo_cliente_raw` que não pôde ser reconstruída a partir do schema —

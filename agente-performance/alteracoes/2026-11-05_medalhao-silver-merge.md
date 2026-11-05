@@ -30,9 +30,12 @@
   `utm_source` em minúsculas/NULL em vez de vazio.
 - `ing_tickets` tinha 4 tickets duplicados; esvaziada e recarregada uma vez.
 
-## Em aberto
-- `ing_novos_clientes_bia`: depende do `pod_historico_clientes.csv` da Bia.
-- `fato_pedidos` continua só Shopify; os pedidos da POD (Shopify + Yampi) estão
-  em `fato_pedidos_pod`.
-- `tickets_alerta`/`metricas_sla` no bronze: parados pelo pipeline de transcrição
-  (último ticket 29/10); a silver acompanha assim que o bronze andar.
+## Ajustes posteriores (mesmo dia)
+- **`fato_pedidos` com a poddi:** o MERGE insert-only agora também insere os pedidos pagos da
+  poddi (121 hoje), classificados por `fato_pedidos_pod`. Snapshot `fato_pedidos_pre_poddi`.
+  O gold de 01/11 não mudou (102 pedidos, 68/20/12/2 por canal).
+- **Views antigas:** as 18 views de `guara_performance` que liam o bronze passaram a ler a silver;
+  `v_todos_dados` deixou de ler `dooki_pedidos_diario` e agrega `ing_yampi_pedidos`. Contagens de
+  linhas iguais. `v_dash_overview`/`v_dash_campaigns` idênticas ao antes; `v_ads_*` e
+  `v_dashboard_diario` diferem só em `cliques_todos` (NULL quando a fonte não coletou).
+- **Tickets/SLA:** o bronze não recebe carga porque o pipeline de transcrição roda em outro host, não nesta máquina.

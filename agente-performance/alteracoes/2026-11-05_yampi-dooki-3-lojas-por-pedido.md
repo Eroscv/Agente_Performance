@@ -70,14 +70,3 @@ Outubro: 2.359 pedidos e R$ 658.177 (iguais), investimento R$ 205.144,07 (igual)
   todos continuam `paid`. Sem impacto, sem código.
 - **Conta Meta "Nova loja":** está carregada nos 4 dias de 01–04/11 (R$ 1.016,72 contra R$ 26.884,53 da
   conta principal; soma R$ 27.901,25).
-
-## Em aberto
-
-- **Token Meta da POD inválido (ação sua):** `META_POD_ACCESS_TOKEN` retorna erro 190 "Bad signature" nas duas
-  contas (também no `debug_token`), então o sync de mídia da POD está parado desde ~00h de 05/11 (sem mídia
-  de 05/11). Gerar um token novo de longa duração e colocá-lo no `.env`; depois rodar
-  `python3 scripts/sync_meta_diario.py --dias 8` e `python3 scripts/rebuild_bq_layers.py`. O resíduo de
-  R$ 7 no investimento de 01–04/11 deve ser revisão de gasto da Meta; reconferir depois do token novo.
-- **Dashboard (fora do repo):** ler `investimento_ajustado` (1,1215) em vez de aplicar 1,12.
-- **Com a Bia:** `pod_historico_clientes.csv` (fecha os 3 novos de outubro e a flag antes de 06/09) e o
-  que é a pod8 (continua no bronze, fora do gold; 0 pedidos).
