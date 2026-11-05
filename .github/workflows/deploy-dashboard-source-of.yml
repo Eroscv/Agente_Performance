@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "dashboard-source-of/**"
+      - "agente-performance/dashboard-source-of/**"
       - ".github/workflows/deploy-dashboard-source-of.yml"
   workflow_dispatch:
 
@@ -22,20 +22,20 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: dashboard-source-of
+        working-directory: agente-performance/dashboard-source-of
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-          cache-dependency-path: dashboard-source-of/package-lock.json
+          cache-dependency-path: agente-performance/dashboard-source-of/package-lock.json
       - run: npm ci
       - run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dashboard-source-of/dist
+          path: agente-performance/dashboard-source-of/dist
 
   deploy:
     needs: build
