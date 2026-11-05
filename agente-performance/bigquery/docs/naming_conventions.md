@@ -18,7 +18,7 @@ em uso** nas três camadas — este arquivo formaliza, não renomeia nada.
 sistema (diferente do repositório de referência, que usa
 `<sistema>_<entidade>` porque mistura CRM + ERP num único dataset — aqui
 cada entidade já é inequívoca: `shopify_diario`, `ads_diario`,
-`pedidos_diario`, `abandoned_checkout_daily`, `dooki_pedidos_diario`).
+`pedidos_diario`, `abandoned_checkout_daily`, `dooki_pedidos`).
 
 ## Silver (`ingestao`)
 

@@ -42,3 +42,33 @@ SELECT cliente_id, data, canal, COUNT(*) AS linhas
 FROM `guara-db.correlacao.fato_performance_diaria`
 GROUP BY cliente_id, data, canal
 HAVING COUNT(*) > 1;
+
+-- 7. fato_pedidos_pod: pedido duplicado (um pedido por loja + order_id)
+SELECT loja, order_id, COUNT(*) AS linhas
+FROM `guara-db.correlacao.fato_pedidos_pod`
+GROUP BY loja, order_id
+HAVING COUNT(*) > 1;
+
+-- 8. fato_pedidos_pod: pedido pod.com.br contado 2x (mesmo order_name) — a Yampi
+--    pod-kombucha são os mesmos pedidos da Shopify e não pode somar por cima
+SELECT order_name, COUNT(*) AS linhas
+FROM `guara-db.correlacao.fato_pedidos_pod`
+WHERE loja = 'pod.com.br'
+GROUP BY order_name
+HAVING COUNT(*) > 1;
+
+-- 9. fato_pedidos_pod: canal fora do vocabulário (meta/google/outros/direto) ou nulo
+SELECT *
+FROM `guara-db.correlacao.fato_pedidos_pod`
+WHERE canal IS NULL OR canal NOT IN ('meta', 'google', 'outros', 'direto');
+
+-- 10. fato_performance_diaria: o canal 'yampi_checkout' foi aposentado (a Yampi
+--     entra nos canais meta/google/outros/direto pelo utm_source)
+SELECT *
+FROM `guara-db.correlacao.fato_performance_diaria`
+WHERE canal = 'yampi_checkout';
+
+-- 11. fato_pedidos_pod: pedido pago sem receita (Yampi sem par e sem valor)
+SELECT *
+FROM `guara-db.correlacao.fato_pedidos_pod`
+WHERE pago AND receita_sem_frete IS NULL;

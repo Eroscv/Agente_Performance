@@ -15,11 +15,18 @@
 --                   the original historical correction that can't be
 --                   reverse-engineered from the schema alone (see
 --                   bigquery/docs/data_catalog_gold.md).
+--   fato_pedidos_pod — full rebuild, um pedido por linha, metodologia do Colab
+--                   da Bia (tutorial "Como calculamos o CAC — Pod Kombucha"):
+--                   pod.com.br = pedidos Shopify (pedidos_diario) ligados aos
+--                   pedidos da Yampi pod-kombucha por order_name =
+--                   shopify_order_number; a Yampi só dá o status de pagamento
+--                   (não soma receita por cima). Sem par na Yampi, vale
+--                   financial_status = paid da Shopify. poddi.com.br = Yampi
+--                   poddi, receita própria. Receita sem frete, canal por
+--                   utm_source (fn_canal_pod), cliente novo por regra do Colab.
 --   fato_performance_diaria — full rebuild joining ing_ads_diario (anuncio
---                   level only) with fato_pedidos (Shopify clients) and
---                   dooki_pedidos (POD's Yampi/Dooki checkout, por pedido —
---                   ver dooki/sync.py; status paid/on_carriage/delivered
---                   contam como receita confirmada).
+--                   level only) with fato_pedidos (Shopify clients, exceto POD)
+--                   and fato_pedidos_pod (POD).
 --
 -- Usage:
 --   CALL `guara-db.correlacao.load_gold`();
@@ -27,6 +34,20 @@
 -- Naming: `load_<layer>` per bigquery/docs/naming_conventions.md.
 -- Run `CALL ingestao.load_silver()` first so ing_ads_diario is current.
 -- =============================================================================
+
+-- Canal do pedido pela utm_source, regra do Colab (tutorial, seção 5).
+-- Substring, como no Colab: "ig"/"fb" casam em qualquer parte do texto.
+-- Fonte desconhecida (ex: klaviyo, manychat) cai em Orgânico/Direto ('direto').
+CREATE OR REPLACE FUNCTION `guara-db.correlacao.fn_canal_pod`(utm_source STRING)
+RETURNS STRING AS (
+  CASE
+    WHEN utm_source IS NULL OR TRIM(utm_source) = '' THEN 'direto'
+    WHEN REGEXP_CONTAINS(LOWER(utm_source), r'facebook|meta|fb|ig|instagram') THEN 'meta'
+    WHEN LOWER(utm_source) LIKE '%google%' THEN 'google'
+    WHEN REGEXP_CONTAINS(LOWER(utm_source), r'revi|email|sms|shopper') THEN 'outros'
+    ELSE 'direto'
+  END
+);
 
 CREATE OR REPLACE PROCEDURE `guara-db.correlacao.load_gold`()
 BEGIN
@@ -69,6 +90,107 @@ BEGIN
             S.status, S.valor_pago, S.desconto, S.frete, S.novo_cliente, S.novo_cliente_raw,
             S.customer_id, S.utm_source, S.utm_campaign, S.utm_content, S.source_name, S.canal);
 
+  -- fato_pedidos_pod (full rebuild) — ver cabeçalho
+  CREATE OR REPLACE TABLE `guara-db.correlacao.fato_pedidos_pod`
+  PARTITION BY data_brt
+  CLUSTER BY loja
+  AS
+  WITH hist AS (
+    SELECT customer_id, email, primeiro_pedido_em
+    FROM `guara-db.guara_performance.shopify_clientes_historico`
+    WHERE cliente = 'pod_kombucha'
+  ),
+  hist_cliente AS (
+    SELECT customer_id, MIN(primeiro_pedido_em) AS primeiro FROM hist GROUP BY customer_id
+  ),
+  hist_email AS (
+    SELECT email, MIN(primeiro_pedido_em) AS primeiro FROM hist WHERE email IS NOT NULL GROUP BY email
+  ),
+  shopify AS (
+    SELECT order_id, order_name, data_brt, created_at_utc, status, valor_pago, frete,
+           current_subtotal_price, customer_id, customer_email,
+           utm_source, utm_medium, utm_campaign, utm_content
+    FROM `guara-db.guara_performance.pedidos_diario`
+    WHERE cliente = 'pod_kombucha'
+      -- Pedido Shopify sem order_name, dentro do período coberto pela Yampi, é linha
+      -- obsoleta: a Shopify parou de devolvê-lo como pago (cancelado/estornado depois)
+      -- e ele não pareia com a Yampi. Antes da cobertura da Yampi, vale o histórico.
+      AND (order_name IS NOT NULL
+           OR data_brt < (SELECT MIN(data) FROM `guara-db.guara_performance.dooki_pedidos`
+                          WHERE loja = 'pod_kombucha'))
+  ),
+  yampi_pod AS (
+    -- Uma linha da Yampi pod-kombucha por pedido Shopify (dedup defensivo).
+    SELECT * EXCEPT(rn) FROM (
+      SELECT *, ROW_NUMBER() OVER (
+        PARTITION BY shopify_order_number ORDER BY pago DESC, created_at_utc DESC
+      ) AS rn
+      FROM `guara-db.guara_performance.dooki_pedidos`
+      WHERE loja = 'pod_kombucha' AND shopify_order_number IS NOT NULL
+    ) WHERE rn = 1
+  ),
+  pod_com_br AS (
+    SELECT
+      'pod.com.br' AS loja,
+      COALESCE(s.order_id, CONCAT('yampi-', y.order_id)) AS order_id,
+      COALESCE(s.order_name, CONCAT('#', y.shopify_order_number)) AS order_name,
+      COALESCE(s.data_brt, y.data) AS data_brt,
+      COALESCE(s.created_at_utc, y.created_at_utc) AS created_at_utc,
+      y.status AS status_atual,
+      IF(y.order_id IS NOT NULL, 'dooki', 'shopify_fallback') AS fonte_pagamento,
+      IF(y.order_id IS NOT NULL, y.pago, s.status = 'paid') AS pago,
+      COALESCE(s.current_subtotal_price, s.valor_pago - s.frete, y.receita_sem_frete) AS receita_sem_frete,
+      COALESCE(s.valor_pago, y.valor_pago) AS total_price,
+      COALESCE(s.frete, y.frete) AS frete,
+      s.customer_id AS customer_id,
+      COALESCE(s.customer_email, y.customer_email) AS customer_email,
+      -- Canal/UTM: Shopify quando há pedido Shopify (é o que o Colab usa), senão Yampi.
+      IF(s.order_id IS NOT NULL, s.utm_source,   y.utm_source)   AS utm_source,
+      IF(s.order_id IS NOT NULL, s.utm_medium,   y.utm_medium)   AS utm_medium,
+      IF(s.order_id IS NOT NULL, s.utm_campaign, y.utm_campaign) AS utm_campaign,
+      IF(s.order_id IS NOT NULL, s.utm_content,  y.utm_content)  AS utm_content
+    FROM shopify s
+    FULL OUTER JOIN yampi_pod y
+      ON REGEXP_REPLACE(s.order_name, r'^#', '') = y.shopify_order_number
+  ),
+  pod_com_br_novo AS (
+    SELECT p.*,
+      COALESCE(hc.primeiro, he.primeiro) AS primeiro_pedido_shopify
+    FROM pod_com_br p
+    LEFT JOIN hist_cliente hc ON hc.customer_id = p.customer_id
+    LEFT JOIN hist_email   he ON he.email = p.customer_email
+  ),
+  poddi AS (
+    SELECT y.*,
+      he.primeiro AS primeiro_pod_com_br,
+      MIN(y.created_at_utc) OVER (PARTITION BY y.customer_email) AS primeiro_poddi
+    FROM `guara-db.guara_performance.dooki_pedidos` y
+    LEFT JOIN hist_email he ON he.email = y.customer_email
+    WHERE y.loja = 'poddi' AND y.data >= DATE '2026-10-01'
+  )
+  SELECT loja, order_id, order_name, data_brt, created_at_utc, status_atual, fonte_pagamento, pago,
+         receita_sem_frete, total_price, frete, customer_id, customer_email,
+         -- Cliente novo pod.com.br: primeiro pedido da vida na Shopify (tolerância de 5 min).
+         primeiro_pedido_shopify IS NOT NULL
+           AND ABS(TIMESTAMP_DIFF(created_at_utc, primeiro_pedido_shopify, MINUTE)) <= 5 AS novo_cliente,
+         `guara-db.correlacao.fn_canal_pod`(utm_source) AS canal,
+         utm_source, utm_medium, utm_campaign, utm_content
+  FROM pod_com_br_novo
+  UNION ALL
+  SELECT
+    'poddi.com.br', CONCAT('poddi-', order_id), CONCAT('poddi-', order_id), data, created_at_utc,
+    status, 'yampi_nova', pago, receita_sem_frete, valor_pago, frete, customer_id, customer_email,
+    -- Cliente novo poddi: e-mail preenchido, nunca comprou no pod.com.br antes (5 min) e
+    -- é o primeiro pedido desse e-mail na poddi desde 01/10 (qualquer status, sem
+    -- tolerância: um pedido cancelado minutos antes já torna o seguinte recorrente).
+    customer_email IS NOT NULL
+      AND (primeiro_pod_com_br IS NULL
+           OR primeiro_pod_com_br >= TIMESTAMP_SUB(created_at_utc, INTERVAL 5 MINUTE))
+      AND created_at_utc = primeiro_poddi,
+    `guara-db.correlacao.fn_canal_pod`(utm_source),
+    utm_source, utm_medium, utm_campaign, utm_content
+  FROM poddi;
+
   -- fato_performance_diaria (full rebuild)
   CREATE OR REPLACE TABLE `guara-db.correlacao.fato_performance_diaria`
   PARTITION BY data
@@ -82,30 +204,35 @@ BEGIN
     GROUP BY cliente, data, plataforma
   ),
   pedidos_shopify AS (
+    -- Source Of / Botica. A POD usa fato_pedidos_pod (metodologia do Colab).
     SELECT cliente_id, data_brt AS data, canal, COUNT(*) AS pedidos,
-      SUM(valor_pago) AS receita, COUNTIF(novo_cliente) AS novos_clientes
+      SUM(valor_pago) AS receita, COUNTIF(novo_cliente) AS novos_clientes,
+      CAST(NULL AS INT64) AS pedidos_criados, CAST(NULL AS FLOAT64) AS receita_criada
     FROM `guara-db.correlacao.fato_pedidos`
-    WHERE status = 'paid'
+    WHERE status = 'paid' AND cliente_id != 'pod_kombucha'
     GROUP BY cliente_id, data_brt, canal
   ),
-  pedidos_yampi AS (
-    -- Por pedido (dooki_pedidos) em vez de total agregado por dia — cada
-    -- pedido é upsertado por (loja, order_id), então não há risco de
-    -- duplicar ou perder pedidos ao somar as 3 lojas. Receita confirmada =
-    -- status ainda não cancelado (paid/on_carriage/delivered).
-    SELECT 'pod_kombucha' AS cliente_id, data, 'yampi_checkout' AS canal,
-      COUNT(*) AS pedidos, SUM(valor_pago) AS receita,
-      COUNTIF(novo_cliente) AS novos_clientes
-    FROM `guara-db.guara_performance.dooki_pedidos`
-    WHERE status IN ('paid', 'on_carriage', 'delivered')
-    GROUP BY data
+  pedidos_pod AS (
+    SELECT 'pod_kombucha' AS cliente_id, data_brt AS data, canal,
+      COUNTIF(pago) AS pedidos,
+      SUM(IF(pago, receita_sem_frete, 0)) AS receita,
+      COUNTIF(pago AND novo_cliente) AS novos_clientes,
+      COUNT(*) AS pedidos_criados,
+      SUM(receita_sem_frete) AS receita_criada
+    FROM `guara-db.correlacao.fato_pedidos_pod`
+    GROUP BY data_brt, canal
   ),
-  pedidos AS (SELECT * FROM pedidos_shopify UNION ALL SELECT * FROM pedidos_yampi)
+  pedidos AS (SELECT * FROM pedidos_shopify UNION ALL SELECT * FROM pedidos_pod)
   SELECT COALESCE(a.cliente_id, p.cliente_id) AS cliente_id, COALESCE(a.data, p.data) AS data,
     COALESCE(a.canal, p.canal) AS canal, COALESCE(a.investimento, 0) AS investimento,
     a.cliques_link, a.impressoes, COALESCE(p.pedidos, 0) AS pedidos, COALESCE(p.receita, 0) AS receita,
     COALESCE(p.novos_clientes, 0) AS novos_clientes,
-    SAFE_DIVIDE(COALESCE(p.receita, 0), COALESCE(a.investimento, 0)) AS roas_real
+    SAFE_DIVIDE(COALESCE(p.receita, 0), COALESCE(a.investimento, 0)) AS roas_real,
+    -- Meta com imposto de 12,15% (Google sem imposto). Use esta coluna, não um fator próprio.
+    CASE WHEN COALESCE(a.canal, p.canal) = 'meta'
+         THEN COALESCE(a.investimento, 0) * 1.1215
+         ELSE COALESCE(a.investimento, 0) END AS investimento_ajustado,
+    p.pedidos_criados, p.receita_criada
   FROM ads a
   FULL OUTER JOIN pedidos p ON a.cliente_id = p.cliente_id AND a.data = p.data AND a.canal = p.canal;
 

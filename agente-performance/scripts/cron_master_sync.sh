@@ -54,10 +54,14 @@ run_step "Sync Google Ads" python3 scripts/sync_gads_diario.py --dias 8
 # 5. Meta Ads (requer META_ACCESS_TOKEN configurado — falha graciosamente se vazio)
 run_step "Sync Meta Ads" python3 scripts/sync_meta_diario.py --dias 8
 
-# 6. Checkout Yampi/Dooki (POD Kombucha)
-run_step "Sync Dooki/Yampi" python3 -m dooki.sync --dias 8
+# 6. Yampi/Dooki (POD Kombucha: poddi, pod-kombucha, pod8).
+#    45 dias: reprocessa pedidos que mudaram de status (pago → cancelado/estornado).
+run_step "Sync Dooki/Yampi" python3 -m dooki.sync --dias 45
 
-# 7. Reconstrói camadas ingestao/ e correlacao/ no BigQuery
+# 7. Primeiro pedido por cliente da Shopify POD (regra de cliente novo do gold)
+run_step "Sync histórico de clientes Shopify POD" python3 scripts/sync_shopify_clientes_historico.py --dias 45
+
+# 8. Reconstrói camadas ingestao/ e correlacao/ no BigQuery
 run_step "Reconstruir camadas BigQuery" python3 scripts/rebuild_bq_layers.py
 
 log "===== cron_master_sync concluído ====="

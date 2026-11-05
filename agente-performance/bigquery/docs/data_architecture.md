@@ -18,7 +18,7 @@ flowchart LR
         b2["pedidos_diario"]
         b3["ads_diario"]
         b4["abandoned_checkout_daily /\nabandoned_checkout_detail"]
-        b5["dooki_pedidos_diario"]
+        b5["dooki_pedidos (por pedido)"]
     end
 
     subgraph Silver["SILVER — ingestao\n(ing_&lt;entidade&gt;, limpo/padronizado)"]

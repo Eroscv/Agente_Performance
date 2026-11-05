@@ -1,109 +1,77 @@
-# Yampi/Dooki: 3 lojas + carga por pedido (05/11/2026)
+# POD Kombucha: Yampi/Dooki por pedido e gold alinhado ao Colab (05/11/2026)
 
-## Problema reportado
+## Problema
 
-A Bia identificou que o BigQuery mostrava números de checkout da POD
-Kombucha menores que a análise manual dela. Exemplo, 01/11:
+A Bia comparou o dashboard (que lê `correlacao.*`) com o Colab `pod_central_performance_13` em
+01–04/11: CAC +22%, MER bruto −34%, ROAS pago Meta −21%. Ela mandou o tutorial "Como calculamos o
+CAC — Pod Kombucha" e o CSV `pagos_0111_colab.csv` (102 pedidos pagos de 01/11, linha a linha).
 
-| Fonte | Pedidos | Receita |
+## Causas (todas verificadas contra BigQuery, API da Yampi/Shopify e o CSV)
+
+1. **A POD vende em 3 lojas Yampi** (`poddi`, `pod-kombucha`, `pod8`) com credenciais próprias e o `.env`
+   tinha `DOOKI_BASE_URL` duplicada: só uma loja era sincronizada.
+2. **Pedido era "pago" só por status `paid`**, e a carga gravava o total do dia. Pedido que avança
+   (`paid` → `on_carriage` → `delivered`) sumia da receita. Agora a carga é **por pedido** (upsert por
+   `loja + order_id`) com a regra do Colab: transação capturada e não cancelada **e** status atual fora
+   de `cancelled`/`refused`.
+3. **A Yampi pod-kombucha são os mesmos pedidos da Shopify** (`metadata.platform_order_number` =
+   número do pedido Shopify). O gold somava as duas por cima uma da outra. Agora a pod-kombucha só dá o
+   status de pagamento; sem par na Yampi (6 pedidos em 01/11) vale `financial_status = paid` da Shopify.
+4. **Receita sem frete**: a poddi entrava com `value_total` (com frete). Colab usa `current_subtotal_price`
+   (Shopify) e `value_products − value_discount` (Yampi).
+5. **Canal**: a poddi caía num canal único `yampi_checkout`. Agora o `utm_source` define
+   meta/google/outros/direto (regra de substring do Colab, `correlacao.fn_canal_pod`).
+6. **Cliente novo**: o cálculo antigo só via o histórico do BigQuery (75 contra 65 do Colab em 01/11).
+   Agora: Shopify = primeiro pedido do cliente; poddi = e-mail que nunca comprou no pod.com.br e é o
+   primeiro pedido do e-mail na poddi.
+7. **Imposto Meta**: o BQ já usava 1,1215. O dashboard mostra R$ 37.135 = Google + Meta × **1,12**
+   (fora do BQ). Use `investimento_ajustado`.
+
+O "resíduo de 6 pedidos / R$ 226" que eu atribuí a cancelados era outra coisa: eu comparava a Yampi
+pod-kombucha (84) + poddi (12) **com frete** contra Shopify (90) + poddi (12) **sem frete** do Colab.
+
+## O que mudou
+
+- `dooki/sync.py` / `dooki_pedidos`: colunas `pago`, `captured_at`, `receita_sem_frete`,
+  `customer_email`, `shopify_order_number`; schema evolui sozinho (`ADD COLUMN IF NOT EXISTS`).
+- `scripts/sync_pedidos_diario.py` / `pedidos_diario`: `order_name`, `current_subtotal_price`,
+  `customer_email`.
+- `scripts/sync_shopify_clientes_historico.py` → `guara_performance.shopify_clientes_historico`
+  (primeiro pedido por cliente). A Shopify só devolve 60 dias de pedidos sem `read_all_orders`; o
+  primeiro pedido de cliente antigo é inferido por `orders_count` (reproduz 90/90 as flags do CSV).
+- `bigquery/scripts/gold/proc_load_gold.sql`: `fn_canal_pod`, nova `correlacao.fato_pedidos_pod`
+  (espelha o CSV da Bia) e `fato_performance_diaria` com `investimento_ajustado`, `pedidos_criados` e
+  `receita_criada` (POD). Canal `yampi_checkout` aposentado. Source Of/Botica não mudaram.
+- `scripts/cron_master_sync.sh`: Yampi com `--dias 45` (reprocessa mudança de status) e o histórico
+  de clientes antes do rebuild.
+
+## Validação
+
+01/11, pedido a pedido contra `pagos_0111_colab.csv`: 102 pedidos pagos, R$ 30.537,65, canais
+(Meta 68 / Orgânico-Direto 20 / Google 12 / Outros 2) e fonte de pagamento idênticos; cliente novo 71.
+
+| 01–04/11 | Colab | `fato_performance_diaria` |
 |---|---|---|
-| BigQuery (antes) | 84 | R$25.171,72 |
-| Análise manual (Bia) | 102 | R$30.537,00 |
+| Pedidos pagos | 445 | 445 |
+| Receita paga | R$ 134.009 | R$ 134.009 |
+| Novos clientes | 286 | 286 |
+| Pedidos / receita criados | 516 / R$ 155.924 | 516 / R$ 155.924 |
+| Meta: pedidos / receita UTM / novos | 253 / R$ 73.166 / 196 | 253 / R$ 73.166 / 196 |
+| Meta ROAS pago | 2,34x | 2,34x |
+| Investimento (com imposto) | R$ 37.184 | R$ 37.177 |
+| CAC conta / CAC Meta | R$ 130,01 / R$ 159,70 | R$ 129,99 / R$ 159,65 |
 
-## Causas encontradas
+Outubro: 2.359 pedidos e R$ 658.177 (iguais), investimento R$ 205.144,07 (igual), novos 1.482 contra
+1.479 (CAC R$ 138,42 contra R$ 138,70).
 
-1. **Só 1 de 3 lojas Yampi era sincronizada.** A POD Kombucha vende em 3
-   lojas Yampi/Dooki separadas (`poddi`, `pod-kombucha`, `pod8`), cada uma
-   com API/token próprios. O `.env` tinha a variável `DOOKI_BASE_URL`
-   duplicada — a segunda definição sobrescrevia a primeira — deixando a
-   `poddi` sem nenhuma sincronização histórica e a `pod8` sem credencial
-   configurada.
+## Em aberto
 
-2. **Só pedidos com status `paid` eram contados.** Um pedido muda de
-   status com o tempo (`paid` → `on_carriage` → `delivered`, ou →
-   `cancelled`). Como a sincronização só olhava pra `paid` no momento
-   exato em que rodava, qualquer pedido que já tivesse avançado de status
-   antes do próximo sync desaparecia da receita **pra sempre**. Isso foi a
-   causa raiz real do histórico da `poddi` estar praticamente vazio: ao
-   rodar o primeiro backfill, os pedidos antigos já tinham saído de
-   `paid`.
-
-3. **Modelo de dados por total agregado do dia**, não por pedido — o que
-   também causava bugs de duplicação/perda em reruns (uma sincronização
-   incremental podia sobrescrever o total de um dia antigo com um valor
-   parcial).
-
-## Correções aplicadas
-
-- Variáveis de ambiente renomeadas por loja: `DOOKI_PODDI_*`,
-  `DOOKI_POD_KOMBUCHA_*`, `DOOKI_POD8_*`.
-- `dooki/sync.py` reescrito do zero:
-  - Sincroniza as 3 lojas em sequência.
-  - Passou a contar como receita confirmada `paid` + `on_carriage` +
-    `delivered` (antes só `paid`).
-  - **Gravação por pedido** (não mais total por dia): tabela
-    `guara-db.guara_performance.dooki_pedidos`, chave `(loja, order_id)`,
-    upsert via `MERGE` — cada pedido é atualizado no lugar quando o
-    status muda, nunca mais "perde" o dia.
-  - Cada linha traz: `data`, `status`, `customer_id`, `novo_cliente`
-    (calculado em batch, mesmo critério do Shopify: primeiro `order_id`
-    daquele `customer_id` na loja), `utm_source`, `utm_medium`,
-    `utm_campaign`, `utm_content` (= ID do anúncio, mesmo padrão do
-    Shopify), `utm_term`, `valor_pago`, `desconto`, `frete`.
-- `correlacao.load_gold` atualizada pra ler de `dooki_pedidos` (elimina a
-  lógica de dedup/alias que o modelo antigo por total-do-dia exigia).
-- Adicionado o sync ao `cron_master_sync.sh` (nunca tinha sido incluído
-  lá).
-
-## Backfill e validação
-
-Backfill de 90 dias rodado nas 3 lojas:
-
-| Loja | Pedidos encontrados (90 dias) |
-|---|---|
-| poddi | 158 |
-| pod-kombucha | 7.151 |
-| pod8 | 0 (loja sem nenhum pedido no período — API responde normalmente, só está vazia) |
-
-Resultado pro dia 01/11 após as correções:
-
-| Status | Loja | Pedidos | Receita |
-|---|---|---|---|
-| on_carriage | pod-kombucha | 81 | R$24.259,18 |
-| delivered | pod-kombucha | 3 | R$912,54 |
-| cancelled | pod-kombucha | 4 | R$903,05 |
-| on_carriage | poddi | 12 | R$5.138,66 |
-| cancelled | poddi | 10 | R$4.358,87 |
-
-**Total confirmado (excluindo cancelados): 96 pedidos / R$30.310,38**
-(contra 84/R$25.171,72 antes da correção).
-
-## Resíduo em aberto — precisa da Bia
-
-Ainda falta um resíduo de **6 pedidos / R$226,62** pra bater com os 102
-pedidos / R$30.537,00 da análise manual.
-
-Investigação do resíduo:
-- Descartada hipótese de fuso horário — a API da Dooki já devolve as
-  datas no fuso `America/Sao_Paulo`, não UTC.
-- Contagem completa de **todos os status** (incluindo cancelados) pra
-  01/11 nas 2 lojas ativas dá **110 pedidos no total**. O número da Bia
-  (102) fica entre "só confirmados" (96) e "todos, incluindo cancelados"
-  (110) — sugerindo que parte dos 14 pedidos cancelados deveria contar.
-- Verificado se a API tem algum campo que diferencie "cancelado sem
-  pagar" de "cancelado após capturar o pagamento": o campo `has_payment`
-  aparece `True` em todos os 14 cancelados de forma indistinta — não é
-  um sinal confiável.
-
-**O que precisamos da Bia:** olhar o painel financeiro da própria Yampi
-(não a API de pedidos) pros 14 pedidos cancelados de 01/11 (10 na poddi,
-4 na pod-kombucha) e confirmar quais deles (se algum) tiveram o
-pagamento capturado antes do cancelamento/reembolso. Com essa lista,
-ajustamos a regra final de forma que valha pra todos os dias, não só
-esse.
-
-## Commits
-
-- `400ab26` — sincroniza as 3 lojas Yampi/Dooki (poddi, pod_kombucha, pod8)
-- `2221da5` — conta on_carriage/delivered como receita confirmada
-- `2ed49f6` — carga por pedido em vez de total agregado por dia
+- **Dashboard (fora do repo):** ler `investimento_ajustado` (1,1215) em vez de aplicar 1,12.
+- **Resíduos pequenos:** 3 novos clientes em outubro e R$ 7 de investimento em 01–04/11. O primeiro
+  se fecha com o `pod_historico_clientes.csv` da Bia (histórico completo, que a API não dá); o segundo
+  provavelmente é a conta Meta "Nova loja" (`act_1136775015453788`) — conferir o spend por conta.
+- **Cliente novo antes de 06/09:** a flag só é confiável a partir de 2026-09-06 (primeiro dia da carga
+  inicial de 60 dias).
+- **pod8:** continua no bronze mas fica fora do gold até a Bia dizer o que é (0 pedidos hoje).
+- **Shopify-only reembolsado:** pedido sem par na Yampi que depois é reembolsado na Shopify continua
+  `paid` no BQ (a carga só busca `financial_status=paid`). Raro (6 pedidos em 01/11).

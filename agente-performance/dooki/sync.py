@@ -17,13 +17,17 @@ total agregado por dia).
 Cruzamento com ads (mesmo padrão do Shopify, ver scripts/sync_pedidos_diario.py):
   Meta:   utm_campaign = campaign.id  |  utm_content = ad.id
 
-Receita confirmada: status.alias em {paid, on_carriage, delivered}.
-'cancelled' e outros ficam de fora (mas a linha do pedido continua
-gravada, com o status atual, pra auditoria).
+Pedido pago (regra do Colab, tutorial "Como calculamos o CAC"): tem pelo
+menos uma transação capturada e não cancelada E o status atual não é
+cancelled/refused. Toda linha de pedido é gravada (com `pago` e o status
+atual), então o gold decide o que conta.
 
-novo_cliente: True se é o primeiro order_id do customer_id no histórico
-             completo daquela loja (calculado post-load via UPDATE no BQ,
-             mesmo critério usado pro Shopify).
+receita_sem_frete = value_products - value_discount.
+shopify_order_number = metadata.platform_order_number: na loja pod-kombucha
+liga o pedido da Yampi ao pedido Shopify (mesmos pedidos, não somar).
+
+Cliente novo NÃO é calculado aqui: a regra (histórico completo da Shopify,
+e-mail na poddi) vive no gold, ver bigquery/scripts/gold/proc_load_gold.sql.
 
 Uso:
   python3 -m dooki.sync --dias 30
@@ -58,6 +62,9 @@ BQ_DATASET = "guara_performance"
 BQ_TABLE   = "dooki_pedidos"   # tabela por pedido (nova) — substitui dooki_pedidos_diario no gold
 
 BRT = timezone(timedelta(hours=-3))
+
+# Status atual que nunca conta como pedido pago (Colab, seção 3 do tutorial).
+STATUS_NAO_PAGOS = {"cancelled", "refused"}
 
 # Lojas Yampi/Dooki da POD Kombucha. Cada uma tem credenciais próprias.
 LOJAS = [
@@ -118,7 +125,7 @@ def buscar_pedidos(base_url: str, token: str, secret: str,
     headers = _headers(token, secret)
 
     for page in range(1, 100):  # max 99 páginas
-        url = f"{base_url}/orders?page={page}&limit={limit}"
+        url = f"{base_url}/orders?page={page}&limit={limit}&include=status,transactions"
         r = requests.get(url, headers=headers, timeout=30)
         if r.status_code == 400:
             break
@@ -158,118 +165,126 @@ def _normalizar(order: dict, loja: str, agora_iso: str) -> dict:
 
     customer = (order.get("customer") or {}).get("data") or {}
     status   = (order.get("status") or {}).get("data") or {}
+    meta     = {m.get("key"): m.get("value") for m in (order.get("metadata") or {}).get("data", [])}
+
+    # Pago (regra do Colab): transação capturada e não cancelada + status atual
+    # fora de cancelled/refused. Cancelado nunca conta, mesmo com captura.
+    transacoes = (order.get("transactions") or {}).get("data", [])
+    capturas = [t["captured_at"]["date"] for t in transacoes
+                if t.get("captured_at") and not t.get("cancelled")]
+    pago = bool(capturas) and status.get("alias") not in STATUS_NAO_PAGOS
+
+    valor_produtos = float(order.get("value_products") or 0)
+    valor_desconto = float(order.get("value_discount") or 0)
+    email = (customer.get("email") or "").strip().lower() or None
 
     return {
-        "loja":           loja,
-        "order_id":       str(order["id"]),
-        "customer_id":    str(customer.get("id")) if customer.get("id") is not None else None,
-        "data":           data_brt,
-        "created_at_utc": dt_brt.astimezone(timezone.utc).isoformat() if dt_brt else None,
-        "status":         status.get("alias"),
-        "valor_pago":     float(order.get("value_total") or 0),
-        "desconto":       float(order.get("value_discount") or 0),
-        "frete":          float(order.get("value_shipment") or 0),
-        "novo_cliente":   None,  # calculado em batch após upsert
-        "utm_source":     order.get("utm_source"),
-        "utm_medium":     order.get("utm_medium"),
-        "utm_campaign":   order.get("utm_campaign"),
-        "utm_content":    order.get("utm_content"),
-        "utm_term":       order.get("utm_term"),
-        "atualizado_em":  agora_iso,
+        "loja":                 loja,
+        "order_id":             str(order["id"]),
+        "customer_id":          str(customer.get("id")) if customer.get("id") is not None else None,
+        "customer_email":       email,
+        "shopify_order_number": meta.get("platform_order_number"),
+        "data":                 data_brt,
+        "created_at_utc":       dt_brt.astimezone(timezone.utc).isoformat() if dt_brt else None,
+        "status":               status.get("alias"),
+        "pago":                 pago,
+        "captured_at":          (datetime.strptime(min(capturas)[:19], "%Y-%m-%d %H:%M:%S")
+                                 .replace(tzinfo=BRT).astimezone(timezone.utc).isoformat()
+                                 if capturas else None),
+        "valor_pago":           float(order.get("value_total") or 0),
+        "receita_sem_frete":    round(valor_produtos - valor_desconto, 2),
+        "desconto":             valor_desconto,
+        "frete":                float(order.get("value_shipment") or 0),
+        "utm_source":           order.get("utm_source"),
+        "utm_medium":           order.get("utm_medium"),
+        "utm_campaign":         order.get("utm_campaign"),
+        "utm_content":          order.get("utm_content"),
+        "utm_term":             order.get("utm_term"),
+        "atualizado_em":        agora_iso,
     }
+
+
+# Colunas da tabela dooki_pedidos: (nome, tipo SQLite, tipo BigQuery).
+# Fonte única para SQLite, schema do BigQuery e MERGE.
+COLUNAS = [
+    ("loja",                 "TEXT",    "STRING"),
+    ("order_id",             "TEXT",    "STRING"),
+    ("customer_id",          "TEXT",    "STRING"),
+    ("customer_email",       "TEXT",    "STRING"),
+    ("shopify_order_number", "TEXT",    "STRING"),
+    ("data",                 "TEXT",    "DATE"),
+    ("created_at_utc",       "TEXT",    "TIMESTAMP"),
+    ("status",               "TEXT",    "STRING"),
+    ("pago",                 "INTEGER", "BOOL"),
+    ("captured_at",          "TEXT",    "TIMESTAMP"),
+    ("valor_pago",           "REAL",    "FLOAT64"),
+    ("receita_sem_frete",    "REAL",    "FLOAT64"),
+    ("desconto",             "REAL",    "FLOAT64"),
+    ("frete",                "REAL",    "FLOAT64"),
+    ("utm_source",           "TEXT",    "STRING"),
+    ("utm_medium",           "TEXT",    "STRING"),
+    ("utm_campaign",         "TEXT",    "STRING"),
+    ("utm_content",          "TEXT",    "STRING"),
+    ("utm_term",             "TEXT",    "STRING"),
+    ("atualizado_em",        "TEXT",    "TIMESTAMP"),
+]
+CHAVE = ("loja", "order_id")
+NOMES = [c[0] for c in COLUNAS]
+NAO_CHAVE = [n for n in NOMES if n not in CHAVE]
 
 
 # ── SQLite ────────────────────────────────────────────────────────────────────
 
-CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS dooki_pedidos (
-    loja            TEXT NOT NULL,
-    order_id        TEXT NOT NULL,
-    customer_id     TEXT,
-    data            TEXT NOT NULL,
-    created_at_utc  TEXT,
-    status          TEXT,
-    valor_pago      REAL DEFAULT 0,
-    desconto        REAL DEFAULT 0,
-    frete           REAL DEFAULT 0,
-    novo_cliente    INTEGER,
-    utm_source      TEXT,
-    utm_medium      TEXT,
-    utm_campaign    TEXT,
-    utm_content     TEXT,
-    utm_term        TEXT,
-    atualizado_em   TEXT NOT NULL,
-    PRIMARY KEY (loja, order_id)
-)
-"""
-
-
 def salvar_sqlite(rows: list[dict]) -> int:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
-    conn.execute(CREATE_TABLE)
-    n = 0
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS dooki_pedidos ("
+        + ", ".join(f"{n} {t}" for n, t, _ in COLUNAS)
+        + f", PRIMARY KEY ({', '.join(CHAVE)}))"
+    )
+    existentes = {r[1] for r in conn.execute("PRAGMA table_info(dooki_pedidos)")}
+    for nome, tipo, _ in COLUNAS:
+        if nome not in existentes:
+            conn.execute(f"ALTER TABLE dooki_pedidos ADD COLUMN {nome} {tipo}")
+
+    sql = (
+        f"INSERT INTO dooki_pedidos ({', '.join(NOMES)}) VALUES ({', '.join('?' * len(NOMES))}) "
+        f"ON CONFLICT({', '.join(CHAVE)}) DO UPDATE SET "
+        + ", ".join(f"{n} = excluded.{n}" for n in NAO_CHAVE)
+    )
     for v in rows:
-        conn.execute("""
-            INSERT INTO dooki_pedidos
-              (loja, order_id, customer_id, data, created_at_utc, status,
-               valor_pago, desconto, frete, novo_cliente,
-               utm_source, utm_medium, utm_campaign, utm_content, utm_term, atualizado_em)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(loja, order_id) DO UPDATE SET
-              customer_id    = excluded.customer_id,
-              data           = excluded.data,
-              created_at_utc = excluded.created_at_utc,
-              status         = excluded.status,
-              valor_pago     = excluded.valor_pago,
-              desconto       = excluded.desconto,
-              frete          = excluded.frete,
-              utm_source     = excluded.utm_source,
-              utm_medium     = excluded.utm_medium,
-              utm_campaign   = excluded.utm_campaign,
-              utm_content    = excluded.utm_content,
-              utm_term       = excluded.utm_term,
-              atualizado_em  = excluded.atualizado_em
-        """, (v["loja"], v["order_id"], v["customer_id"], v["data"], v["created_at_utc"],
-              v["status"], v["valor_pago"], v["desconto"], v["frete"],
-              v["utm_source"], v["utm_medium"], v["utm_campaign"], v["utm_content"],
-              v["utm_term"], v["atualizado_em"]))
-        n += 1
+        conn.execute(sql, [int(v[n]) if isinstance(v[n], bool) else v[n] for n in NOMES])
     conn.commit()
     conn.close()
-    return n
+    return len(rows)
 
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
-BQ_SCHEMA = [
-    bq.SchemaField("loja", "STRING"),
-    bq.SchemaField("order_id", "STRING"),
-    bq.SchemaField("customer_id", "STRING"),
-    bq.SchemaField("data", "DATE"),
-    bq.SchemaField("created_at_utc", "TIMESTAMP"),
-    bq.SchemaField("status", "STRING"),
-    bq.SchemaField("valor_pago", "FLOAT64"),
-    bq.SchemaField("desconto", "FLOAT64"),
-    bq.SchemaField("frete", "FLOAT64"),
-    bq.SchemaField("utm_source", "STRING"),
-    bq.SchemaField("utm_medium", "STRING"),
-    bq.SchemaField("utm_campaign", "STRING"),
-    bq.SchemaField("utm_content", "STRING"),
-    bq.SchemaField("utm_term", "STRING"),
-    bq.SchemaField("atualizado_em", "TIMESTAMP"),
-]
+BQ_SCHEMA = [bq.SchemaField(n, t) for n, _, t in COLUNAS]
 
 
 def _ensure_table(client: bq.Client) -> None:
+    """Cria a tabela se não existir; se existir, acrescenta colunas novas."""
     table_id = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
     try:
-        client.get_table(table_id)
+        tabela = client.get_table(table_id)
     except Exception:
-        table = bq.Table(table_id, schema=BQ_SCHEMA + [bq.SchemaField("novo_cliente", "BOOL")])
+        table = bq.Table(table_id, schema=BQ_SCHEMA)
         table.time_partitioning = bq.TimePartitioning(field="data")
         client.create_table(table)
         logger.info("[BQ] Tabela %s criada", table_id)
+        return
+
+    existentes = {f.name for f in tabela.schema}
+    faltando = [f for f in BQ_SCHEMA if f.name not in existentes]
+    if faltando:
+        client.query(
+            f"ALTER TABLE `{table_id}` "
+            + ", ".join(f"ADD COLUMN IF NOT EXISTS {f.name} {f.field_type}" for f in faltando)
+        ).result()
+        logger.info("[BQ] Colunas adicionadas em %s: %s", BQ_TABLE, [f.name for f in faltando])
 
 
 def salvar_bigquery(client: bq.Client, rows: list[dict], loja: str) -> int:
@@ -279,19 +294,12 @@ def salvar_bigquery(client: bq.Client, rows: list[dict], loja: str) -> int:
 
     _ensure_table(client)
 
-    for r in rows:
-        r.pop("novo_cliente", None)
-
     try:
         staging_id = f"{BQ_PROJECT}.{BQ_DATASET}._staging_dooki_pedidos_{loja}"
         job_config = bq.LoadJobConfig(write_disposition="WRITE_TRUNCATE", schema=BQ_SCHEMA)
         client.load_table_from_json(rows, staging_id, job_config=job_config).result()
 
-        cols = [f.name for f in BQ_SCHEMA]
-        set_clause = ", ".join(f"{c} = S.{c}" for c in cols if c not in ("loja", "order_id"))
-        insert_cols = ", ".join(cols)
-        insert_vals = ", ".join(f"S.{c}" for c in cols)
-
+        set_clause = ", ".join(f"{c} = S.{c}" for c in NAO_CHAVE)
         merge_sql = f"""
         MERGE `{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}` T
         USING `{staging_id}` S
@@ -299,7 +307,7 @@ def salvar_bigquery(client: bq.Client, rows: list[dict], loja: str) -> int:
         WHEN MATCHED THEN
           UPDATE SET {set_clause}
         WHEN NOT MATCHED THEN
-          INSERT ({insert_cols}) VALUES ({insert_vals})
+          INSERT ({', '.join(NOMES)}) VALUES ({', '.join('S.' + c for c in NOMES)})
         """
         client.query(merge_sql).result()
         client.delete_table(staging_id, not_found_ok=True)
@@ -308,35 +316,6 @@ def salvar_bigquery(client: bq.Client, rows: list[dict], loja: str) -> int:
         return len(rows)
     except Exception as e:
         logger.error("[BQ] Exceção (loja=%s): %s", loja, e)
-        return 0
-
-
-def atualizar_novo_cliente_bq(client: bq.Client, loja: str) -> int:
-    """
-    Recalcula novo_cliente no BQ: True se o order_id é o PRIMEIRO (menor)
-    daquele customer_id, dentro da mesma loja (customer_id não é comparável
-    entre lojas — são contas Yampi separadas).
-    """
-    try:
-        sql = f"""
-        UPDATE `{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}` T
-        SET novo_cliente = (
-          T.order_id = (
-            SELECT MIN(order_id)
-            FROM `{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}`
-            WHERE loja = T.loja
-              AND customer_id = T.customer_id
-              AND customer_id IS NOT NULL
-          )
-        )
-        WHERE loja = '{loja}'
-          AND customer_id IS NOT NULL
-        """
-        job = client.query(sql)
-        job.result()
-        return job.num_dml_affected_rows or 0
-    except Exception as exc:
-        logger.warning("[%s] atualizar_novo_cliente_bq falha: %s", loja, exc)
         return 0
 
 
@@ -377,9 +356,7 @@ def sync_loja(client: bq.Client | None, loja: dict, data_ini: date, data_fim: da
 
     if client is not None:
         n_bq = salvar_bigquery(client, rows, nome)
-        n_nc = atualizar_novo_cliente_bq(client, nome)
-        logger.info("[%s] BigQuery: %d pedidos upsert | novo_cliente recalculado: %d linhas",
-                    nome, n_bq, n_nc)
+        logger.info("[%s] BigQuery: %d pedidos upsert", nome, n_bq)
 
 
 def main():

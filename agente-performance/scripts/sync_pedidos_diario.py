@@ -59,8 +59,8 @@ _CLIENT_CFG = {
 }
 
 _FIELDS = (
-    "id,created_at,total_price,total_discounts,shipping_lines,"
-    "financial_status,customer,source_name,note_attributes,landing_site"
+    "id,name,created_at,total_price,current_subtotal_price,total_discounts,shipping_lines,"
+    "financial_status,customer,email,source_name,note_attributes,landing_site"
 )
 
 
@@ -69,18 +69,21 @@ def _get_headers(token: str) -> dict:
 
 
 def _paginar_pedidos(store: str, token: str,
-                     date_start: date, date_end: date) -> list[dict]:
-    """Busca todos os pedidos pagos no período com cursor pagination."""
+                     date_start: date, date_end: date,
+                     financial_status: str | None = "paid",
+                     fields: str = _FIELDS) -> list[dict]:
+    """Busca os pedidos do período com cursor pagination (por padrão só os pagos)."""
     url = f"https://{store}.myshopify.com/admin/api/{API_VERSION}/orders.json"
     headers = _get_headers(token)
     params = {
         "limit":            250,
         "status":           "any",
-        "financial_status": "paid",
         "created_at_min":   f"{date_start.isoformat()}T00:00:00-03:00",
         "created_at_max":   f"{date_end.isoformat()}T23:59:59-03:00",
-        "fields":           _FIELDS,
+        "fields":           fields,
     }
+    if financial_status:
+        params["financial_status"] = financial_status
     pedidos = []
     while True:
         r = requests.get(url, headers=headers, params=params, timeout=30)
@@ -155,10 +158,16 @@ def _normalizar(pedido: dict, cliente: str, utm_source_type: str, agora_iso: str
     # novo_cliente: None aqui — será calculado em batch após insert via BQ UPDATE
     customer = pedido.get("customer") or {}
 
+    email = (customer.get("email") or pedido.get("email") or "").strip().lower() or None
+    subtotal = pedido.get("current_subtotal_price")
+
     return {
         "cliente":        cliente,
         "order_id":       str(pedido["id"]),
+        "order_name":     pedido.get("name"),
         "customer_id":    str(customer.get("id", "")) or None,
+        "customer_email": email,
+        "current_subtotal_price": float(subtotal) if subtotal is not None else None,
         "data_brt":       data_brt,
         "created_at_utc": created_utc,
         "status":         pedido.get("financial_status"),
