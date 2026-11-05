@@ -99,7 +99,6 @@ FIELDS = ",".join([
     "video_thruplay_watched_actions",
     "video_p25_watched_actions",
     "video_p50_watched_actions",
-    "video_view_3_sec_actions",
     "objective",
     "quality_ranking",
     "engagement_rate_ranking",
