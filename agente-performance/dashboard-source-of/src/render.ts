@@ -292,8 +292,8 @@ function renderRecuperacao(cur: DateRange, prev: DateRange, ads: CanalTotalsMap,
   </div>`;
 }
 
-function renderCriativos(): string {
-  const sorted = [...TOP_CRIATIVOS].sort((a, b) => b.inv - a.inv);
+function renderCriativos(cur: Period): string {
+  const sorted = aggCriativos(cur.from, cur.to).sort((a, b) => b.inv - a.inv);
   const rows = sorted
     .map(
       (c) =>
@@ -307,7 +307,7 @@ function renderCriativos(): string {
 
   return `
   <h1>Criativos</h1>
-  <p class="lede">Anúncios Meta de maior investimento nos últimos 30 dias, com retorno por peça.</p>
+  <p class="lede">Anúncios Meta de maior investimento no período selecionado, com retorno por peça.</p>
   <div class="card">
     <div class="tablewrap"><table>
       <thead><tr><th>Anúncio</th><th>Campanha / Conjunto</th><th class="num">Invest.</th><th class="num">Compras</th><th class="num">Receita</th><th class="num">ROAS</th><th class="num">Cliques</th></tr></thead>
@@ -362,19 +362,19 @@ export function render(): void {
       html = renderLoja(cur, prev);
       break;
     case "meta":
-      html = renderCanal("meta", "Meta Ads", ads, adsPrev, TOP_CAMPANHAS);
+      html = renderCanal("meta", "Meta Ads", cur, ads, adsPrev);
       break;
     case "google":
-      html = renderCanal("google", "Google Ads", ads, adsPrev, TOP_CAMPANHAS);
+      html = renderCanal("google", "Google Ads", cur, ads, adsPrev);
       break;
     case "canais":
-      html = renderCanaisProdutos(ads, adsPrev);
+      html = renderCanaisProdutos(cur, ads, adsPrev);
       break;
     case "recuperacao":
       html = renderRecuperacao(range, prevRange, ads, adsPrev);
       break;
     case "criativos":
-      html = renderCriativos();
+      html = renderCriativos(cur);
       break;
     case "sync":
       html = renderSync();
