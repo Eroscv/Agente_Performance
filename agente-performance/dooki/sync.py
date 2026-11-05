@@ -1,22 +1,29 @@
 """
 dooki/sync.py
 
-Sincroniza pedidos PAGOS das lojas Yampi/Dooki da POD Kombucha para:
-  - SQLite local (tabela: dooki_pedidos_diario, por loja)
-  - BigQuery (guara-db.guara_performance.dooki_pedidos_diario — coluna
-    fonte='dooki_<loja>', uma loja por linha/dia)
+Sincroniza pedidos (por pedido, não mais por total diário) das lojas
+Yampi/Dooki da POD Kombucha para:
+  - SQLite local (tabela: dooki_pedidos, por loja)
+  - BigQuery (guara-db.guara_performance.dooki_pedidos — uma linha por
+    pedido, coluna `loja` identifica poddi/pod_kombucha/pod8)
 
 A POD Kombucha vende em 3 lojas Yampi/Dooki separadas (poddi, pod_kombucha,
-pod8) que precisam ser somadas no gold, mas mantidas distintas no bronze
-(coluna `fonte`) para poder auditar cada loja isoladamente.
+pod8). Cada pedido é upsertado por (loja, order_id) — se o status mudar
+depois (paid → on_carriage → delivered, ou → cancelled), a próxima
+sincronização só atualiza aquele pedido no lugar, nunca perde o histórico
+do dia (era exatamente isso que acontecia quando a gente só gravava o
+total agregado por dia).
 
-Regra de receita confirmada:
-  Pedidos com status.alias em {paid, on_carriage, delivered} contam como
-  receita confirmada (o pedido já avançou no fluxo, não foi cancelado).
-  Um pedido passa por esses status ao longo do tempo (paid → on_carriage →
-  delivered) — contar só 'paid' faz o pedido desaparecer pra sempre do
-  histórico se o sync não rodar antes dele mudar de status. 'cancelled' e
-  outros são ignorados.
+Cruzamento com ads (mesmo padrão do Shopify, ver scripts/sync_pedidos_diario.py):
+  Meta:   utm_campaign = campaign.id  |  utm_content = ad.id
+
+Receita confirmada: status.alias em {paid, on_carriage, delivered}.
+'cancelled' e outros ficam de fora (mas a linha do pedido continua
+gravada, com o status atual, pra auditoria).
+
+novo_cliente: True se é o primeiro order_id do customer_id no histórico
+             completo daquela loja (calculado post-load via UPDATE no BQ,
+             mesmo critério usado pro Shopify).
 
 Uso:
   python3 -m dooki.sync --dias 30
@@ -48,37 +55,32 @@ load_dotenv(ENV_FILE)
 
 BQ_PROJECT = "guara-db"
 BQ_DATASET = "guara_performance"
-BQ_TABLE   = "dooki_pedidos_diario"   # tabela dedicada Dooki no BQ (uma linha por data+loja)
+BQ_TABLE   = "dooki_pedidos"   # tabela por pedido (nova) — substitui dooki_pedidos_diario no gold
+
+BRT = timezone(timedelta(hours=-3))
 
 # Lojas Yampi/Dooki da POD Kombucha. Cada uma tem credenciais próprias.
-# `fonte` é o identificador gravado no BQ/SQLite para distinguir a loja.
 LOJAS = [
     {
-        "nome":        "poddi",
-        "fonte":       "dooki_poddi",
+        "nome":         "poddi",
         "base_url_env": "DOOKI_PODDI_BASE_URL",
         "token_env":    "DOOKI_PODDI_USER_TOKEN",
         "secret_env":   "DOOKI_PODDI_USER_SECRET_KEY",
     },
     {
-        "nome":        "pod_kombucha",
-        "fonte":       "dooki_pod_kombucha",
+        "nome":         "pod_kombucha",
         "base_url_env": "DOOKI_POD_KOMBUCHA_BASE_URL",
         "token_env":    "DOOKI_POD_KOMBUCHA_USER_TOKEN",
         "secret_env":   "DOOKI_POD_KOMBUCHA_USER_SECRET_KEY",
     },
     {
-        "nome":        "pod8",
-        "fonte":       "dooki_pod8",
+        "nome":         "pod8",
         "base_url_env": "DOOKI_POD8_BASE_URL",
         # pod8 usa o mesmo token/secret da loja poddi (mesma conta Dooki/Yampi)
         "token_env":    "DOOKI_PODDI_USER_TOKEN",
         "secret_env":   "DOOKI_PODDI_USER_SECRET_KEY",
     },
 ]
-
-# Apenas estes status contam como receita paga
-STATUS_RECEITA_PAGA = {"paid", "on_carriage", "delivered"}
 
 logging.basicConfig(
     level=logging.INFO,
@@ -98,15 +100,16 @@ def _headers(token: str, secret: str) -> dict:
     }
 
 
-def buscar_pedidos_pagos(base_url: str, token: str, secret: str,
-                          data_inicio: date, data_fim: date) -> list[dict]:
+def buscar_pedidos(base_url: str, token: str, secret: str,
+                    data_inicio: date, data_fim: date) -> list[dict]:
     """
-    Retorna pedidos com status 'paid' no intervalo [data_inicio, data_fim]
-    para a loja identificada por `base_url`/`token`/`secret`.
+    Retorna TODOS os pedidos (qualquer status) com created_at no intervalo
+    [data_inicio, data_fim] — a filtragem por status acontece depois, na
+    normalização, pra manter o histórico do pedido mesmo quando ele não
+    conta como receita confirmada (ex: cancelled).
 
-    A API Dooki retorna pedidos em ordem DESC (mais recente primeiro, pág 1).
-    Vai até pág 99 no máximo (400 acima disso).
-    Paginamos da pág 1 em diante e paramos quando a data sair do período.
+    A API Dooki retorna pedidos em ordem DESC. Paginamos da pág 1 em diante
+    e paramos quando a data sair do período.
     """
     pedidos = []
     limit   = 100
@@ -132,13 +135,9 @@ def buscar_pedidos_pagos(base_url: str, token: str, secret: str,
             if data_criacao < data_inicio_str:
                 passou_inicio = True
                 break       # já passou do início, pode parar
-            status_alias = order.get("status", {}).get("data", {}).get("alias", "")
-            if status_alias in STATUS_RECEITA_PAGA:
-                pedidos.append(order)
+            pedidos.append(order)
 
         last_date = orders[-1]["created_at"]["date"][:10] if orders else ""
-        logger.debug("Pág %d: última_data=%s | coletados=%d", page, last_date, len(pedidos))
-
         if passou_inicio or (last_date and last_date < data_inicio_str):
             break
         time.sleep(0.1)
@@ -146,69 +145,95 @@ def buscar_pedidos_pagos(base_url: str, token: str, secret: str,
     return pedidos
 
 
-def agregar_por_dia(pedidos: list[dict]) -> dict[str, dict]:
-    """
-    Agrega pedidos pagos por data de criação.
-    Retorna dict[data_str] = {receita, pedidos, ticket_medio}
-    """
-    por_dia: dict[str, dict] = {}
-    for o in pedidos:
-        data_str = o["created_at"]["date"][:10]
-        valor = float(o.get("value_total") or 0)
-        customer_id = str(o.get("customer_id") or "")
+def _normalizar(order: dict, loja: str, agora_iso: str) -> dict:
+    """Converte um pedido Dooki/Yampi pro schema dooki_pedidos."""
+    created_raw = order["created_at"]["date"]
+    dt_brt = None
+    try:
+        # A API já devolve no fuso America/Sao_Paulo (ver created_at.timezone)
+        dt_brt = datetime.strptime(created_raw[:19], "%Y-%m-%d %H:%M:%S").replace(tzinfo=BRT)
+        data_brt = dt_brt.date().isoformat()
+    except Exception:
+        data_brt = created_raw[:10]
 
-        if data_str not in por_dia:
-            por_dia[data_str] = {"receita": 0.0, "pedidos": 0, "customer_ids": set()}
+    customer = (order.get("customer") or {}).get("data") or {}
+    status   = (order.get("status") or {}).get("data") or {}
 
-        por_dia[data_str]["receita"]    += valor
-        por_dia[data_str]["pedidos"]    += 1
-        por_dia[data_str]["customer_ids"].add(customer_id)
-
-    # Calcula ticket médio e transforma set em count
-    for d, v in por_dia.items():
-        v["ticket_medio"]    = round(v["receita"] / v["pedidos"], 2) if v["pedidos"] else 0
-        v["clientes_unicos"] = len(v["customer_ids"])
-        del v["customer_ids"]
-
-    return por_dia
+    return {
+        "loja":           loja,
+        "order_id":       str(order["id"]),
+        "customer_id":    str(customer.get("id")) if customer.get("id") is not None else None,
+        "data":           data_brt,
+        "created_at_utc": dt_brt.astimezone(timezone.utc).isoformat() if dt_brt else None,
+        "status":         status.get("alias"),
+        "valor_pago":     float(order.get("value_total") or 0),
+        "desconto":       float(order.get("value_discount") or 0),
+        "frete":          float(order.get("value_shipment") or 0),
+        "novo_cliente":   None,  # calculado em batch após upsert
+        "utm_source":     order.get("utm_source"),
+        "utm_medium":     order.get("utm_medium"),
+        "utm_campaign":   order.get("utm_campaign"),
+        "utm_content":    order.get("utm_content"),
+        "utm_term":       order.get("utm_term"),
+        "atualizado_em":  agora_iso,
+    }
 
 
 # ── SQLite ────────────────────────────────────────────────────────────────────
 
 CREATE_TABLE = """
-CREATE TABLE IF NOT EXISTS dooki_pedidos_diario (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+CREATE TABLE IF NOT EXISTS dooki_pedidos (
+    loja            TEXT NOT NULL,
+    order_id        TEXT NOT NULL,
+    customer_id     TEXT,
     data            TEXT NOT NULL,
-    receita         REAL DEFAULT 0,
-    pedidos         INTEGER DEFAULT 0,
-    ticket_medio    REAL DEFAULT 0,
-    clientes_unicos INTEGER DEFAULT 0,
-    fonte           TEXT NOT NULL,
+    created_at_utc  TEXT,
+    status          TEXT,
+    valor_pago      REAL DEFAULT 0,
+    desconto        REAL DEFAULT 0,
+    frete           REAL DEFAULT 0,
+    novo_cliente    INTEGER,
+    utm_source      TEXT,
+    utm_medium      TEXT,
+    utm_campaign    TEXT,
+    utm_content     TEXT,
+    utm_term        TEXT,
     atualizado_em   TEXT NOT NULL,
-    UNIQUE(data, fonte)
+    PRIMARY KEY (loja, order_id)
 )
 """
 
 
-def salvar_sqlite(por_dia: dict[str, dict], fonte: str) -> int:
+def salvar_sqlite(rows: list[dict]) -> int:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(DB_PATH))
     conn.execute(CREATE_TABLE)
-    agora = datetime.now(timezone.utc).isoformat()
     n = 0
-    for data_str, v in por_dia.items():
+    for v in rows:
         conn.execute("""
-            INSERT INTO dooki_pedidos_diario
-              (data, receita, pedidos, ticket_medio, clientes_unicos, fonte, atualizado_em)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(data, fonte) DO UPDATE SET
-              receita         = excluded.receita,
-              pedidos         = excluded.pedidos,
-              ticket_medio    = excluded.ticket_medio,
-              clientes_unicos = excluded.clientes_unicos,
-              atualizado_em   = excluded.atualizado_em
-        """, (data_str, round(v["receita"], 2), v["pedidos"],
-              v["ticket_medio"], v["clientes_unicos"], fonte, agora))
+            INSERT INTO dooki_pedidos
+              (loja, order_id, customer_id, data, created_at_utc, status,
+               valor_pago, desconto, frete, novo_cliente,
+               utm_source, utm_medium, utm_campaign, utm_content, utm_term, atualizado_em)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(loja, order_id) DO UPDATE SET
+              customer_id    = excluded.customer_id,
+              data           = excluded.data,
+              created_at_utc = excluded.created_at_utc,
+              status         = excluded.status,
+              valor_pago     = excluded.valor_pago,
+              desconto       = excluded.desconto,
+              frete          = excluded.frete,
+              utm_source     = excluded.utm_source,
+              utm_medium     = excluded.utm_medium,
+              utm_campaign   = excluded.utm_campaign,
+              utm_content    = excluded.utm_content,
+              utm_term       = excluded.utm_term,
+              atualizado_em  = excluded.atualizado_em
+        """, (v["loja"], v["order_id"], v["customer_id"], v["data"], v["created_at_utc"],
+              v["status"], v["valor_pago"], v["desconto"], v["frete"],
+              v["utm_source"], v["utm_medium"], v["utm_campaign"], v["utm_content"],
+              v["utm_term"], v["atualizado_em"]))
         n += 1
     conn.commit()
     conn.close()
@@ -217,65 +242,101 @@ def salvar_sqlite(por_dia: dict[str, dict], fonte: str) -> int:
 
 # ── BigQuery ──────────────────────────────────────────────────────────────────
 
-def salvar_bigquery(client: bq.Client, por_dia: dict[str, dict], fonte: str) -> int:
-    """
-    Upsert idempotente por (data, fonte) via MERGE — evita duplicar linhas
-    quando o sync roda mais de uma vez para o mesmo dia/loja.
-    """
-    if not por_dia:
+BQ_SCHEMA = [
+    bq.SchemaField("loja", "STRING"),
+    bq.SchemaField("order_id", "STRING"),
+    bq.SchemaField("customer_id", "STRING"),
+    bq.SchemaField("data", "DATE"),
+    bq.SchemaField("created_at_utc", "TIMESTAMP"),
+    bq.SchemaField("status", "STRING"),
+    bq.SchemaField("valor_pago", "FLOAT64"),
+    bq.SchemaField("desconto", "FLOAT64"),
+    bq.SchemaField("frete", "FLOAT64"),
+    bq.SchemaField("utm_source", "STRING"),
+    bq.SchemaField("utm_medium", "STRING"),
+    bq.SchemaField("utm_campaign", "STRING"),
+    bq.SchemaField("utm_content", "STRING"),
+    bq.SchemaField("utm_term", "STRING"),
+    bq.SchemaField("atualizado_em", "TIMESTAMP"),
+]
+
+
+def _ensure_table(client: bq.Client) -> None:
+    table_id = f"{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}"
+    try:
+        client.get_table(table_id)
+    except Exception:
+        table = bq.Table(table_id, schema=BQ_SCHEMA + [bq.SchemaField("novo_cliente", "BOOL")])
+        table.time_partitioning = bq.TimePartitioning(field="data")
+        client.create_table(table)
+        logger.info("[BQ] Tabela %s criada", table_id)
+
+
+def salvar_bigquery(client: bq.Client, rows: list[dict], loja: str) -> int:
+    """Upsert por (loja, order_id) via MERGE — nunca perde pedido quando o status muda."""
+    if not rows:
         return 0
 
-    agora = datetime.now(timezone.utc).isoformat()
-    rows = [
-        {
-            "data":          data_str,
-            "receita":       round(v["receita"], 2),
-            "pedidos":       v["pedidos"],
-            "ticket_medio":  v["ticket_medio"],
-            "fonte":         fonte,
-            "atualizado_em": agora,
-        }
-        for data_str, v in por_dia.items()
-    ]
+    _ensure_table(client)
+
+    for r in rows:
+        r.pop("novo_cliente", None)
 
     try:
-        staging_id = f"{BQ_PROJECT}.{BQ_DATASET}._staging_dooki_{fonte}"
-        job_config = bq.LoadJobConfig(
-            write_disposition="WRITE_TRUNCATE",
-            schema=[
-                bq.SchemaField("data", "DATE"),
-                bq.SchemaField("receita", "NUMERIC"),
-                bq.SchemaField("pedidos", "INTEGER"),
-                bq.SchemaField("ticket_medio", "NUMERIC"),
-                bq.SchemaField("fonte", "STRING"),
-                bq.SchemaField("atualizado_em", "TIMESTAMP"),
-            ],
-        )
+        staging_id = f"{BQ_PROJECT}.{BQ_DATASET}._staging_dooki_pedidos_{loja}"
+        job_config = bq.LoadJobConfig(write_disposition="WRITE_TRUNCATE", schema=BQ_SCHEMA)
         client.load_table_from_json(rows, staging_id, job_config=job_config).result()
 
-        # A API da Dooki, numa sincronização incremental, pode devolver só os
-        # pedidos "recém atualizados" pra uma data antiga que já tinha mais
-        # pedidos completos (ex: paginação por data de atualização, não de
-        # criação). Só sobrescreve se o novo total for >= o que já tínhamos —
-        # nunca encolhe um dia.
+        cols = [f.name for f in BQ_SCHEMA]
+        set_clause = ", ".join(f"{c} = S.{c}" for c in cols if c not in ("loja", "order_id"))
+        insert_cols = ", ".join(cols)
+        insert_vals = ", ".join(f"S.{c}" for c in cols)
+
         merge_sql = f"""
         MERGE `{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}` T
         USING `{staging_id}` S
-        ON T.data = S.data AND T.fonte = S.fonte
-        WHEN MATCHED AND S.pedidos >= T.pedidos THEN
-          UPDATE SET receita = S.receita, pedidos = S.pedidos,
-                     ticket_medio = S.ticket_medio, atualizado_em = S.atualizado_em
+        ON T.loja = S.loja AND T.order_id = S.order_id
+        WHEN MATCHED THEN
+          UPDATE SET {set_clause}
         WHEN NOT MATCHED THEN
-          INSERT (data, receita, pedidos, ticket_medio, fonte, atualizado_em)
-          VALUES (S.data, S.receita, S.pedidos, S.ticket_medio, S.fonte, S.atualizado_em)
+          INSERT ({insert_cols}) VALUES ({insert_vals})
         """
         client.query(merge_sql).result()
         client.delete_table(staging_id, not_found_ok=True)
 
-        logger.info("[BQ] ✅ %d dias upsert em %s (fonte=%s)", len(rows), BQ_TABLE, fonte)
+        logger.info("[BQ] ✅ %d pedidos upsert em %s (loja=%s)", len(rows), BQ_TABLE, loja)
         return len(rows)
     except Exception as e:
-        logger.error("[BQ] Exceção (fonte=%s): %s", fonte, e)
+        logger.error("[BQ] Exceção (loja=%s): %s", loja, e)
+        return 0
+
+
+def atualizar_novo_cliente_bq(client: bq.Client, loja: str) -> int:
+    """
+    Recalcula novo_cliente no BQ: True se o order_id é o PRIMEIRO (menor)
+    daquele customer_id, dentro da mesma loja (customer_id não é comparável
+    entre lojas — são contas Yampi separadas).
+    """
+    try:
+        sql = f"""
+        UPDATE `{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}` T
+        SET novo_cliente = (
+          T.order_id = (
+            SELECT MIN(order_id)
+            FROM `{BQ_PROJECT}.{BQ_DATASET}.{BQ_TABLE}`
+            WHERE loja = T.loja
+              AND customer_id = T.customer_id
+              AND customer_id IS NOT NULL
+          )
+        )
+        WHERE loja = '{loja}'
+          AND customer_id IS NOT NULL
+        """
+        job = client.query(sql)
+        job.result()
+        return job.num_dml_affected_rows or 0
+    except Exception as exc:
+        logger.warning("[%s] atualizar_novo_cliente_bq falha: %s", loja, exc)
         return 0
 
 
@@ -284,41 +345,41 @@ def salvar_bigquery(client: bq.Client, por_dia: dict[str, dict], fonte: str) -> 
 def sync_loja(client: bq.Client | None, loja: dict, data_ini: date, data_fim: date,
               dry_run: bool) -> None:
     nome   = loja["nome"]
-    fonte  = loja["fonte"]
     base_url = os.getenv(loja["base_url_env"], "").rstrip("/")
     token    = os.getenv(loja["token_env"], "")
     secret   = os.getenv(loja["secret_env"], "")
 
     if not base_url or not token or not secret:
-        logger.warning("Loja '%s' sem credenciais configuradas (%s/%s/%s) — pulando",
-                        nome, loja["base_url_env"], loja["token_env"], loja["secret_env"])
+        logger.warning("Loja '%s' sem credenciais configuradas — pulando", nome)
         return
 
-    logger.info("[%s] Buscando pedidos pagos: %s → %s", nome, data_ini, data_fim)
-    pedidos = buscar_pedidos_pagos(base_url, token, secret, data_ini, data_fim)
-    logger.info("[%s] %d pedidos pagos encontrados", nome, len(pedidos))
+    logger.info("[%s] Buscando pedidos: %s → %s", nome, data_ini, data_fim)
+    orders = buscar_pedidos(base_url, token, secret, data_ini, data_fim)
+    logger.info("[%s] %d pedidos encontrados", nome, len(orders))
 
-    if not pedidos:
-        logger.info("[%s] Nenhum pedido pago no período.", nome)
+    if not orders:
         return
 
-    por_dia = agregar_por_dia(pedidos)
-    receita_total = sum(v["receita"] for v in por_dia.values())
-    logger.info("[%s] Receita total paga: R$%.2f | %d dias com dados", nome, receita_total, len(por_dia))
+    agora = datetime.now(timezone.utc).isoformat()
+    rows  = [_normalizar(o, nome, agora) for o in orders]
 
     if dry_run:
-        print(f"\n=== DRY RUN ({nome}) ===")
-        for d in sorted(por_dia.keys()):
-            v = por_dia[d]
-            print(f"  {d}: R${v['receita']:,.2f} | {v['pedidos']} pedidos | ticket R${v['ticket_medio']:,.2f}")
+        print(f"\n=== DRY RUN ({nome}) — {len(rows)} pedidos ===")
+        for v in rows[:10]:
+            print(f"  {v['order_id']} | {v['data']} | {v['status']} | R${v['valor_pago']:.2f} | "
+                  f"utm_content={v['utm_content']}")
+        if len(rows) > 10:
+            print(f"  ... e mais {len(rows) - 10}")
         return
 
-    n_sqlite = salvar_sqlite(por_dia, fonte)
-    logger.info("[%s] SQLite: %d dias salvos em %s", nome, n_sqlite, DB_PATH)
+    n_sqlite = salvar_sqlite(rows)
+    logger.info("[%s] SQLite: %d pedidos salvos em %s", nome, n_sqlite, DB_PATH)
 
     if client is not None:
-        n_bq = salvar_bigquery(client, por_dia, fonte)
-        logger.info("[%s] BigQuery: %d dias espelhados", nome, n_bq)
+        n_bq = salvar_bigquery(client, rows, nome)
+        n_nc = atualizar_novo_cliente_bq(client, nome)
+        logger.info("[%s] BigQuery: %d pedidos upsert | novo_cliente recalculado: %d linhas",
+                    nome, n_bq, n_nc)
 
 
 def main():
