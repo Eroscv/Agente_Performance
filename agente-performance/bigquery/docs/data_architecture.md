@@ -90,9 +90,13 @@ Regras de limpeza (vivem na silver, não no gold):
 - `ing_ads_diario`: `nivel` derivado; `cliques_todos` menor que `cliques_link`
   (a fonte não coletou) vira NULL e a linha fica marcada em
   `dq_cliques_todos_ausente`;
-- `ing_yampi_pedidos`: as 3 lojas Yampi (poddi, pod-kombucha, pod8), sem o
+- `ing_yampi_pedidos`: as lojas Yampi que têm pedidos (poddi e pod-kombucha; a pod8 está
+  configurada mas nunca devolveu pedidos), sem o
   `novo_cliente` do bronze (a regra de cliente novo é do gold);
 - `ing_shopify_clientes_historico`: primeiro pedido por cliente (cliente novo);
+- `ing_ads_diario.entra_no_total`: anúncio sempre; campanha ou adset só quando aquele dia e
+  campanha não tem anúncio (histórico Meta de 23/01/2024 a 13/05/2026 e Google). Totais usam
+  só linhas com `entra_no_total`;
 - `ing_tickets`: um ticket por `ticket_id`, a versão mais recente.
 
 **Gold (`correlacao`)** — fatos e dimensões prontos para consumo:
@@ -102,6 +106,11 @@ MERGE incremental — nunca sobrescreve histórico), `fato_performance_diaria`
 (investimento + receita + ROAS por cliente/canal/dia, full rebuild).
 Reconstruída pela stored procedure `correlacao.load_gold()`
 (`bigquery/scripts/gold/proc_load_gold.sql`).
+
+**Limite do desenho:** o bronze (`guara_performance`) já guarda cada entidade normalizada pelos
+scripts de sync, e não o payload bruto das APIs. A silver limpa e padroniza sobre isso; não há
+camada com a resposta original da fonte, então um erro de parsing no loader não é reprocessável
+a partir do banco.
 
 **O gold lê somente a silver**, nunca o bronze. `scripts/rebuild_bq_layers.py`
 só dispara as duas procedures, nessa ordem (silver antes de gold). É o último passo de `scripts/cron_master_sync.sh`.
@@ -115,3 +124,11 @@ só dispara as duas procedures, nessa ordem (silver antes de gold). É o último
 alimentadas por `load_silver`, mas só andam quando o bronze (`tickets_alerta`,
 `metricas_sla`) recebe carga nova: o bronze de tickets está parado desde 29/10,
 por parte do pipeline de transcrição.
+
+## Verificações automáticas
+
+`scripts/run_quality_checks.py` roda os 17 SELECTs de `bigquery/tests/quality_checks_*.sql`
+depois de `load_gold` (último passo de `rebuild_bq_layers.py`), grava uma linha por
+verificação em `correlacao.qualidade_dados_checks` e abre um alerta em
+`correlacao.alertas_qualidade_dados` quando alguma retorna linhas. O cron registra falha
+(exit 1) nesse caso.

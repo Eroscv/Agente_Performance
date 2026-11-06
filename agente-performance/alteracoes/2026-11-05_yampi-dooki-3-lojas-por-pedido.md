@@ -8,7 +8,7 @@ CAC — Pod Kombucha" e o CSV `pagos_0111_colab.csv` (102 pedidos pagos de 01/11
 
 ## Causas (todas verificadas contra BigQuery, API da Yampi/Shopify e o CSV)
 
-1. **A POD vende em 3 lojas Yampi** (`poddi`, `pod-kombucha`, `pod8`) com credenciais próprias e o `.env`
+1. **A POD vende em lojas Yampi diferentes** (`poddi` e `pod-kombucha` têm pedidos; `pod8` está configurada mas nunca devolveu pedido) com credenciais próprias e o `.env`
    tinha `DOOKI_BASE_URL` duplicada: só uma loja era sincronizada.
 2. **Pedido era "pago" só por status `paid`**, e a carga gravava o total do dia. Pedido que avança
    (`paid` → `on_carriage` → `delivered`) sumia da receita. Agora a carga é **por pedido** (upsert por

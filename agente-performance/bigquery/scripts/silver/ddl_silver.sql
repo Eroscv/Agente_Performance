@@ -22,10 +22,12 @@ AS
 SELECT * FROM `guara-db.guara_performance.shopify_clientes_historico`
 WHERE FALSE;
 
+-- entra_no_total: linha que soma nos totais (anúncio; ou campanha sem anúncio no mesmo dia).
 -- Cliques totais ausentes na fonte (cliques_todos = 0 com cliques_link > 0) não
 -- são zero: são "não coletado". A silver grava NULL e marca a linha aqui.
 ALTER TABLE `guara-db.ingestao.ing_ads_diario`
-  ADD COLUMN IF NOT EXISTS dq_cliques_todos_ausente BOOL;
+  ADD COLUMN IF NOT EXISTS dq_cliques_todos_ausente BOOL,
+  ADD COLUMN IF NOT EXISTS entra_no_total BOOL;
 
 -- Controle de execução: uma linha por tabela a cada load_silver().
 CREATE TABLE IF NOT EXISTS `guara-db.ingestao.log_cargas` (

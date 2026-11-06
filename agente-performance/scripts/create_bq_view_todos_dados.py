@@ -1,4 +1,8 @@
 """
+DEFASADO: as views em produção estão versionadas em bigquery/scripts/views/. Este gerador
+não reproduz as definições atuais e rodá-lo desfaz correções já aplicadas. Não executar.
+"""
+"""
 Cria (ou recria) a view v_todos_dados no BigQuery.
 
 Estratégia: cada bloco SELECT é construído como dicionário
@@ -14,6 +18,25 @@ from google.cloud import bigquery
 
 P = os.environ.get("BQ_PROJECT", "guara-db")
 D = os.environ.get("BQ_DATASET", "guara_performance")
+
+# A view lê a silver (ingestao), não o bronze. Tabela sem silver (analise_reunioes) fica no bronze.
+_SILVER = {
+    "ads_diario": "ing_ads_diario", "shopify_diario": "ing_shopify_resumo_diario",
+    "pedidos_diario": "ing_shopify_pedidos", "abandoned_checkout_daily": "ing_checkout_abandonado_diario",
+    "abandoned_checkout_detail": "ing_checkout_abandonado_detalhe", "novos_clientes_semanal": "ing_novos_clientes_semanal",
+    "meta_campaign_totals": "ing_meta_campaign_totals", "metricas_sla": "ing_metricas_sla", "tickets_alerta": "ing_tickets",
+}
+FONTE = {t: f"`{P}.ingestao.{s}`" for t, s in _SILVER.items()}
+# dooki_pedidos_diario (legado) agora sai de ing_yampi_pedidos, agregado por dia.
+FONTE["dooki_pedidos_diario"] = f"""(
+  SELECT 'dooki' AS fonte, data, COUNTIF(pago) AS pedidos,
+         SUM(IF(pago, receita_sem_frete, 0)) AS receita,
+         SAFE_DIVIDE(SUM(IF(pago, receita_sem_frete, 0)), COUNTIF(pago)) AS ticket_medio,
+         COUNT(DISTINCT IF(pago, customer_id, NULL)) AS clientes_unicos,
+         MAX(atualizado_em) AS atualizado_em
+  FROM `{P}.ingestao.ing_yampi_pedidos`
+  GROUP BY data
+)"""
 
 # ── Lista canônica de colunas da view ───────────────────────────────────────
 COLS = [
@@ -89,7 +112,7 @@ def block(table: str, mapping: dict) -> str:
     body = ",\n".join(lines)
     return (
         f"-- ── {table} {'─'*(52-len(table))}\n"
-        f"SELECT\n{body}\nFROM `{P}.{D}.{table}`"
+        f"SELECT\n{body}\nFROM {FONTE.get(table, f'`{P}.{D}.{table}`')}"
     )
 
 

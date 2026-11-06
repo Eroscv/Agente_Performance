@@ -96,15 +96,21 @@
   da Bia (tutorial "Como calculamos o CAC — Pod Kombucha"). Espelha as colunas
   do CSV `pagos_*_colab.csv`, então dá para conferir pedido a pedido.
 - **Atualização:** `correlacao.load_gold()` — full rebuild.
-- **Fontes:** `guara_performance.pedidos_diario` (Shopify),
-  `guara_performance.dooki_pedidos` (Yampi: lojas `pod_kombucha` e `poddi`),
-  `guara_performance.shopify_clientes_historico` (primeiro pedido por cliente).
+- **Fontes (silver):** `ingestao.ing_shopify_pedidos`, `ingestao.ing_yampi_pedidos`
+  (lojas `pod_kombucha` e `poddi`; só essas duas têm pedidos no banco) e
+  `ingestao.ing_shopify_clientes_historico` (primeiro pedido por cliente).
 - **Regras:**
   - **pod.com.br** = pedidos Shopify ligados à Yampi pod-kombucha por
     `order_name` = `shopify_order_number`. A Yampi pod-kombucha são os mesmos
     pedidos: ela só dá o status de pagamento, nunca soma receita por cima.
     Sem par na Yampi vale `financial_status = paid` da Shopify
-    (`fonte_pagamento = 'shopify_fallback'`).
+    (`fonte_pagamento = 'shopify_fallback'`). O pedido Shopify nunca passou pelo checkout da
+    Yampi: hoje são 260 pedidos (07/09 a 05/11), 214 deles renovações de assinatura
+    (`source_name = subscription_contract_checkout_one`), 44 `web` e 2 de outro canal. O
+    pagamento é confirmado pela própria Shopify (`financial_status = paid`), que só entra
+    em `pedidos_diario` quando o pedido está pago. Não há reprocessamento posterior: se o
+    pedido for estornado depois, o `shopify_fallback` só deixa de ser pago quando a Shopify
+    parar de devolvê-lo como `paid`.
   - **poddi.com.br** = Yampi poddi, receita própria (`fonte_pagamento = 'yampi_nova'`).
   - **Pago** = transação capturada e não cancelada e status atual fora de
     `cancelled`/`refused`. Cancelado nunca conta, mesmo com captura.
@@ -118,6 +124,10 @@
     pedido (tolerância de 5 min). poddi: e-mail preenchido, nunca comprou no
     pod.com.br antes e é o primeiro pedido do e-mail na poddi (desde 01/10).
     Só conta no CAC se o pedido também for `pago`.
+  - **Primeira compra paga** (`primeira_compra_paga`): o primeiro pedido PAGO do cliente. Difere de
+    `novo_cliente` quando o primeiro pedido da vida foi cancelado: ali `novo_cliente = FALSE` e a
+    compra paga seguinte é recompra pela regra do Colab, mas `primeira_compra_paga = TRUE`.
+    Não substitui `novo_cliente` em nenhuma métrica; está em `fato_cac.cac_primeira_compra_paga`.
   - **Dia** = criação do pedido no horário de São Paulo.
 
 | Coluna | Tipo | Descrição |
@@ -129,6 +139,7 @@
 | `created_at_utc` | TIMESTAMP | Criação em UTC. |
 | `status_atual` | STRING | Status atual na Yampi (NULL em `shopify_fallback`). |
 | `fonte_pagamento` | STRING | `dooki`, `shopify_fallback` ou `yampi_nova`. |
+| `primeira_compra_paga` | BOOL | Primeiro pedido pago do cliente (ver regra acima). |
 | `pago` | BOOL | Regra de pago acima. |
 | `receita_sem_frete` | FLOAT64 | Receita do pedido sem frete. |
 | `total_price` | FLOAT64 | Valor total com frete. |
@@ -144,3 +155,24 @@ dias de pedidos; o primeiro pedido de clientes antigos é inferido por
 `orders_count` (ver `scripts/sync_shopify_clientes_historico.py`). A flag `novo_cliente` da
 POD é confiável a partir de 2026-09-06, primeiro dia coberto pela carga inicial; antes disso,
 quem comprou pela primeira vez entre 01 e 05/09 e recomprou depois aparece como recorrente.
+
+## 6. `correlacao.fato_cac`
+
+- **Propósito:** CAC mensal por cliente, desde 09/2026.
+- **Atualização:** `correlacao.load_gold()`, full rebuild, derivada de `fato_performance_diaria`
+  (acompanha qualquer mudança de regra na mesma carga).
+- **Cálculo:** `cac` = `investimento_total` (Meta ×1,1215, Google ×1) ÷ `novos_clientes` do mês.
+  Só a POD tem `cac_primeira_compra_paga`, que divide pelo número de `primeira_compra_paga`.
+  O mês corrente é parcial (o `periodo_fim` mostra até que dia há dado).
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `cliente_id` | STRING | Cliente. |
+| `periodo_inicio` / `periodo_fim` | DATE | Primeiro dia do mês e último dia com dado. |
+| `novos_clientes` | INT64 | Soma de `novos_clientes` de `fato_performance_diaria`. |
+| `investimento_total` | NUMERIC | Soma de `investimento_ajustado`. |
+| `cac` | NUMERIC | `investimento_total` ÷ `novos_clientes`. |
+| `novos_primeira_compra_paga` | INT64 | Só POD. |
+| `cac_primeira_compra_paga` | NUMERIC | Só POD. |
+| `fonte_logica_novos_clientes` | STRING | Descrição do cálculo. |
+| `calculado_em` | TIMESTAMP | Quando foi calculada. |

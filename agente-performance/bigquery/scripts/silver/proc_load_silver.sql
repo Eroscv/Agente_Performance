@@ -111,15 +111,24 @@ BEGIN
   ''', ['cliente', 'semana_inicio']);
 
   CALL `guara-db.ingestao.sp_upsert`('ing_ads_diario', r'''
-    SELECT * REPLACE(
-      IF(cliques_todos IS NULL OR cliques_todos < cliques_link, NULL, cliques_todos) AS cliques_todos),
-      CASE
-        WHEN ad_id IS NOT NULL THEN 'anuncio'
-        WHEN adset_id IS NOT NULL THEN 'adset'
-        ELSE 'campanha'
-      END AS nivel,
-      cliques_todos IS NULL OR cliques_todos < cliques_link AS dq_cliques_todos_ausente
-    FROM `guara-db.guara_performance.ads_diario`
+    SELECT * EXCEPT(ad_nivel),
+      ad_nivel AS nivel,
+      -- Linha que entra nos totais: anúncio sempre; campanha/adset só quando o mesmo
+      -- dia e campanha não tem anúncio (histórico antes de 14/05/2026 e Google).
+      ad_nivel = 'anuncio'
+        OR NOT LOGICAL_OR(ad_nivel = 'anuncio')
+                 OVER (PARTITION BY cliente, plataforma, campaign_id, data) AS entra_no_total,
+      cliques_todos IS NULL AS dq_cliques_todos_ausente
+    FROM (
+      SELECT * REPLACE(
+        IF(cliques_todos IS NULL OR cliques_todos < cliques_link, NULL, cliques_todos) AS cliques_todos),
+        CASE
+          WHEN ad_id IS NOT NULL THEN 'anuncio'
+          WHEN adset_id IS NOT NULL THEN 'adset'
+          ELSE 'campanha'
+        END AS ad_nivel
+      FROM `guara-db.guara_performance.ads_diario`
+    )
   ''', ['cliente', 'plataforma', 'data', 'campaign_id', 'adset_id', 'ad_id', 'account_id']);
 
   CALL `guara-db.ingestao.sp_upsert`('ing_yampi_pedidos', r'''

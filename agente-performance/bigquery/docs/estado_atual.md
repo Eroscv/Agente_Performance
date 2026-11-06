@@ -30,7 +30,7 @@ GOLD    correlacao          dim_/fato_, pronto para dashboard e relatórios
 | `pedidos_diario` | 8.804 | Shopify, um pedido por linha (`cliente`, `order_id`) |
 | `shopify_diario` | 628 | resumo diário Shopify (`cliente`, `data`) |
 | `abandoned_checkout_daily` / `_detail` | 281 / 1.815 | checkouts abandonados |
-| `dooki_pedidos` | 7.309 | Yampi das 3 lojas, um pedido por linha (`loja`, `order_id`) |
+| `dooki_pedidos` | 7.309 | Yampi (`poddi` 188 e `pod_kombucha` 7.212 pedidos), um pedido por linha (`loja`, `order_id`) |
 | `shopify_clientes_historico` | 38.119 | primeiro pedido por cliente da Shopify da POD |
 | `meta_campaign_totals` | 72 | totais de campanha Meta |
 | `novos_clientes_semanal` | 12 | novos clientes por semana |
@@ -58,7 +58,7 @@ DDL das tabelas que só o MERGE alimenta: `scripts/silver/ddl_silver.sql`.
 | `ing_ads_diario` | 23.534 | `ads_diario` | cliente, plataforma, data, campaign/adset/ad, account | `nivel`; cliques totais ausentes → NULL + `dq_cliques_todos_ausente` |
 | `ing_meta_campaign_totals` | 72 | `meta_campaign_totals` | cliente, período, campanha, conta | — |
 | `ing_novos_clientes_semanal` | 12 | `novos_clientes_semanal` | cliente, semana_inicio | — |
-| `ing_yampi_pedidos` | 7.309 | `dooki_pedidos` | loja, order_id | sem `novo_cliente`; e-mail/utm minúsculos |
+| `ing_yampi_pedidos` | 7.400 | `dooki_pedidos` | loja, order_id | sem `novo_cliente`; e-mail/utm minúsculos |
 | `ing_shopify_clientes_historico` | 38.119 | `shopify_clientes_historico` | cliente, customer_id, email | e-mail minúsculo |
 | `ing_tickets` | 46 | `tickets_alerta` | ticket_id | versão mais recente por ticket |
 | `ing_metricas_sla` | 2.404 | `metricas_sla` | gerado_em, janela_dias, tipo | — |
@@ -75,7 +75,7 @@ Carregada por `correlacao.load_gold()` (`scripts/gold/proc_load_gold.sql`), lend
 | `fato_pedidos_pod` | 7.563 | POD, um pedido por linha: Shopify (pod.com.br) + Yampi poddi, pelas regras do Colab da Bia |
 | `fato_performance_diaria` | 1.170 | investimento, receita, ROAS e novos por cliente/canal/dia; `investimento_ajustado` (Meta ×1,1215) |
 | `fato_tickets`, `alertas_qualidade_dados`, `qualidade_dados_checks` | 46, 8, 14 | subsistema de tickets |
-| `fato_cac` | 1 | placeholder, fora de escopo |
+| `fato_cac` | 8 | CAC mensal por cliente (desde 09/2026), recalculado a cada `load_gold` |
 | `fn_canal_pod` | — | função: canal pelo `utm_source` |
 
 Views para o dashboard: `v_dash_overview_corrigida`, `v_dash_campaigns_corrigida`, `v_dash_shopify_corrigida`.

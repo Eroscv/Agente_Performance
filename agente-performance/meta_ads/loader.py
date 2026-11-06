@@ -91,6 +91,7 @@ FIELDS = ",".join([
     "impressions",
     "reach",
     "clicks",
+    "inline_link_clicks",
     "spend",
     "cpm",
     "frequency",
@@ -167,7 +168,9 @@ def _normalizar(row: dict) -> dict:
     valor_compras = _pixel_val(action_values)
     investimento  = float(row.get("spend", 0) or 0)
     impressoes    = float(row.get("impressions", 0) or 0)
-    cliques_link  = float(row.get("clicks", 0) or 0)
+    # Na API da Meta, `clicks` são TODOS os cliques e `inline_link_clicks` são os cliques no link.
+    cliques_link  = float(row.get("inline_link_clicks", 0) or 0)
+    cliques_todos = float(row.get("clicks", 0) or 0)
 
     roas = round(valor_compras / investimento, 4) if investimento > 0 else None
     cpa  = round(investimento / compras, 2) if compras > 0 else None
@@ -185,7 +188,7 @@ def _normalizar(row: dict) -> dict:
         "impressoes":         impressoes,
         "alcance":            float(row.get("reach", 0) or 0),
         "cliques_link":       cliques_link,
-        "cliques_todos":      float(row.get("unique_clicks", 0) or 0),
+        "cliques_todos":      cliques_todos,
         "investimento":       investimento,
         "compras":            compras,
         "valor_compras":      valor_compras,
