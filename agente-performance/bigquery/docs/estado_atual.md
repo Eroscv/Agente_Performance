@@ -78,6 +78,7 @@ Carregada por `correlacao.load_gold()` (`scripts/gold/proc_load_gold.sql`), lend
 | `fato_performance_diaria` | 1.170 | investimento, receita, ROAS e novos por cliente/canal/dia; `investimento_ajustado` (Meta ×1,1215) |
 | `fato_tickets`, `alertas_qualidade_dados`, `qualidade_dados_checks` | 46, 8, 14 | subsistema de tickets |
 | `fato_cac` | 8 | CAC mensal por cliente (desde 09/2026), recalculado a cada `load_gold` |
+| `log_alteracoes_bq` | — | quem aplicou qual SQL em produção, quando, commit e revisor (`scripts/apply_bq_sql.py`) |
 | `fn_canal_pod` | — | função: canal pelo `utm_source` |
 
 Views para o dashboard: `v_dash_overview_corrigida`, `v_dash_campaigns_corrigida`, `v_dash_shopify_corrigida`.
@@ -92,7 +93,9 @@ Views para o dashboard: `v_dash_overview_corrigida`, `v_dash_campaigns_corrigida
   comprou no pod.com.br e primeiro pedido na poddi desde 01/10.
 - Imposto Meta ×1,1215 em `investimento_ajustado`; o dashboard ainda aplica 1,12.
 
-## Verificação
+## Verificação e revisão
+
+Mudança de view, procedure ou DDL segue `revisao_de_mudancas.md`: branch, pull request com revisor e aplicação só por `scripts/apply_bq_sql.py`.
 
 `tests/quality_checks_silver.sql` (6 verificações) e `tests/quality_checks_gold.sql` (11):
 cada consulta deve voltar zero linhas. Rodar depois de todo `load_silver`/`load_gold`.
