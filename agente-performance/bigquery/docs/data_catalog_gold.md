@@ -63,6 +63,14 @@
 
 ## 4. `correlacao.fato_performance_diaria`
 
+- **Pedidos, receita e novos clientes por cliente:**
+  - **POD:** vêm de `fato_pedidos_pod` (metodologia do Colab: poddi e pod.com.br somados, receita sem frete,
+    pago pela Yampi). Bate com o Colab da Bia.
+  - **Source Of e Botica:** vêm de `ing_shopify_resumo_diario` (receita paga = subtotal sem frete, novos
+    clientes e canais da própria sincronização), que bate com a API da Shopify. `receita_criada` e
+    `pedidos_criados` existem só por dia na Shopify; aqui são repartidos entre os canais na proporção
+    dos pedidos pagos do dia (soma exata por dia, divisão por canal aproximada). Dia sem resumo (histórico
+    antigo) usa `fato_pedidos`.
 - **Propósito:** investimento, pedidos, receita e ROAS por
   cliente/canal/dia — a tabela que a maioria dos dashboards e relatórios
   consulta diretamente.
