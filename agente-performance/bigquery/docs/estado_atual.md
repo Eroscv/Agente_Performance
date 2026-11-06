@@ -37,6 +37,8 @@ GOLD    correlacao          dim_/fato_, pronto para dashboard e relatórios
 | `tickets_alerta` | 50 | tickets das reuniões (subsistema de transcrição) |
 | `metricas_sla` | 2.404 | SLA de tickets (subsistema de transcrição) |
 | `analise_reunioes`, `transcricao` | 35, 4 | transcrição |
+| `raw_yampi_pedidos` / `raw_shopify_pedidos` | 3.754 / 600 | resposta original das APIs (`payload_json`), upsert por chave |
+| `raw_meta_insights` / `raw_google_ads` | a preencher / 23 | idem; a Meta começa a gravar quando o token for renovado |
 | `dooki_pedidos_diario` | 188 | legado (total por dia), não é mais lido |
 
 As views `v_*` (dashboards, relatórios, agente) agora leem a silver (`ingestao`), exceto `v_analise_reunioes`

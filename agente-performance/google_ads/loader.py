@@ -102,6 +102,7 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
     try:
         stream = service.search_stream(customer_id=customer_id, query=query)
         rows = []
+        raw_rows = []   # resposta da API como veio, gravada em raw_google_ads
         skipped = 0
         for batch in stream:
             for row in batch.results:
@@ -117,6 +118,13 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
                     )
                     skipped += 1
                     continue
+                try:
+                    from google.protobuf import json_format
+                    payload = json_format.MessageToDict(type(row).pb(row))
+                except Exception:
+                    payload = {"campaign_id": str(c.id), "campanha": c.name, "data": row.segments.date}
+                raw_rows.append({"customer_id": customer_id, "campaign_id": str(c.id),
+                                 "data": row.segments.date, "payload": payload})
                 rows.append({
                     "customer_id":         customer_id,
                     "data":                row.segments.date,
@@ -138,6 +146,8 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
                 })
 
         logger.info("[%s] %d linhas retornadas (ignoradas de outras contas: %d)", customer_id, len(rows), skipped)
+        from db.raw_writer import salvar_raw
+        salvar_raw("raw_google_ads", ["customer_id", "campaign_id", "data"], raw_rows)
         return rows
 
     except GoogleAdsException as ex:

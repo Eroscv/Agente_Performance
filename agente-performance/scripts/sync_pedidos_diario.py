@@ -241,6 +241,11 @@ def sync_cliente(cliente_key: str, date_start: date, date_end: date) -> int:
     agora = datetime.now(timezone.utc).isoformat()
     rows  = [_normalizar(p, cliente_key, utm_source_type, agora) for p in pedidos_raw]
 
+    # Resposta da Shopify como veio (só os campos pedidos em _FIELDS: sem endereço nem telefone)
+    from db.raw_writer import salvar_raw
+    salvar_raw("raw_shopify_pedidos", ["cliente", "order_id"],
+               [{"cliente": cliente_key, "order_id": p["id"], "payload": p} for p in pedidos_raw])
+
     try:
         from db.bq_writer import enabled, _insert
         if enabled():

@@ -342,6 +342,11 @@ def sync_loja(client: bq.Client | None, loja: dict, data_ini: date, data_fim: da
     agora = datetime.now(timezone.utc).isoformat()
     rows  = [_normalizar(o, nome, agora) for o in orders]
 
+    if not dry_run:
+        from db.raw_writer import salvar_raw
+        salvar_raw("raw_yampi_pedidos", ["loja", "order_id"],
+                   [{"loja": nome, "order_id": o["id"], "payload": o} for o in orders], client=client)
+
     if dry_run:
         print(f"\n=== DRY RUN ({nome}) — {len(rows)} pedidos ===")
         for v in rows[:10]:

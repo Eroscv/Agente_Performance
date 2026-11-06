@@ -120,3 +120,11 @@ SELECT MAX(executado_em) AS ultima_carga
 FROM `guara-db.ingestao.log_cargas`
 WHERE camada = 'silver'
 HAVING MAX(executado_em) < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 12 HOUR);
+
+-- 7. Todo pedido da Yampi dos últimos 30 dias tem a resposta original em raw_yampi_pedidos.
+SELECT d.loja, d.order_id
+FROM `guara-db.guara_performance.dooki_pedidos` d
+WHERE d.data >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
+  AND NOT EXISTS (
+    SELECT 1 FROM `guara-db.guara_performance.raw_yampi_pedidos` r
+    WHERE r.loja = d.loja AND r.order_id = d.order_id);

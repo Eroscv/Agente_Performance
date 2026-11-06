@@ -107,10 +107,15 @@ MERGE incremental — nunca sobrescreve histórico), `fato_performance_diaria`
 Reconstruída pela stored procedure `correlacao.load_gold()`
 (`bigquery/scripts/gold/proc_load_gold.sql`).
 
-**Limite do desenho:** o bronze (`guara_performance`) já guarda cada entidade normalizada pelos
-scripts de sync, e não o payload bruto das APIs. A silver limpa e padroniza sobre isso; não há
-camada com a resposta original da fonte, então um erro de parsing no loader não é reprocessável
-a partir do banco.
+**Raw (dentro do bronze):** as respostas originais das APIs ficam em `raw_<fonte>` no
+`guara_performance`, escritas pelos mesmos syncs por `db/raw_writer.py`: `raw_yampi_pedidos`,
+`raw_shopify_pedidos`, `raw_meta_insights` e `raw_google_ads`. Cada linha tem a chave da fonte,
+`payload_json` (resposta como veio), `payload_hash`, `capturado_em` e `atualizado_em`; o MERGE só
+atualiza quando o conteúdo muda e guarda a versão mais recente (não o histórico de versões).
+Limites: o payload da Shopify traz só os campos pedidos no sync (sem endereço nem telefone, de
+propósito); o raw começa na data da primeira carga e cresce a cada sync (a Yampi cobre os últimos
+45 dias); a silver ainda é derivada das tabelas normalizadas do bronze, não do raw, que serve para
+auditar e reprocessar. A falha do raw nunca derruba o sync.
 
 **O gold lê somente a silver**, nunca o bronze. `scripts/rebuild_bq_layers.py`
 só dispara as duas procedures, nessa ordem (silver antes de gold). É o último passo de `scripts/cron_master_sync.sh`.
@@ -127,7 +132,7 @@ por parte do pipeline de transcrição.
 
 ## Verificações automáticas
 
-`scripts/run_quality_checks.py` roda os 17 SELECTs de `bigquery/tests/quality_checks_*.sql`
+`scripts/run_quality_checks.py` roda os 18 SELECTs de `bigquery/tests/quality_checks_*.sql`
 depois de `load_gold` (último passo de `rebuild_bq_layers.py`), grava uma linha por
 verificação em `correlacao.qualidade_dados_checks` e abre um alerta em
 `correlacao.alertas_qualidade_dados` quando alguma retorna linhas. O cron registra falha

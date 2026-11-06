@@ -35,6 +35,9 @@ sistema (diferente do repositório de referência, que usa
 cada entidade já é inequívoca: `shopify_diario`, `ads_diario`,
 `pedidos_diario`, `abandoned_checkout_daily`, `dooki_pedidos`).
 
+`raw_<fonte>`: resposta original da API, no mesmo dataset do bronze (`raw_yampi_pedidos`,
+`raw_shopify_pedidos`, `raw_meta_insights`, `raw_google_ads`).
+
 ## Silver (`ingestao`)
 
 `ing_<entidade>`, mesmo nome de entidade do bronze, prefixado com `ing_`

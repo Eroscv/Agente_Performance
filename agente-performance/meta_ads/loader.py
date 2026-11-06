@@ -255,6 +255,7 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
 
     url  = f"{API_BASE}/{account_id}/insights"
     rows = []
+    raw_batch: list[dict] = []   # resposta da API como veio, gravada em raw_meta_insights
     page = 0
 
     while url:
@@ -270,6 +271,7 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
 
         batch = data.get("data", [])
         rows.extend([_normalizar(r) for r in batch])
+        raw_batch.extend(batch)
         page += 1
 
         paging   = data.get("paging", {})
@@ -277,6 +279,10 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
         url      = next_url if next_url else None
         params   = {}
 
+    from db.raw_writer import salvar_raw
+    salvar_raw("raw_meta_insights", ["account_id", "ad_id", "data"],
+               [{"account_id": account_id, "ad_id": r.get("ad_id"), "data": r.get("date_start"), "payload": r}
+                for r in raw_batch])
     return rows
 
 
