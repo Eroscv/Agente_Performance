@@ -61,7 +61,13 @@ run_step "Sync Dooki/Yampi" python3 -m dooki.sync --dias 45
 # 7. Primeiro pedido por cliente da Shopify POD (regra de cliente novo do gold)
 run_step "Sync histórico de clientes Shopify POD" python3 scripts/sync_shopify_clientes_historico.py --dias 45
 
-# 8. Reconstrói camadas ingestao/ e correlacao/ no BigQuery
+# 8. Meta Ads semanal (campaign_totals + novos_clientes_semanal). Só na segunda-feira, as 4 semanas
+#    fechadas mais recentes: o snapshot é insert-only/idempotente e uma semana perdida é recuperada.
+if [ "$(date +%u)" = "1" ]; then
+    run_step "Sync Meta semanal" python3 scripts/sync_meta_semanal.py --semanas 4
+fi
+
+# 9. Reconstrói camadas ingestao/ e correlacao/ no BigQuery
 run_step "Reconstruir camadas BigQuery" python3 scripts/rebuild_bq_layers.py
 
 log "===== cron_master_sync concluído ====="

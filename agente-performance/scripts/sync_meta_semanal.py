@@ -222,6 +222,8 @@ def main():
     parser.add_argument("--semana-inicio",  type=str, default=None,
                         help="YYYY-MM-DD da segunda-feira da semana desejada "
                              "(padrão: semana anterior automática)")
+    parser.add_argument("--semanas",        type=int, default=1,
+                        help="Quantas semanas fechadas processar, da mais recente para trás (padrão: 1)")
     parser.add_argument("--dry-run",        action="store_true",
                         help="Busca dados mas não grava no banco")
     args = parser.parse_args()
@@ -236,40 +238,44 @@ def main():
                 date_start, date_start.weekday()
             )
             date_start = date_start - timedelta(days=date_start.weekday())
-        date_end = date_start + timedelta(days=6)
+        semanas = [(date_start, date_start + timedelta(days=6))]
     else:
-        date_start, date_end = semana_anterior()
-
-    logger.info(
-        "=== Sync Semanal Meta campaign_totals | %s (seg) → %s (dom) ===",
-        date_start, date_end,
-    )
-
-    # Semana não pode incluir hoje ou amanhã (período ainda aberto)
-    if date_end >= date.today():
-        logger.error(
-            "Semana solicitada (%s → %s) ainda não está fechada (hoje = %s). "
-            "Use --semana-inicio para especificar uma semana passada.",
-            date_start, date_end, date.today()
-        )
-        sys.exit(1)
+        # A semana anterior e, com --semanas N, as N-1 anteriores a ela (recupera semana perdida)
+        ultima_seg, _ = semana_anterior()
+        semanas = [(ultima_seg - timedelta(days=7 * i), ultima_seg - timedelta(days=7 * i) + timedelta(days=6))
+                   for i in range(args.semanas)]
 
     clientes = carregar_clientes()
     sucessos = erros = pulados = 0
 
-    for key, cfg in clientes.items():
-        if not cfg.get("ativo", False):
-            continue
-        if args.cliente and key != args.cliente:
-            continue
+    for date_start, date_end in semanas:
+        logger.info(
+            "=== Sync Semanal Meta campaign_totals | %s (seg) → %s (dom) ===",
+            date_start, date_end,
+        )
 
-        ok = sync_semanal_cliente(key, cfg, date_start, date_end, dry_run=args.dry_run)
-        if ok is True:
-            sucessos += 1
-        elif ok is False:
-            erros += 1
-        else:
-            pulados += 1
+        # Semana não pode incluir hoje ou amanhã (período ainda aberto)
+        if date_end >= date.today():
+            logger.error(
+                "Semana solicitada (%s → %s) ainda não está fechada (hoje = %s). "
+                "Use --semana-inicio para especificar uma semana passada.",
+                date_start, date_end, date.today()
+            )
+            sys.exit(1)
+
+        for key, cfg in clientes.items():
+            if not cfg.get("ativo", False):
+                continue
+            if args.cliente and key != args.cliente:
+                continue
+
+            ok = sync_semanal_cliente(key, cfg, date_start, date_end, dry_run=args.dry_run)
+            if ok is True:
+                sucessos += 1
+            elif ok is False:
+                erros += 1
+            else:
+                pulados += 1
 
     logger.info(
         "Sync semanal Meta concluído: %d sucesso(s), %d erro(s), %d pulado(s)",
