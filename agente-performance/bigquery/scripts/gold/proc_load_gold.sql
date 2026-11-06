@@ -249,14 +249,46 @@ BEGIN
     WHERE entra_no_total
     GROUP BY cliente, data, plataforma
   ),
+  -- Source Of / Botica (a POD usa fato_pedidos_pod, metodologia do Colab).
+  -- Fonte: resumo diário da Shopify (ing_shopify_resumo_diario), que bate com a API da Shopify:
+  -- receita paga = subtotal sem frete, novos clientes e canais da própria sincronização.
+  -- Os pedidos/receita CRIADOS só existem por dia (sem canal); aqui são repartidos entre os canais
+  -- na proporção dos pedidos pagos do dia, então a soma dos canais é exata e a divisão por canal é
+  -- aproximada. Dia sem resumo (histórico antigo) cai em fato_pedidos.
+  resumo AS (
+    SELECT cliente AS cliente_id, data, pedidos, CAST(receita AS FLOAT64) AS receita,
+           pedidos_meta, CAST(receita_meta AS FLOAT64) AS receita_meta, novos_meta,
+           pedidos_google, CAST(receita_google AS FLOAT64) AS receita_google, novos_google,
+           pedidos_outros, CAST(receita_outros AS FLOAT64) AS receita_outros, novos_outros,
+           pedidos_criados, CAST(receita_criada AS FLOAT64) AS receita_criada,
+           COALESCE(SAFE_DIVIDE(pedidos_meta, pedidos), 0) AS sh_meta,
+           COALESCE(SAFE_DIVIDE(pedidos_google, pedidos), 0) AS sh_google
+    FROM `guara-db.ingestao.ing_shopify_resumo_diario`
+    WHERE cliente != 'pod_kombucha'
+  ),
   pedidos_shopify AS (
-    -- Source Of / Botica. A POD usa fato_pedidos_pod (metodologia do Colab).
-    SELECT cliente_id, data_brt AS data, canal, COUNT(*) AS pedidos,
-      SUM(valor_pago) AS receita, COUNTIF(novo_cliente) AS novos_clientes,
-      CAST(NULL AS INT64) AS pedidos_criados, CAST(NULL AS FLOAT64) AS receita_criada
-    FROM `guara-db.correlacao.fato_pedidos`
-    WHERE status = 'paid' AND cliente_id != 'pod_kombucha'
-    GROUP BY cliente_id, data_brt, canal
+    SELECT cliente_id, data, 'meta' AS canal, pedidos_meta AS pedidos, receita_meta AS receita,
+           novos_meta AS novos_clientes,
+           CAST(ROUND(sh_meta * pedidos_criados) AS INT64) AS pedidos_criados,
+           sh_meta * receita_criada AS receita_criada
+    FROM resumo
+    UNION ALL
+    SELECT cliente_id, data, 'google', pedidos_google, receita_google, novos_google,
+           CAST(ROUND(sh_google * pedidos_criados) AS INT64), sh_google * receita_criada
+    FROM resumo
+    UNION ALL
+    SELECT cliente_id, data, 'outros', pedidos_outros, receita_outros, novos_outros,
+           pedidos_criados - CAST(ROUND(sh_meta * pedidos_criados) AS INT64)
+                           - CAST(ROUND(sh_google * pedidos_criados) AS INT64),
+           receita_criada - sh_meta * receita_criada - sh_google * receita_criada
+    FROM resumo
+    UNION ALL
+    SELECT fp.cliente_id, fp.data_brt, fp.canal, COUNT(*), SUM(fp.valor_pago), COUNTIF(fp.novo_cliente),
+           CAST(NULL AS INT64), CAST(NULL AS FLOAT64)
+    FROM `guara-db.correlacao.fato_pedidos` fp
+    WHERE fp.status = 'paid' AND fp.cliente_id != 'pod_kombucha'
+      AND NOT EXISTS (SELECT 1 FROM resumo r WHERE r.cliente_id = fp.cliente_id AND r.data = fp.data_brt)
+    GROUP BY fp.cliente_id, fp.data_brt, fp.canal
   ),
   pedidos_pod AS (
     SELECT 'pod_kombucha' AS cliente_id, data_brt AS data, canal,
@@ -268,7 +300,10 @@ BEGIN
     FROM `guara-db.correlacao.fato_pedidos_pod`
     GROUP BY data_brt, canal
   ),
-  pedidos AS (SELECT * FROM pedidos_shopify UNION ALL SELECT * FROM pedidos_pod)
+  pedidos AS (
+    SELECT * FROM pedidos_shopify WHERE pedidos > 0 OR pedidos_criados > 0 OR pedidos_criados IS NULL
+    UNION ALL SELECT * FROM pedidos_pod
+  )
   SELECT COALESCE(a.cliente_id, p.cliente_id) AS cliente_id, COALESCE(a.data, p.data) AS data,
     COALESCE(a.canal, p.canal) AS canal, COALESCE(a.investimento, 0) AS investimento,
     a.cliques_link, a.impressoes, COALESCE(p.pedidos, 0) AS pedidos, COALESCE(p.receita, 0) AS receita,
