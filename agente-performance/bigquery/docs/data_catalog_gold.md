@@ -128,6 +128,12 @@
     `novo_cliente` quando o primeiro pedido da vida foi cancelado: ali `novo_cliente = FALSE` e a
     compra paga seguinte é recompra pela regra do Colab, mas `primeira_compra_paga = TRUE`.
     Não substitui `novo_cliente` em nenhuma métrica; está em `fato_cac.cac_primeira_compra_paga`.
+  - **Regra oficial** (decidida a partir dos Colabs da Bia, página do Notion "Documentação — Lógica de CAC
+    e Novo Cliente (colabs Bia)"): `novo_cliente` = o pedido é literalmente o primeiro da vida do cliente
+    na Shopify (qualquer status, tolerância de 300 s) e `novos_clientes` conta só pedidos pagos. Se o primeiro
+    pedido foi cancelado, a compra paga seguinte é recompra por definição, e cliente sem registro no histórico
+    é não-novo (conservador). O CAC oficial é o `cac` de `fato_cac`; `cac_primeira_compra_paga` é só uma
+    leitura complementar.
   - **Dia** = criação do pedido no horário de São Paulo.
 
 | Coluna | Tipo | Descrição |

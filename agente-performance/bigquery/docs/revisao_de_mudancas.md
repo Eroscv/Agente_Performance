@@ -11,11 +11,12 @@ Toda mudança em view, procedure, função ou DDL de produção:
 
 1. **Vai por branch e pull request.** O SQL fica em `bigquery/scripts/` (views em
    `bigquery/scripts/views/<dataset>/<view>.sql`), nunca só no console ou num script solto.
-2. **Tem revisor** diferente de quem escreveu, que aprova o pull request (modelo em
+2. **Tem revisor** diferente de quem escreveu. O revisor das mudanças de produção do BigQuery é o **Miguel**, que aprova o pull request (modelo em
    `.github/pull_request_template.md`: antes e depois, verificações de qualidade).
 3. **Só é aplicada pelo `scripts/apply_bq_sql.py`**, depois do merge. O script recusa arquivo
    não commitado e grava em `correlacao.log_alteracoes_bq` quem aplicou, quando, o commit, o
-   hash do arquivo e o revisor.
+   hash do arquivo e o revisor. Sem `--revisor "Miguel"` o script recusa (a não ser com `--forcar`,
+   que fica registrado como forçado).
 4. Depois de aplicar, rodar `python3 scripts/run_quality_checks.py`.
 
 ## O que não está coberto

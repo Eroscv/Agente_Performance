@@ -9,7 +9,7 @@
 - [ ] O SQL alterado está em `bigquery/scripts/` (views em `bigquery/scripts/views/`)
 - [ ] Comparei antes e depois (contagem de linhas e totais) e colei o resultado abaixo
 - [ ] `python3 scripts/run_quality_checks.py` passou (0 falhas)
-- [ ] Revisor aprovou antes de aplicar com `scripts/apply_bq_sql.py --revisor "<nome>"`
+- [ ] Miguel (revisor) aprovou antes de aplicar com `scripts/apply_bq_sql.py --revisor "<nome>"`
 
 ## Antes e depois
 <!-- números -->

@@ -12,8 +12,8 @@ bigquery/docs/revisao_de_mudancas.md). Este script não substitui a revisão, s�
 que roda em produção é o que foi commitado e que fica registro.
 
 Uso:
-    python3 scripts/apply_bq_sql.py bigquery/scripts/views/guara_performance/v_dash_overview.sql
-    python3 scripts/apply_bq_sql.py --revisor "Nome" arquivo1.sql arquivo2.sql
+    python3 scripts/apply_bq_sql.py --revisor "Miguel" bigquery/scripts/views/guara_performance/v_dash_overview.sql
+    python3 scripts/apply_bq_sql.py --revisor "Miguel" arquivo1.sql arquivo2.sql
     python3 scripts/apply_bq_sql.py --forcar arquivo.sql     # sem checar o git (fica registrado)
 """
 import argparse
@@ -52,6 +52,10 @@ def main() -> int:
     ap.add_argument("--revisor", default=None, help="Quem revisou a mudança (pull request)")
     ap.add_argument("--forcar", action="store_true", help="Não exige arquivo commitado (fica registrado)")
     args = ap.parse_args()
+
+    if not args.revisor and not args.forcar:
+        logger.error('Informe quem revisou: --revisor "Miguel" (ou --forcar, que fica registrado como forçado)')
+        return 1
 
     caminhos = [Path(a).resolve() for a in args.arquivos]
     if not args.forcar:
