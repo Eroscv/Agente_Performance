@@ -71,7 +71,7 @@ flowchart LR
 **Bronze (`guara_performance`)** — espelho bruto de cada fonte, sem
 transformação. Gravado em dual-write pelos scripts de sync
 (`cron_shopify_sync.py`, `sync_pedidos_diario.py`, `sync_gads_diario.py`,
-`sync_meta_diario.py`) via `db/bq_writer.py`, rodando a cada 6h pelo
+`sync_meta_diario.py`) via `db/bq_writer.py`, rodando a cada 3h pelo
 `scripts/cron_master_sync.sh`. Serve como trilha de auditoria: se um
 cálculo do gold parecer errado, o primeiro lugar a conferir é aqui.
 
@@ -132,7 +132,7 @@ por parte do pipeline de transcrição.
 
 ## Verificações automáticas
 
-`scripts/run_quality_checks.py` roda os 18 SELECTs de `bigquery/tests/quality_checks_*.sql`
+`scripts/run_quality_checks.py` roda os 19 SELECTs de `bigquery/tests/quality_checks_*.sql`
 depois de `load_gold` (último passo de `rebuild_bq_layers.py`), grava uma linha por
 verificação em `correlacao.qualidade_dados_checks` e abre um alerta em
 `correlacao.alertas_qualidade_dados` quando alguma retorna linhas. O cron registra falha

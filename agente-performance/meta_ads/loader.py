@@ -353,6 +353,7 @@ def buscar_insights(account_id: str, dias: int = 30,
 
     LOTE = 1  # 1 dia por vez — ranges maiores causam HTTP 500 intermitente na Meta API
     all_rows = []
+    dias_falhos: list[date] = []
     cursor   = date_start
 
     while cursor <= date_end:
@@ -370,11 +371,19 @@ def buscar_insights(account_id: str, dias: int = 30,
                     time.sleep(5 * tentativa)
                 else:
                     logger.error("[%s] Dia %s abortado após 3 tentativas", account_id, cursor)
+                    dias_falhos.append(cursor)
         cursor = lote_fim + timedelta(days=1)
         if cursor <= date_end:
             time.sleep(0.5)  # pausa leve entre dias
 
     logger.info("[%s] Total: %d linhas", account_id, len(all_rows))
+    if dias_falhos:
+        logger.error("[%s] %d dia(s) sem dados por erro da API: %s", account_id, len(dias_falhos),
+                     ", ".join(d.isoformat() for d in dias_falhos))
+        # Todos os dias falharam (token inválido/expirado, conta sem acesso): não é "0 linhas", é falha.
+        if len(dias_falhos) == (date_end - date_start).days + 1:
+            raise RuntimeError(f"Meta API falhou em todos os {len(dias_falhos)} dias de {account_id} "
+                               "(veja o log: token inválido ou expirado?)")
     return all_rows
 
 

@@ -78,6 +78,12 @@ def main() -> int:
                      f"VALUES ('{uuid.uuid4()}', '{dataset}', '{eixo}', '{descricao}', 'aberto', "
                      "CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())").result()
 
+    # Verificação que voltou a passar fecha o alerta que ela mesma tinha aberto
+    for c in checks:
+        if c["passou"]:
+            bq.query(f"UPDATE {TABELA_ALERTAS} SET status = 'resolvido', atualizado_em = CURRENT_TIMESTAMP() "
+                     f"WHERE tabela = '{c['tabela']}' AND eixo = '{c['eixo']}' AND status = 'aberto'").result()
+
     logger.info("%d verificações, %d com falha", len(checks), len(falhas))
     return 1 if falhas else 0
 

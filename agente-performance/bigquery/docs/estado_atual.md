@@ -9,7 +9,7 @@ para nomes, `naming_conventions.md`.
 
 ```
 APIs (Shopify, Meta, Google Ads, Yampi/Dooki)
-   │  scripts de sync (Python, a cada 6h: scripts/cron_master_sync.sh)
+   │  scripts de sync (Python, a cada 3h: scripts/cron_master_sync.sh)
    ▼
 BRONZE  guara_performance   cru, upsert por chave, sem regra de negócio
    │  CALL ingestao.load_silver()   MERGE idempotente + limpeza
