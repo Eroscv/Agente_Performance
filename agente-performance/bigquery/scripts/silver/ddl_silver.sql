@@ -39,3 +39,15 @@ CREATE TABLE IF NOT EXISTS `guara-db.ingestao.log_cargas` (
   linhas_afetadas INT64
 )
 PARTITION BY DATE(executado_em);
+
+-- Estado (UF) do pedido: nova coluna do bronze, carregada pelo MERGE de ing_shopify_pedidos.
+ALTER TABLE `guara-db.ingestao.ing_shopify_pedidos`
+  ADD COLUMN IF NOT EXISTS estado STRING;
+
+-- Itens (SKU) dos pedidos da Shopify, um item por linha.
+CREATE TABLE IF NOT EXISTS `guara-db.ingestao.ing_shopify_pedido_itens`
+PARTITION BY data_brt
+CLUSTER BY cliente
+AS
+SELECT * FROM `guara-db.guara_performance.pedido_itens`
+WHERE FALSE;

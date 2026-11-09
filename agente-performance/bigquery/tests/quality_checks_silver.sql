@@ -15,6 +15,12 @@ WITH checks AS (
     (SELECT MAX(data_brt) FROM `guara-db.guara_performance.pedidos_diario`) AS bronze_max_data,
     (SELECT MAX(data_brt) FROM `guara-db.ingestao.ing_shopify_pedidos`) AS silver_max_data
   UNION ALL
+  SELECT 'ing_shopify_pedido_itens',
+    (SELECT COUNT(*) FROM `guara-db.guara_performance.pedido_itens`),
+    (SELECT COUNT(*) FROM `guara-db.ingestao.ing_shopify_pedido_itens`),
+    (SELECT MAX(data_brt) FROM `guara-db.guara_performance.pedido_itens`),
+    (SELECT MAX(data_brt) FROM `guara-db.ingestao.ing_shopify_pedido_itens`)
+  UNION ALL
   SELECT 'ing_shopify_resumo_diario',
     (SELECT COUNT(*) FROM `guara-db.guara_performance.shopify_diario`),
     (SELECT COUNT(*) FROM `guara-db.ingestao.ing_shopify_resumo_diario`),
@@ -101,7 +107,10 @@ SELECT 'ing_yampi_pedidos', loja, order_id, COUNT(*)
 FROM `guara-db.ingestao.ing_yampi_pedidos` GROUP BY loja, order_id HAVING COUNT(*) > 1
 UNION ALL
 SELECT 'ing_tickets', CAST(NULL AS STRING), ticket_id, COUNT(*)
-FROM `guara-db.ingestao.ing_tickets` GROUP BY ticket_id HAVING COUNT(*) > 1;
+FROM `guara-db.ingestao.ing_tickets` GROUP BY ticket_id HAVING COUNT(*) > 1
+UNION ALL
+SELECT 'ing_shopify_pedido_itens', cliente, CONCAT(order_id, '/', line_item_id), COUNT(*)
+FROM `guara-db.ingestao.ing_shopify_pedido_itens` GROUP BY cliente, order_id, line_item_id HAVING COUNT(*) > 1;
 
 -- 5. Texto sujo que a silver deveria ter limpo: e-mail/utm com maiúscula, espaço ou vazio.
 SELECT 'ing_shopify_pedidos' AS tabela, COUNT(*) AS linhas
@@ -116,7 +125,7 @@ WHERE utm_source != LOWER(TRIM(utm_source)) OR utm_source = ''
    OR customer_email != LOWER(TRIM(customer_email)) OR customer_email = ''
 HAVING COUNT(*) > 0;
 
--- 6. A última carga da silver não pode ter mais de 12h (o cron roda a cada 6h).
+-- 6. A última carga da silver não pode ter mais de 12h (o cron roda a cada 3h).
 SELECT MAX(executado_em) AS ultima_carga
 FROM `guara-db.ingestao.log_cargas`
 WHERE camada = 'silver'
@@ -138,3 +147,15 @@ WHERE (cliente, plataforma) IN (('pod_kombucha', 'meta'), ('pod_kombucha', 'goog
                                 ('source_of', 'meta'), ('source_of', 'google'))
 GROUP BY cliente, plataforma
 HAVING MAX(data) < DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY);
+
+-- 9. Pedido pago da Shopify dos últimos 3 dias sem itens (a carga de itens falhou). A janela é curta de
+--    propósito: pedido que depois foi estornado deixa de vir da API e fica 'paid' no bronze sem itens.
+SELECT p.cliente, COUNT(*) AS pedidos_sem_itens
+FROM `guara-db.ingestao.ing_shopify_pedidos` p
+WHERE p.data_brt >= DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY)
+  AND p.status = 'paid'
+  AND NOT EXISTS (
+    SELECT 1 FROM `guara-db.ingestao.ing_shopify_pedido_itens` i
+    WHERE i.cliente = p.cliente AND i.order_id = p.order_id)
+GROUP BY p.cliente
+HAVING COUNT(*) > 0;

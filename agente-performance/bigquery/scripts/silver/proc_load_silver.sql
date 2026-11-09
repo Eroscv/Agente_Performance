@@ -90,6 +90,11 @@ BEGIN
     FROM `guara-db.guara_performance.pedidos_diario`
   ''', ['cliente', 'order_id']);
 
+  CALL `guara-db.ingestao.sp_upsert`('ing_shopify_pedido_itens', r'''
+    SELECT * REPLACE(UPPER(TRIM(NULLIF(sku, ''))) AS sku)
+    FROM `guara-db.guara_performance.pedido_itens`
+  ''', ['cliente', 'order_id', 'line_item_id']);
+
   CALL `guara-db.ingestao.sp_upsert`('ing_shopify_resumo_diario', r'''
     SELECT * FROM `guara-db.guara_performance.shopify_diario`
   ''', ['cliente', 'data']);

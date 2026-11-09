@@ -31,6 +31,7 @@ GOLD    correlacao          dim_/fato_, pronto para dashboard e relatórios
 | `shopify_diario` | 628 | resumo diário Shopify (`cliente`, `data`) |
 | `abandoned_checkout_daily` / `_detail` | 281 / 1.815 | checkouts abandonados |
 | `dooki_pedidos` | 7.309 | Yampi (`poddi` 188 e `pod_kombucha` 7.212 pedidos), um pedido por linha (`loja`, `order_id`) |
+| `pedido_itens` | ~14.700 | itens dos pedidos da Shopify (SKU, produto, quantidade, receita do item), um item por linha (`cliente`, `order_id`, `line_item_id`); `pedidos_diario.estado` guarda a UF de entrega |
 | `shopify_clientes_historico` | 38.119 | primeiro pedido por cliente da Shopify da POD |
 | `meta_campaign_totals` | 72 | totais de campanha Meta |
 | `novos_clientes_semanal` | 12 | novos clientes por semana |
@@ -61,6 +62,7 @@ DDL das tabelas que só o MERGE alimenta: `scripts/silver/ddl_silver.sql`.
 | `ing_meta_campaign_totals` | 72 | `meta_campaign_totals` | cliente, período, campanha, conta | — |
 | `ing_novos_clientes_semanal` | 12 | `novos_clientes_semanal` | cliente, semana_inicio | — |
 | `ing_yampi_pedidos` | 7.400 | `dooki_pedidos` | loja, order_id | sem `novo_cliente`; e-mail/utm minúsculos |
+| `ing_shopify_pedido_itens` | a carregar | `pedido_itens` | cliente, order_id, line_item_id | SKU maiúsculo, vazio→NULL |
 | `ing_shopify_clientes_historico` | 38.119 | `shopify_clientes_historico` | cliente, customer_id, email | e-mail minúsculo |
 | `ing_tickets` | 46 | `tickets_alerta` | ticket_id | versão mais recente por ticket |
 | `ing_metricas_sla` | 2.404 | `metricas_sla` | gerado_em, janela_dias, tipo | — |
@@ -97,7 +99,7 @@ Views para o dashboard: `v_dash_overview_corrigida`, `v_dash_campaigns_corrigida
 
 Mudança de view, procedure ou DDL segue `revisao_de_mudancas.md`: branch, pull request com revisor e aplicação só por `scripts/apply_bq_sql.py`.
 
-`tests/quality_checks_silver.sql` (6 verificações) e `tests/quality_checks_gold.sql` (11):
+`tests/quality_checks_silver.sql` (9 verificações) e `tests/quality_checks_gold.sql` (11):
 cada consulta deve voltar zero linhas. Rodar depois de todo `load_silver`/`load_gold`.
 
 ## Backups
