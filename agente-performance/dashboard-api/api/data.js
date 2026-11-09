@@ -50,7 +50,7 @@ const QUERIES = {
     ORDER BY data`,
   criativos: `
     SELECT data, campanha, adset, ad_id AS ad, ad_name AS ad_nome,
-           investimento AS inv, compras, receita, cliques_link AS cliques
+           investimento AS inv, compras, receita, cliques_todos AS cliques
     FROM \`${PROJECT_ID}.ingestao.ing_ads_diario\`
     WHERE cliente = @cliente AND nivel = 'anuncio' AND plataforma = 'meta'
     ORDER BY data`,

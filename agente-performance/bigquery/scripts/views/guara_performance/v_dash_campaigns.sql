@@ -25,7 +25,7 @@ SELECT
     ROUND(SUM(compras), 0)                                              AS compras,
     ROUND(SUM(receita), 2)                                              AS receita_plataforma,
     ROUND(SUM(impressoes), 0)                                           AS impressoes,
-    ROUND(SUM(cliques_link), 0)                                         AS cliques,
+    ROUND(SUM(cliques_todos), 0)                                         AS cliques,
     ROUND(SUM(adicoes_carrinho), 0)                                     AS adicoes_carrinho,
     ROUND(SUM(checkout_iniciado), 0)                                    AS checkout_iniciado,
     ROUND(SUM(video_3s), 0)                                             AS video_3s,

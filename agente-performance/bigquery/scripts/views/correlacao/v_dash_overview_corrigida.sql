@@ -12,6 +12,6 @@ SELECT
   ROUND(CASE WHEN canal = 'meta' THEN investimento * 1.1215 ELSE investimento END, 2) AS investimento_ajustado,
   pedidos,
   receita,
-  cliques_link AS cliques,
+  cliques_todos AS cliques,
   roas_real
 FROM `guara-db.correlacao.fato_performance_diaria`;

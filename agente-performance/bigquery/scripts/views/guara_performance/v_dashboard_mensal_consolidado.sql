@@ -10,7 +10,7 @@ WITH ads AS (
         ROUND(SUM(receita), 2)                                          AS receita_plataforma,
         ROUND(SUM(compras), 4)                                          AS compras,
         ROUND(SUM(impressoes), 0)                                       AS impressoes,
-        ROUND(SUM(cliques_link), 0)                                     AS cliques
+        ROUND(SUM(cliques_todos), 0)                                     AS cliques
     FROM `guara-db.guara_performance.v_dashboard_diario`
     GROUP BY 1, 2, 3
 ),

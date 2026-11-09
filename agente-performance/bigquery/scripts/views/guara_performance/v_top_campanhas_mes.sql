@@ -16,8 +16,8 @@ SELECT
                  THEN investimento * 1.1215
                  ELSE investimento END), 0), 2)                   AS roas_real,
     ROUND(SUM(impressoes), 0)                                     AS impressoes,
-    ROUND(SUM(cliques_link), 0)                                   AS cliques,
-    ROUND(SUM(cliques_link) / NULLIF(SUM(impressoes), 0) * 100, 2) AS ctr
+    ROUND(SUM(cliques_todos), 0)                                   AS cliques,
+    ROUND(SUM(cliques_todos) / NULLIF(SUM(impressoes), 0) * 100, 2) AS ctr
 FROM `guara-db.ingestao.ing_ads_diario`
 WHERE data >= DATE_TRUNC(CURRENT_DATE(), MONTH)
 GROUP BY 1, 2, 3

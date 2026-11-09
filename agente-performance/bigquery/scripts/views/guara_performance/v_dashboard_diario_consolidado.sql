@@ -16,8 +16,8 @@ SELECT
 
     ROUND(SUM(impressoes), 0)                                           AS impressoes,
     ROUND(SUM(alcance), 0)                                              AS alcance,
-    ROUND(SUM(cliques_link), 0)                                         AS cliques_link,
-    ROUND(SUM(cliques_link) / NULLIF(SUM(impressoes), 0) * 100, 4)      AS ctr,
+    ROUND(SUM(cliques_todos), 0)                                         AS cliques_link,
+    ROUND(SUM(cliques_todos) / NULLIF(SUM(impressoes), 0) * 100, 4)      AS ctr,
     ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2)     AS cpm,
     ROUND(AVG(frequencia), 2)                                           AS frequencia,
 

@@ -64,7 +64,7 @@ SELECT
     alcance,
     cliques_link,
     cliques_todos,
-    ROUND(cliques_link / NULLIF(impressoes, 0) * 100, 4)                AS ctr,
+    ROUND(cliques_todos / NULLIF(impressoes, 0) * 100, 4)                AS ctr,
     ROUND(investimento / NULLIF(impressoes, 0) * 1000, 2)               AS cpm_real,
     frequencia,
 

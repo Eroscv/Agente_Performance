@@ -16,7 +16,7 @@ SELECT
   ROUND(SUM(CASE WHEN ad.plataforma = 'meta' THEN ad.investimento * 1.1215 ELSE ad.investimento END), 2) AS amount_spent,
   ROUND(SUM(ad.compras), 0) AS compras,
   ROUND(SUM(ad.receita), 2) AS receita_plataforma,
-  ROUND(SUM(ad.cliques_link), 0) AS cliques
+  ROUND(SUM(ad.cliques_todos), 0) AS cliques
 FROM `guara-db.ingestao.ing_ads_diario` ad
 LEFT JOIN `guara-db.correlacao.dim_cliente_alias` a ON a.alias = ad.cliente
 WHERE ad.nivel = 'anuncio'

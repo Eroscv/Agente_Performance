@@ -10,7 +10,7 @@ WITH base AS (
         compras,
         receita,
         impressoes,
-        cliques_link,
+        cliques_todos AS cliques_link,
         CASE WHEN plataforma = 'meta'
              THEN investimento * 1.1215
              ELSE investimento END AS investimento_ajustado

@@ -18,6 +18,6 @@ SELECT
                  ELSE investimento END), 0), 2)                   AS roas_real,
     ROUND(SUM(investimento) / NULLIF(SUM(compras), 0), 2)         AS cpa,
     ROUND(SUM(impressoes), 0)                                     AS impressoes,
-    ROUND(SUM(cliques_link), 0)                                   AS cliques
+    ROUND(SUM(cliques_todos), 0)                                   AS cliques
 FROM `guara-db.ingestao.ing_ads_diario`
 GROUP BY 1, 2, 3;

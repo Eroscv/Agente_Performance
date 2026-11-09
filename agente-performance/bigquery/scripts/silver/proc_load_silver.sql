@@ -12,9 +12,10 @@
 --
 --   A limpeza mora aqui, não no gold:
 --     - texto: trim, e-mail/utm_source/utm_medium em minúsculas, vazio vira NULL
---     - ing_ads_diario: `nivel` derivado; cliques totais menores que cliques no
---       link (a fonte não coletou) viram NULL e a linha fica marcada em
---       dq_cliques_todos_ausente
+--     - ing_ads_diario: `nivel` derivado; cliques_todos = TODOS os cliques e cliques_link =
+--       cliques no link. Linhas do loader antigo da Meta (que gravava todos os cliques em
+--       cliques_link) ganham o total em cliques_todos e cliques_link NULL (não coletado);
+--       a linha fica marcada em dq_cliques. Google: cliques_todos = cliques.
 --     - ing_yampi_pedidos: sem o `novo_cliente` do bronze (regra é do gold)
 --     - ing_tickets: um ticket por ticket_id (a versão mais recente)
 --
@@ -118,10 +119,23 @@ BEGIN
       ad_nivel = 'anuncio'
         OR NOT LOGICAL_OR(ad_nivel = 'anuncio')
                  OVER (PARTITION BY cliente, plataforma, campaign_id, data) AS entra_no_total,
-      cliques_todos IS NULL AS dq_cliques_todos_ausente
+      dq_cliques IS NOT NULL AS dq_cliques_todos_ausente
     FROM (
-      SELECT * REPLACE(
-        IF(cliques_todos IS NULL OR cliques_todos < cliques_link, NULL, cliques_todos) AS cliques_todos),
+      SELECT * EXCEPT(cliques_link, cliques_todos),
+        -- Meta, loader antigo: `clicks` (TODOS os cliques) era gravado em cliques_link e
+        -- cliques_todos ficava 0. O valor antigo é o total de cliques; o de link não foi coletado.
+        -- Google só tem `clicks`: é o total de cliques.
+        CASE
+          WHEN plataforma = 'google' THEN cliques_link
+          WHEN cliques_link > 0 AND COALESCE(cliques_todos, 0) = 0 THEN cliques_link
+          ELSE cliques_todos
+        END AS cliques_todos,
+        IF(plataforma = 'meta' AND cliques_link > 0 AND COALESCE(cliques_todos, 0) = 0, NULL, cliques_link)
+          AS cliques_link,
+        CASE
+          WHEN plataforma = 'meta' AND cliques_link > 0 AND COALESCE(cliques_todos, 0) = 0 THEN 'link_nao_coletado'
+          WHEN plataforma = 'meta' AND cliques_todos < cliques_link THEN 'todos_menor_que_link'
+        END AS dq_cliques,
         CASE
           WHEN ad_id IS NOT NULL THEN 'anuncio'
           WHEN adset_id IS NOT NULL THEN 'adset'

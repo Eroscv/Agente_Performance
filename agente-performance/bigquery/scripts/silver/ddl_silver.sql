@@ -27,7 +27,8 @@ WHERE FALSE;
 -- são zero: são "não coletado". A silver grava NULL e marca a linha aqui.
 ALTER TABLE `guara-db.ingestao.ing_ads_diario`
   ADD COLUMN IF NOT EXISTS dq_cliques_todos_ausente BOOL,
-  ADD COLUMN IF NOT EXISTS entra_no_total BOOL;
+  ADD COLUMN IF NOT EXISTS entra_no_total BOOL,
+  ADD COLUMN IF NOT EXISTS dq_cliques STRING;  -- 'link_nao_coletado' | 'todos_menor_que_link'
 
 -- Controle de execução: uma linha por tabela a cada load_silver().
 CREATE TABLE IF NOT EXISTS `guara-db.ingestao.log_cargas` (

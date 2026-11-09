@@ -244,7 +244,8 @@ BEGIN
   AS
   WITH ads AS (
     SELECT cliente AS cliente_id, data, plataforma AS canal,
-      SUM(investimento) AS investimento, SUM(cliques_link) AS cliques_link, SUM(impressoes) AS impressoes
+      SUM(investimento) AS investimento, SUM(cliques_link) AS cliques_link,
+      SUM(cliques_todos) AS cliques_todos, SUM(impressoes) AS impressoes
     FROM `guara-db.ingestao.ing_ads_diario`
     WHERE entra_no_total
     GROUP BY cliente, data, plataforma
@@ -306,7 +307,8 @@ BEGIN
   )
   SELECT COALESCE(a.cliente_id, p.cliente_id) AS cliente_id, COALESCE(a.data, p.data) AS data,
     COALESCE(a.canal, p.canal) AS canal, COALESCE(a.investimento, 0) AS investimento,
-    a.cliques_link, a.impressoes, COALESCE(p.pedidos, 0) AS pedidos, COALESCE(p.receita, 0) AS receita,
+    a.cliques_link, a.cliques_todos,
+    SAFE_DIVIDE(a.investimento, a.cliques_todos) AS cpc_todos, a.impressoes, COALESCE(p.pedidos, 0) AS pedidos, COALESCE(p.receita, 0) AS receita,
     COALESCE(p.novos_clientes, 0) AS novos_clientes,
     SAFE_DIVIDE(COALESCE(p.receita, 0), COALESCE(a.investimento, 0)) AS roas_real,
     -- Meta com imposto de 12,15% (Google sem imposto). Use esta coluna, não um fator próprio.

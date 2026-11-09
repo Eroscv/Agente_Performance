@@ -80,17 +80,18 @@ SELECT *, bronze_linhas - silver_linhas AS diff_linhas,
 FROM checks
 WHERE bronze_linhas != silver_linhas OR bronze_max_data != silver_max_data;
 
--- 2. Cliques totais nunca menores que cliques no link (a silver limpa isso para NULL).
+-- 2. Cliques totais nunca menores que cliques no link, salvo linha marcada em dq_cliques
+--    (anomalia da própria Meta: clicks < inline_link_clicks).
 SELECT plataforma, nivel, COUNT(*) AS linhas
 FROM `guara-db.ingestao.ing_ads_diario`
-WHERE cliques_todos < cliques_link
+WHERE cliques_todos < cliques_link AND dq_cliques IS NULL
 GROUP BY plataforma, nivel;
 
--- 3. Linha marcada como cliques ausentes tem que ter cliques_todos NULL (e vice-versa).
-SELECT COUNT(*) AS inconsistentes
+-- 3. Meta sem total de cliques onde há investimento (o CPC do dashboard usa cliques_todos).
+SELECT cliente, COUNT(*) AS linhas
 FROM `guara-db.ingestao.ing_ads_diario`
-WHERE dq_cliques_todos_ausente IS DISTINCT FROM (cliques_todos IS NULL OR cliques_todos < cliques_link)
-HAVING COUNT(*) > 0;
+WHERE plataforma = 'meta' AND nivel = 'anuncio' AND investimento > 0 AND cliques_todos IS NULL
+GROUP BY cliente;
 
 -- 4. Chave natural duplicada em qualquer tabela alimentada por MERGE.
 SELECT 'ing_shopify_pedidos' AS tabela, cliente, order_id AS chave, COUNT(*) AS linhas
@@ -128,3 +129,12 @@ WHERE d.data >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)
   AND NOT EXISTS (
     SELECT 1 FROM `guara-db.guara_performance.raw_yampi_pedidos` r
     WHERE r.loja = d.loja AND r.order_id = d.order_id);
+
+-- 8. Mídia paga parada: Meta ou Google de um cliente sem dado nos últimos 3 dias
+--    (token expirado ou sync falhando; o sync do cron pode ter registrado sucesso).
+SELECT cliente, plataforma, MAX(data) AS ultima_data
+FROM `guara-db.ingestao.ing_ads_diario`
+WHERE (cliente, plataforma) IN (('pod_kombucha', 'meta'), ('pod_kombucha', 'google'),
+                                ('source_of', 'meta'), ('source_of', 'google'))
+GROUP BY cliente, plataforma
+HAVING MAX(data) < DATE_SUB(CURRENT_DATE(), INTERVAL 3 DAY);

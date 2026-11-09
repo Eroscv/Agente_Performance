@@ -18,7 +18,7 @@ SELECT
     ROUND(SUM(compras), 0)                                              AS compras,
     ROUND(SUM(receita), 2)                                              AS receita_plataforma,
     ROUND(SUM(impressoes), 0)                                           AS impressoes,
-    ROUND(SUM(cliques_link), 0)                                         AS cliques
+    ROUND(SUM(cliques_todos), 0)                                         AS cliques
 
 FROM (
     SELECT * EXCEPT(rn, nivel, dq_cliques_todos_ausente)
