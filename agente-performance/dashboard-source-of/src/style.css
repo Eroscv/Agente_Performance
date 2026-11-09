@@ -210,6 +210,8 @@ h1 {
   margin-bottom: 20px;
 }
 .kpi {
+  container-type: inline-size;
+  min-width: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -223,9 +225,11 @@ h1 {
   font-weight: 600;
 }
 .kpi .val {
-  font-size: 23px;
+  /* valores grandes (ex.: R$ 1.234.567) encolhem para caber no card */
+  font-size: clamp(13px, calc(100cqw / (var(--chars, 10) * 0.64)), 23px);
   font-weight: 700;
   margin-top: 6px;
+  white-space: nowrap;
 }
 .cmp {
   font-size: 12px;
@@ -378,4 +382,12 @@ tr:last-child td {
   .filterbar {
     padding: 12px 16px 8px;
   }
+}
+
+/* nomes de anúncio são longos: quebram em vez de alargar a tabela */
+table.criativos td:nth-child(1),
+table.criativos td:nth-child(2) {
+  max-width: 230px;
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }
