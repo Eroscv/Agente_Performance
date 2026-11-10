@@ -346,7 +346,7 @@ def buscar_insights(account_id: str, dias: int = 30,
                     token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
     """Busca insights de anúncios via API em lotes de 14 dias."""
     _get_token(token_env)  # valida token antes de iterar
-    date_end   = date.today() - timedelta(days=1)
+    date_end   = date.today()  # inclui o dia corrente (parcial); a próxima carga sobrescreve
     date_start = date_end - timedelta(days=dias - 1)
 
     logger.info("[%s] Buscando %d dias (%s → %s) em lotes", account_id, dias, date_start, date_end)

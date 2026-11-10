@@ -88,7 +88,7 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
     client   = get_client()
     service  = client.get_service("GoogleAdsService")
 
-    date_end   = date.today() - timedelta(days=1)  # ontem
+    date_end   = date.today()  # inclui o dia corrente (parcial); a próxima carga sobrescreve
     date_start = date_end - timedelta(days=dias - 1)
 
     query = QUERY.format(

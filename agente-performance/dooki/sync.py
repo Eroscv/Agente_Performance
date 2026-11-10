@@ -119,6 +119,7 @@ def buscar_pedidos(base_url: str, token: str, secret: str,
     e paramos quando a data sair do período.
     """
     pedidos = []
+    vistos  = set()  # pedido novo durante a paginação desloca as páginas e repete pedido; o MERGE rejeita duplicata
     limit   = 100
     data_inicio_str = data_inicio.isoformat()
     data_fim_str    = data_fim.isoformat()
@@ -142,6 +143,9 @@ def buscar_pedidos(base_url: str, token: str, secret: str,
             if data_criacao < data_inicio_str:
                 passou_inicio = True
                 break       # já passou do início, pode parar
+            if order["id"] in vistos:
+                continue
+            vistos.add(order["id"])
             pedidos.append(order)
 
         last_date = orders[-1]["created_at"]["date"][:10] if orders else ""
@@ -373,7 +377,7 @@ def main():
     args = parser.parse_args()
 
     hoje      = date.today()
-    data_fim  = hoje - timedelta(days=1)   # ontem (dia corrente incompleto)
+    data_fim  = hoje   # inclui o dia corrente (parcial); a próxima carga sobrescreve
     data_ini  = hoje - timedelta(days=args.dias)
 
     lojas = [l for l in LOJAS if args.loja is None or l["nome"] == args.loja]
