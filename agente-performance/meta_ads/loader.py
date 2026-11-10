@@ -99,7 +99,7 @@ FIELDS = ",".join([
     "video_thruplay_watched_actions",
     "video_p25_watched_actions",
     "video_p50_watched_actions",
-    "video_view_3_sec_actions",
+    # video_view_3_sec_actions foi removido da Graph API (erro #100 em 11/2026); 3s vem de actions[video_view].
     "objective",
     "quality_ranking",
     "engagement_rate_ranking",
@@ -194,7 +194,7 @@ def _normalizar(row: dict) -> dict:
         "roas_compras":       roas,
         "cpm":                float(row.get("cpm", 0) or 0),
         "frequencia":         float(row.get("frequency", 0) or 0),
-        "video_3s":           _parse_video(row.get("video_view_3_sec_actions")),  # 3-second video views (corrigido de video_play_actions)
+        "video_3s":           _parse_action(actions, "video_view"),  # visualizações de 3 s (action_type video_view)
         "video_50pct":        _parse_video(row.get("video_p50_watched_actions")),
         "thruplays":          _parse_video(row.get("video_thruplay_watched_actions")),
         "adicoes_carrinho":   _parse_action(actions, "add_to_cart"),
