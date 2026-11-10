@@ -275,7 +275,7 @@ def main():
         "Sync semanal Meta concluído: %d sucesso(s), %d erro(s), %d pulado(s)",
         sucessos, erros, pulados,
     )
-    sys.exit(1 if erros > 0 and sucessos == 0 else 0)
+    sys.exit(1 if erros else 0)  # falha parcial também falha a unit (antes: só se tudo falhasse)
 
 
 if __name__ == "__main__":

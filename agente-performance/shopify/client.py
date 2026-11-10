@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-_STORE   = os.getenv("SHOPIFY_STORE", "source-of-brasil")
+_STORE   = os.getenv("SHOPIFY_STORE", "source-of-brasil").removesuffix(".myshopify.com")
 _TOKEN   = os.getenv("SHOPIFY_TOKEN", "")
 _API_VER = "2024-01"
 _BASE    = f"https://{_STORE}.myshopify.com/admin/api/{_API_VER}"
@@ -76,7 +76,7 @@ def get_client_for(cliente_key: str):
     if not cfg:
         raise ValueError(f"cliente_key '{cliente_key}' não configurado em shopify/client.py")
 
-    store = os.getenv(cfg["store_env"], cfg["store_default"])
+    store = os.getenv(cfg["store_env"], cfg["store_default"]).removesuffix(".myshopify.com")  # aceita os dois formatos
     token = os.getenv(cfg["token_env"], "")
 
     if not store:

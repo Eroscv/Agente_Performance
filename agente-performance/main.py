@@ -26,6 +26,7 @@ Inicialização:
 """
 
 import asyncio
+import hmac
 import logging
 import os
 
@@ -33,6 +34,7 @@ import uvicorn
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from slack_bolt.adapter.fastapi.async_handler import AsyncSlackRequestHandler
 
 load_dotenv()
@@ -105,6 +107,21 @@ slack_handler = AsyncSlackRequestHandler(slack_app)
 @app.post("/slack/events")
 async def slack_events(request: Request):
     return await slack_handler.handle(request)
+
+
+# ── Autenticação da API interna ───────────────────────────────────────────────
+# Só /health e /slack/events (assinado pelo Slack) são abertos. O resto (/sql, /consulta, /db/reload,
+# /shopify/sync...) gasta tokens ou mexe em dados: exige X-API-Token = API_TOKEN. Sem API_TOKEN, nega.
+_ABERTAS = {"/health", "/slack/events"}
+
+
+@app.middleware("http")
+async def _exige_token(request: Request, call_next):
+    if request.url.path not in _ABERTAS:
+        esperado = os.getenv("API_TOKEN", "")
+        if not esperado or not hmac.compare_digest(request.headers.get("x-api-token", ""), esperado):
+            return JSONResponse({"detail": "não autorizado"}, status_code=401)
+    return await call_next(request)
 
 
 # ── Monta rotas da API ────────────────────────────────────────────────────────

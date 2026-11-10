@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS gads_campanhas_diario (
 """
 
 # GAQL — Google Ads Query Language
+# Sem filtro de status: campanha removida HOJE gastou ONTEM. Com "status != REMOVED", o replace da
+# janela apagava esse investimento do banco. O status continua na coluna para quem quiser filtrar na leitura.
 QUERY = """
     SELECT
         customer.id,
@@ -73,7 +75,6 @@ QUERY = """
         campaign_budget.amount_micros
     FROM campaign
     WHERE segments.date BETWEEN '{date_start}' AND '{date_end}'
-      AND campaign.status != 'REMOVED'
     ORDER BY segments.date DESC, metrics.cost_micros DESC
 """
 

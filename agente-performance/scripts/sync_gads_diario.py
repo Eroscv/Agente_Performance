@@ -143,7 +143,7 @@ def main():
             erros += 1
 
     logger.info("Sync concluído: %d sucesso(s), %d erro(s)", sucessos, erros)
-    sys.exit(1 if erros > 0 and sucessos == 0 else 0)
+    sys.exit(1 if erros else 0)  # falha parcial também falha a unit (antes: só se tudo falhasse)
 
 
 if __name__ == "__main__":

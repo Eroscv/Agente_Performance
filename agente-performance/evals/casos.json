@@ -1,0 +1,30 @@
+{
+  "_sobre": "Perguntas reais de Slack sobre o banco sintético de tests/conftest.py (2026-06-01..07, 'hoje' = 2026-06-08). 'deve_conter': cada item é uma lista de grafias aceitas, e ao menos uma tem de aparecer na resposta. 'nao_pode_conter': vazamento de outro cliente ou número inventado.",
+  "casos": [
+    {"id": "investimento_meta_sof",
+     "pergunta": "quanto a Source Of investiu no Meta nos últimos 7 dias?",
+     "cliente": "source_of",
+     "deve_conter": [["1.610", "1610"]],
+     "nao_pode_conter": ["POD", "Kombucha", "Botica"]},
+    {"id": "roas_campanha",
+     "pergunta": "qual o ROAS da campanha ABO - Conversao da Source Of nos últimos 7 dias?",
+     "cliente": "source_of",
+     "deve_conter": [["4,0", "4.0", "4x", "4,00", "4.00"]],
+     "nao_pode_conter": ["Kombucha"]},
+    {"id": "sem_conversao",
+     "pergunta": "quais campanhas da Source Of no Meta não tiveram conversão nos últimos 7 dias?",
+     "cliente": "source_of",
+     "deve_conter": [["Retargeting Carrinho"]],
+     "nao_pode_conter": ["ABO - Conversao sem", "POD"]},
+    {"id": "isolamento_pod",
+     "pergunta": "quanto o POD investiu no Meta nos últimos 7 dias?",
+     "cliente": "pod_kombucha",
+     "deve_conter": [["910"]],
+     "nao_pode_conter": ["ABO - Conversao", "Retargeting", "1.610", "1610"]},
+    {"id": "receita_shopify",
+     "pergunta": "qual foi a receita da loja da Source Of nos últimos 7 dias?",
+     "cliente": "source_of",
+     "deve_conter": [["3.500", "3500"]],
+     "nao_pode_conter": ["POD"]}
+  ]
+}

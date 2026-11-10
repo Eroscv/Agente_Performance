@@ -611,7 +611,7 @@ def reformatar_proximas_etapas(texto: str, anthropic_key: str = "") -> str:
         import anthropic
         client = anthropic.Anthropic(api_key=anthropic_key)
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001"),
             max_tokens=1000,
             system=_REFORMATAR_SYSTEM,
             messages=[{"role": "user", "content": texto}],

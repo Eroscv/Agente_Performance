@@ -71,7 +71,7 @@ def _get_headers(token: str) -> dict:
 def _paginar_pedidos(store: str, token: str,
                      date_start: date, date_end: date) -> list[dict]:
     """Busca todos os pedidos pagos no período com cursor pagination."""
-    url = f"https://{store}.myshopify.com/admin/api/{API_VERSION}/orders.json"
+    url = f"https://{store.removesuffix('.myshopify.com')}.myshopify.com/admin/api/{API_VERSION}/orders.json"
     headers = _get_headers(token)
     params = {
         "limit":            250,

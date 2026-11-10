@@ -34,18 +34,29 @@ ADS_TABLE = f"`{PROJECT}.{DATASET}.ads_diario`"
 V_ALERTAS = f"`{PROJECT}.{DATASET}.v_alertas_campanha`"
 
 
+# Teto por query: SQL gerado por LLM não pode varrer a tabela inteira várias vezes por pergunta.
+MAX_BYTES = int(os.environ.get("BQ_MAX_BYTES", 2_000_000_000))  # 2 GB ≈ US$ 0,01
+
+
+def _credencial() -> str:
+    """Leitura usa a conta só-leitura (BQ_READONLY_CREDENTIALS) quando existe; senão a padrão."""
+    return os.environ.get("BQ_READONLY_CREDENTIALS") or os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+
+
 def enabled() -> bool:
     """True se credenciais BQ estão configuradas e o arquivo existe."""
-    creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
+    creds = _credencial()
     return bool(creds and Path(creds).exists())
 
 
 def _client():
-    """Retorna singleton do BigQuery Client."""
+    """Retorna singleton do BigQuery Client (conta só-leitura, se configurada)."""
     global _BQ_CLIENT
     if _BQ_CLIENT is None:
         from google.cloud import bigquery
-        _BQ_CLIENT = bigquery.Client()
+        ro = os.environ.get("BQ_READONLY_CREDENTIALS")
+        _BQ_CLIENT = (bigquery.Client.from_service_account_json(ro, project=PROJECT) if ro
+                      else bigquery.Client())
     return _BQ_CLIENT
 
 
@@ -69,7 +80,7 @@ def _normalize_row(row: dict) -> dict:
     return result
 
 
-def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
+def query_bq(sql: str, params: Optional[list] = None, estrito: bool = False) -> list[dict]:
     """
     Executa query no BigQuery e retorna lista de dicts.
 
@@ -84,7 +95,7 @@ def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
         from google.cloud import bigquery
         bq = _client()
 
-        job_config = bigquery.QueryJobConfig()
+        job_config = bigquery.QueryJobConfig(maximum_bytes_billed=MAX_BYTES)
         if params:
             job_config.query_parameters = [
                 bigquery.ScalarQueryParameter(f"p{i}", _bq_type(v), v)
@@ -95,6 +106,8 @@ def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
         return [_normalize_row(dict(r)) for r in rows]
     except Exception as exc:
         logger.error("[BQReader] Erro na query: %s\nSQL: %.300s", exc, sql)
+        if estrito:  # quem pede estrito prefere erro a "sem dados" falso
+            raise
         return []
 
 

@@ -43,8 +43,10 @@ from slack.responder import _processar_e_responder
 
 # ── Fluxo de criação manual de cards no Notion via Slack ─────────────────────
 import sys as _sys
-_sys.path.insert(0, "/home/ubuntu/.openclaw/workspace/transcricao")
-_sys.path.insert(0, "/home/ubuntu/.openclaw/workspace")
+from pathlib import Path as _Path
+_RAIZ = _Path(__file__).resolve().parents[2]          # raiz do repo (antes: /home/ubuntu/.openclaw/...)
+_sys.path.insert(0, str(_RAIZ / "transcricao"))
+_sys.path.insert(0, str(_RAIZ))
 from card_handlers import (
     registrar_handlers as _registrar_criar_card,
     cmd_tutorial_transcricao as _cmd_tut_transcricao,

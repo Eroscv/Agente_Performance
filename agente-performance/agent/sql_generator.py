@@ -52,7 +52,7 @@ def _call_llm(system: str, user: str, max_tokens: int = 512) -> str:
     """Chamada simplificada ao Claude para geração de SQL."""
     client = _get_client()
     resp = client.messages.create(
-        model=os.getenv("ANTHROPIC_MODEL", "claude-haiku-4-5"),
+        model=os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001"),
         max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],
@@ -129,7 +129,7 @@ REGRAS OBRIGATÓRIAS:
   4. CPA calculado como: ROUND(SUM(investimento)/NULLIF(SUM(compras),0), 2)
   5. CTR como: ROUND(SUM(cliques_link)/NULLIF(SUM(impressoes),0)*100, 2)
   6. Filtros de data: data >= '2026-08-01' AND data <= '2026-08-31'
-  7. Apenas SELECT — nenhum INSERT/UPDATE/DELETE/DROP
+  7. Apenas SELECT — nenhum INSERT/UPDATE/DELETE/DROP; nunca use OR (use coluna IN ('a', 'b'))
   8. Nomes de tabelas sempre com backtick: `guara-db.guara_performance.ads_diario`
   9. NÃO use campanhas_unificada nem cliente_key — não existem no BQ
   10. HAVING com múltiplas agregações: prefira subquery wrapper:
@@ -306,9 +306,13 @@ def _sql_from_plan(
 # ── Validação ─────────────────────────────────────────────────────────────────
 _MAX_ROWS = 50
 _FORBIDDEN_RE = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|ATTACH|PRAGMA|VACUUM)\b",
+    r"\b(INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|ATTACH|PRAGMA|VACUUM|MERGE|TRUNCATE|GRANT|REVOKE"
+    r"|EXPORT|CALL|EXECUTE|DECLARE|SET|BEGIN|LOAD)\b|;",
     re.IGNORECASE,
 )
+# Todo literal comparado a `cliente` tem de ser o cliente da conversa; IN/<>/LIKE/OR em cliente são recusados.
+_CLIENTE_LIT_RE = re.compile(r"\bcliente\s*=\s*'([^']*)'", re.IGNORECASE)
+_CLIENTE_RUIM_RE = re.compile(r"\bcliente\s*(!=|<>|\bIN\b|\bLIKE\b|\bIS\b)|\bcliente\s*=\s*[^'\s]", re.IGNORECASE)
 _LIMIT_RE    = re.compile(r"\bLIMIT\s+\d+", re.IGNORECASE)
 _CLIENTE_RE  = re.compile(r"\bcliente\s*=", re.IGNORECASE)
 
@@ -334,7 +338,15 @@ def _validate_sql(sql: str, cliente: str) -> tuple[str, str | None]:
     sql = match.group(1).strip()
 
     if _FORBIDDEN_RE.search(sql):
-        return sql, "SQL gerado contém operação não permitida (DDL/DML)."
+        return sql, "SQL gerado contém operação não permitida (DDL/DML ou múltiplas instruções)."
+
+    # Isolamento entre clientes: nenhum outro cliente pode aparecer na consulta.
+    if _CLIENTE_RUIM_RE.search(sql) or any(v != cliente for v in _CLIENTE_LIT_RE.findall(sql)):
+        return sql, "SQL gerado consulta outro cliente."
+    # `cliente = 'x' AND a OR b` escapa do filtro pela precedência. ponytail: recusa OR em vez de
+    # parsear o SQL; o prompt pede IN (...). Isolamento forte = row access policy por cliente no BQ.
+    if re.search(r"\bOR\b", sql, re.IGNORECASE):
+        return sql, "SQL gerado usa OR (use IN (...))."
 
     # Garante LIMIT
     if not _LIMIT_RE.search(sql):
@@ -457,7 +469,7 @@ def executar_sql_dinamico(
         }
 
     try:
-        rows = _query_fed(sql, cliente_key=cliente_key)
+        rows = _query_fed(sql, estrito=True)  # antes: kwarg inexistente → TypeError em toda pergunta
         logger.info(
             "[SQLGenerator] OK — %d linhas em %dms (modo=%s)",
             len(rows), int((time.time() - t0) * 1000), modo,

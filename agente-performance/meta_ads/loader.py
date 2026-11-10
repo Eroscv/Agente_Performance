@@ -357,6 +357,15 @@ def _enriquecer_status(
     return rows
 
 
+class SyncIncompleto(Exception):
+    """Alguns dias não vieram da API. `rows` tem o que veio (pode e deve ser gravado); `dias` lista os que faltam."""
+
+    def __init__(self, account_id: str, rows: list, dias: list):
+        self.rows, self.dias = rows, dias
+        super().__init__(f"{account_id}: {len(dias)} dia(s) sem dados após 3 tentativas: "
+                         f"{', '.join(str(d) for d in dias[:10])}{'…' if len(dias) > 10 else ''}")
+
+
 def buscar_insights(account_id: str, dias: int = 30,
                     token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
     """Busca insights de anúncios via API em lotes de 14 dias."""
@@ -370,6 +379,7 @@ def buscar_insights(account_id: str, dias: int = 30,
     all_rows = []
     cursor   = date_start
 
+    falhas: list = []
     while cursor <= date_end:
         lote_fim = min(cursor + timedelta(days=LOTE - 1), date_end)
         # Retry por lote: até 3 tentativas com backoff
@@ -385,11 +395,14 @@ def buscar_insights(account_id: str, dias: int = 30,
                     time.sleep(5 * tentativa)
                 else:
                     logger.error("[%s] Dia %s abortado após 3 tentativas", account_id, cursor)
+                    falhas.append(cursor)
         cursor = lote_fim + timedelta(days=1)
         if cursor <= date_end:
             time.sleep(0.5)  # pausa leve entre dias
 
     logger.info("[%s] Total: %d linhas", account_id, len(all_rows))
+    if falhas:
+        raise SyncIncompleto(account_id, all_rows, falhas)
     return all_rows
 
 
@@ -597,7 +610,12 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         account_id = f"act_{account_id}"
 
     try:
-        rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
+        incompleto = None
+        try:
+            rows = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
+        except SyncIncompleto as e:
+            # Grava o que veio (dias bons não podem esperar pelos ruins) e falha no fim, para alertar.
+            rows, incompleto = e.rows, e
         # Guarda: rejeitar linhas de contas diferentes da solicitada
         # (pode ocorrer em Business Managers com contas compartilhadas)
         # Normaliza: Meta API retorna account_id sem o prefixo 'act_'
@@ -649,10 +667,18 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
     # Registra sucesso no monitor de alertas
     try:
         from db.sync_alerts import registrar_resultado
-        registrar_resultado(cliente_key, "meta", sucesso=True)
+        if not incompleto:  # sucesso aqui zeraria a contagem de falhas e o alerta nunca dispararia
+            registrar_resultado(cliente_key, "meta", sucesso=True)
     except Exception:
         pass
 
+    if incompleto:
+        try:
+            from db.sync_alerts import registrar_resultado
+            registrar_resultado(cliente_key, "meta", sucesso=False, erro=str(incompleto))
+        except Exception as e_alerta:
+            logger.error("[alerta] não consegui registrar sync incompleto: %s", e_alerta)
+        raise incompleto
     info   = resumo_banco(tabela, db_path=db_path)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
     return linhas, periodo

@@ -279,7 +279,7 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
         api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("AWS_CLAUDE_KEY", "")
         _anthropic = anthropic.Anthropic(api_key=api_key)
         msg = _anthropic.messages.create(
-            model=os.getenv("CLAUDE_MODEL_LP", "claude-opus-4-5"),
+            model=os.getenv("CLAUDE_MODEL_LP", "claude-sonnet-4-6"),
             max_tokens=8192,
             messages=[{"role": "user", "content": prompt}],
         )

@@ -248,7 +248,7 @@ def reset_federated_conn() -> None:
 
 # ── Helpers de query ──────────────────────────────────────────────────────────
 
-def query_fed(sql: str, params: tuple = ()) -> list[dict]:
+def query_fed(sql: str, params: tuple = (), estrito: bool = False) -> list[dict]:
     """
     Query analítica — FONTE PRIMÁRIA: BigQuery.
     Fallback para DuckDB/SQLite se BQ indisponível.
@@ -262,8 +262,10 @@ def query_fed(sql: str, params: tuple = ()) -> list[dict]:
         from db.bq_translator import translate as _translate
         if _bq_enabled():
             bq_sql, bq_params = _translate(sql, params)
-            return _query_bq(bq_sql, bq_params if bq_params else None)
+            return _query_bq(bq_sql, bq_params if bq_params else None, estrito=estrito)
     except Exception as _bq_exc:
+        if estrito:
+            raise
         logger.warning("[query_fed] BQ falhou (%s) — fallback DuckDB", _bq_exc)
     # Fallback: DuckDB local
     from db.duck import query_duck
