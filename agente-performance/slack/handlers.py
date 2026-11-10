@@ -189,6 +189,14 @@ async def handle_ajuda_command(ack, respond):
     await respond(text=AJUDA_TEXTO, response_type="ephemeral")
 
 
+async def _ancora(client, command) -> str:
+    """Slash command não gera mensagem própria: posta uma âncora e devolve o ts dela para a resposta ir em thread.
+    (Antes usava str(time.time()) como thread_ts; o Slack recusa ts que não existe: invalid_thread_ts.)"""
+    pedido = f"/{command['command'].lstrip('/')} {command.get('text') or ''}".strip()
+    r = await client.chat_postMessage(channel=command["channel_id"], text=f"<@{command['user_id']}> pediu `{pedido}`")
+    return r["ts"]
+
+
 # ── /hoje — resumo do dia atual ───────────────────────────────────────────────
 
 @app.command("/hoje")
@@ -196,7 +204,7 @@ async def handle_hoje(ack, respond, command, client):
     await ack()
     channel  = command["channel_id"]
     user_id  = command["user_id"]
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
     await respond(text="⏳ Buscando dados de hoje...", response_type="ephemeral")
     await _processar_e_responder(
         text="resumo geral de hoje",
@@ -211,7 +219,7 @@ async def handle_semana(ack, respond, command, client):
     await ack()
     channel   = command["channel_id"]
     user_id   = command["user_id"]
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
     await respond(text="⏳ Buscando dados da semana...", response_type="ephemeral")
     await _processar_e_responder(
         text="resumo geral dos últimos 7 dias",
@@ -226,7 +234,7 @@ async def handle_mes(ack, respond, command, client):
     await ack()
     channel   = command["channel_id"]
     user_id   = command["user_id"]
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
     texto_arg = command.get("text", "").strip()
     # Aceita argumento: /mes junho ou /mes 2026-05
     if texto_arg:
@@ -247,7 +255,7 @@ async def handle_top(ack, respond, command, client):
     await ack()
     channel   = command["channel_id"]
     user_id   = command["user_id"]
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
     arg = command.get("text", "").strip().lower()
 
     # Exemplos: /top roas · /top compras · /top 5 roas · /top
@@ -276,7 +284,7 @@ async def handle_campanha(ack, respond, command, client):
     await ack()
     channel   = command["channel_id"]
     user_id   = command["user_id"]
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
     nome = command.get("text", "").strip()
 
     if not nome:
@@ -306,7 +314,7 @@ async def handle_alertas(ack, respond, command, client):
     await ack()
     channel   = command["channel_id"]
     user_id   = command["user_id"]
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
     await respond(text="⏳ Verificando alertas de performance...", response_type="ephemeral")
     await _processar_e_responder(
         text="quais campanhas estão com ROAS ruim ou sem conversão nos últimos 30 dias?",
@@ -321,7 +329,7 @@ async def handle_funil(ack, respond, command, client):
     await ack()
     channel   = command["channel_id"]
     user_id   = command["user_id"]
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
     nome = command.get("text", "").strip()
 
     if nome:
@@ -343,7 +351,7 @@ async def handle_compare(ack, respond, command, client):
     await ack()
     channel   = command["channel_id"]
     user_id   = command["user_id"]
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
     arg = command.get("text", "").strip()
 
     if not arg:
@@ -485,7 +493,7 @@ async def handle_pod(ack, respond, command, client):
     channel   = command["channel_id"]
     user_id   = command["user_id"]
     arg       = command.get("text", "").strip() or "como foi essa semana?"
-    thread_ts = str(__import__("time").time())
+    thread_ts = await _ancora(client, command)
 
     # /pod status — resposta instantânea sem Claude (item 4)
     if arg.strip().lower() in ("status", "hoje", "agora"):
