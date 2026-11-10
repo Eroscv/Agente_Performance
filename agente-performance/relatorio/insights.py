@@ -125,18 +125,10 @@ def _campanhas_para_texto(campanhas: list[dict], max_camps: int = 10) -> str:
 def _chamar_claude(prompt: str) -> str:
     """Chama Claude e retorna o texto gerado."""
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        model = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
-        response = client.messages.create(
-            model=model,
-            max_tokens=1200,
-            system=_PROMPT_SISTEMA,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text.strip()
+        from utils.llm import gerar
+        return gerar(_PROMPT_SISTEMA, prompt, max_tokens=1200)
     except Exception as e:
-        logger.warning("[Insights] Claude falhou: %s", e)
+        logger.warning("[Insights] LLM falhou: %s", e)
         return None
 
 

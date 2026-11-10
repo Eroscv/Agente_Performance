@@ -38,26 +38,10 @@ from db.connections import query_fed as _query_fed
 
 logger = logging.getLogger(__name__)
 
-_client: anthropic.Anthropic | None = None
-
-
-def _get_client() -> anthropic.Anthropic:
-    global _client
-    if _client is None:
-        _client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-    return _client
-
-
 def _call_llm(system: str, user: str, max_tokens: int = 512) -> str:
-    """Chamada simplificada ao Claude para geração de SQL."""
-    client = _get_client()
-    resp = client.messages.create(
-        model=os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001"),
-        max_tokens=max_tokens,
-        system=system,
-        messages=[{"role": "user", "content": user}],
-    )
-    return resp.content[0].text.strip()
+    """Geração de SQL: Gemini → Claude (utils/llm.py). Temperatura 0: SQL não precisa de criatividade."""
+    from utils.llm import gerar
+    return gerar(system, user, max_tokens=max_tokens, temperature=0.0)
 
 
 # ── Schema injetado no prompt (BigQuery — fonte oficial) ──────────────────────

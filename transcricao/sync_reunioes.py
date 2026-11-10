@@ -597,31 +597,18 @@ def reformatar_proximas_etapas(texto: str, anthropic_key: str = "") -> str:
 
     Retorna o texto reformatado, ou o original se falhar.
     """
-    if not anthropic_key:
-        import os
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not anthropic_key:
-        return texto
-
     # Se já está no formato correto, não faz nada
     if re.search(r"\[[A-Z][a-z]+ [A-Z][a-z]+\]", texto):
         return texto  # já tem [Nome Sobrenome]
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=anthropic_key)
-        msg = client.messages.create(
-            model=os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001"),
-            max_tokens=1000,
-            system=_REFORMATAR_SYSTEM,
-            messages=[{"role": "user", "content": texto}],
-        )
-        resultado = msg.content[0].text.strip()
+        from utils.llm import gerar
+        resultado = gerar(_REFORMATAR_SYSTEM, texto, max_tokens=1000)
         if resultado == "NÃO_HÁ_TAREFAS" or not resultado:
             return texto
         return resultado
     except Exception as e:
-        logger.warning("[reformatar] Claude falhou: %s", e)
+        logger.warning("[reformatar] LLM falhou: %s", e)
         return texto
 
 

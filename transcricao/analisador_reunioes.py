@@ -241,15 +241,6 @@ def salvar_analise_bq(reuniao, resultado: dict) -> bool:
 
 # ── Claude ────────────────────────────────────────────────────────────────────
 
-_claude = None
-
-def get_claude():
-    global _claude
-    if _claude is None:
-        _claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    return _claude
-
-
 def analisar_com_claude(reuniao) -> dict:
     """Envia o texto da reunião ao Claude e retorna JSON estruturado."""
     texto = f"""Título: {reuniao['titulo']}
@@ -268,14 +259,8 @@ Próximas Etapas:
 Detalhes:
 {(reuniao['detalhes'] or '')[:4000]}"""
 
-    client = get_claude()
-    msg = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=1024,
-        system=PROMPT_SISTEMA,
-        messages=[{"role": "user", "content": texto}],
-    )
-    raw = msg.content[0].text.strip()
+    from utils.llm import gerar
+    raw = gerar(PROMPT_SISTEMA, texto, max_tokens=1024, temperature=0.0)
 
     # Remove possível markdown
     if raw.startswith("```"):

@@ -302,7 +302,6 @@ Regras ESTRITAS:
 
 
 def verificar_resolucao_claude(ticket: sqlite3.Row, texto_reuniao: str) -> dict:
-    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     prompt = PROMPT_RESOLUCAO.format(
         tipo=ticket["tipo"],
         cliente=ticket["cliente"] or "?",
@@ -310,12 +309,8 @@ def verificar_resolucao_claude(ticket: sqlite3.Row, texto_reuniao: str) -> dict:
         trecho=ticket["trecho"] or "",
         texto_reuniao=texto_reuniao[:3000],
     )
-    msg = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=512,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    raw = msg.content[0].text.strip()
+    from utils.llm import gerar
+    raw = gerar("", prompt, max_tokens=512, temperature=0.0)
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):

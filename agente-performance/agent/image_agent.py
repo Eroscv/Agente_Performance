@@ -253,9 +253,6 @@ Regras:
 
 def _refinar_prompt(prompt_usuario: str, texto_original: str = "") -> str:
     """Usa Claude Haiku para refinar e traduzir o prompt, com contexto do cliente."""
-    if not ANTHROPIC_KEY:
-        return prompt_usuario
-
     estilo = _detectar_estilo_cliente(texto_original or prompt_usuario)
     system = _REFINE_SYSTEM_BASE.format(
         estilo_cliente=(
@@ -265,15 +262,8 @@ def _refinar_prompt(prompt_usuario: str, texto_original: str = "") -> str:
     )
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
-        msg = client.messages.create(
-            model=os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001"),
-            max_tokens=300,
-            system=system,
-            messages=[{"role": "user", "content": prompt_usuario}],
-        )
-        refined = msg.content[0].text.strip().strip('"').strip("'")
+        from utils.llm import gerar
+        refined = gerar(system, prompt_usuario, max_tokens=300).strip('"').strip("'")
         logger.info("[image] Prompt refinado: %s", refined[:80])
         return refined
     except Exception as e:
@@ -481,7 +471,7 @@ def editar_imagem(
 
     texto_ref = texto_slack or instrucao
     width, height, fmt_label = detectar_formato(texto_ref)
-    instrucao_en = _refinar_prompt(instrucao, texto_ref) if ANTHROPIC_KEY else instrucao
+    instrucao_en = _refinar_prompt(instrucao, texto_ref)
 
     proporcao = ""
     if width != height:
