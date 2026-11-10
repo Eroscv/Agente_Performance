@@ -404,10 +404,25 @@ def main():
             if pcfg.get("ativo", False):
                 segmentos.append((key, plat))
 
+    from utils.idempotencia import uma_vez
+
+    class _NaoEnviado(Exception):
+        pass
+
     enviados = 0
     for cliente_key, plataforma in segmentos:
-        ok = enviar_relatorio_cliente(data, cliente_key, plataforma)
-        if ok: enviados += 1
+        # Idempotente: rerun, catch-up do timer ou carga manual não postam o mesmo relatório duas vezes.
+        try:
+            with uma_vez(f"relatorio_diario:{cliente_key}:{plataforma}:{data}") as pode:
+                if not pode:
+                    logger.info("[%s/%s] relatório de %s já enviado — pulando", cliente_key, plataforma, data)
+                    continue
+                if not enviar_relatorio_cliente(data, cliente_key, plataforma):
+                    raise _NaoEnviado  # libera a chave para a próxima execução tentar de novo
+                enviados += 1
+        except _NaoEnviado:
+            logger.warning("[%s/%s] relatório de %s não enviado; tenta de novo na próxima execução",
+                           cliente_key, plataforma, data)
         time.sleep(1)
 
     logger.info("Relatórios enviados: %d/%d", enviados, len(segmentos))

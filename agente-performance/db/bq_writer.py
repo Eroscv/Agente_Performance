@@ -95,6 +95,13 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
                 logger.info("[BQ] ✅ %s — %d linhas inseridas", desc, len(rows))
             return len(errors)
 
+        # MERGE exige no máximo uma linha de origem por chave; repetida no lote derrubava o MERGE inteiro
+        # (e a falha era engolida pelo dual-write "silencioso"). Colapsa antes: a última ocorrência vence.
+        unicas = {tuple(r.get(k) for k in keys): r for r in rows}
+        if len(unicas) < len(rows):
+            logger.warning("[BQ] %s — %d linhas repetidas pela chave %s colapsadas", desc, len(rows) - len(unicas), keys)
+            rows = list(unicas.values())
+
         # MERGE via tabela temporária
         tmp_table = f"{project}.{dataset}._{table_id}_tmp_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}"
         schema = bq.get_table(full_table).schema

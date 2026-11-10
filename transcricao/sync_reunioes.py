@@ -203,10 +203,24 @@ def get_conn() -> sqlite3.Connection:
 
 
 def ja_processado(conn: sqlite3.Connection, file_id: str) -> bool:
-    row = conn.execute(
-        "SELECT id FROM reunioes WHERE fonte_id = ?", (file_id,)
-    ).fetchone()
-    return row is not None
+    """Já processado se estiver no SQLite local OU no MongoDB (fonte que sobreviveu à perda da AWS).
+
+    Falha fechada: se o MongoDB não responder, trata como processado e pula. Reprocessar por engano
+    custa uma chamada ao Claude por arquivo e cria tarefas repetidas no Notion; pular só atrasa.
+    """
+    if conn.execute("SELECT id FROM reunioes WHERE fonte_id = ?", (file_id,)).fetchone():
+        return True
+    if os.getenv("TRANSCRICAO_SEM_MONGO") == "1":  # escape explícito para rodar sem Mongo
+        return False
+    col = get_mongo_col()
+    if col is None:
+        logger.error("[dedup] MongoDB indisponível — pulando %s para não reprocessar (falha fechada)", file_id)
+        return True
+    try:
+        return col.find_one({"fonte_id": file_id}, {"_id": 1}) is not None
+    except Exception as e:
+        logger.error("[dedup] erro ao consultar MongoDB (%s) — pulando %s", e, file_id)
+        return True
 
 
 def salvar_log(conn, file_id, nome, status, mensagem):

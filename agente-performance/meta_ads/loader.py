@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     adset_name          TEXT,
     adset_id            TEXT,
     ad_name             TEXT,
-    ad_id               TEXT,
+    ad_id               TEXT NOT NULL,
     objetivo            TEXT,
     status_criativo     TEXT,
     impressoes          REAL DEFAULT 0,
@@ -70,10 +70,33 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     qualidade_ranking   TEXT,
     engagement_ranking  TEXT,
     conversion_ranking  TEXT,
-    account_id          TEXT,
-    UNIQUE(data, campanha, ad_id)
+    account_id          TEXT NOT NULL DEFAULT '',
+    -- Grão: um anúncio, num dia, numa conta. Nome de campanha fica fora da chave: renomear
+    -- campanha duplicava o investimento. ad_id NOT NULL porque NULL nunca colide no UNIQUE.
+    UNIQUE(account_id, data, ad_id)
 )
 """
+
+_CHAVE_ANTIGA = "UNIQUE(data, campanha, ad_id)"
+
+
+def _migrar_chave(conn: sqlite3.Connection, tabela: str) -> None:
+    """Tabelas criadas com a chave antiga são reconstruídas uma vez, deduplicando (a linha mais nova vence)."""
+    ddl = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (tabela,)).fetchone()
+    if not ddl or _CHAVE_ANTIGA not in ddl[0]:
+        return
+    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tabela})") if r[1] != "id"]
+    sel = ", ".join("REPLACE(COALESCE(account_id, ''), 'act_', '')" if c == "account_id" else c for c in cols)
+    antes = conn.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0]
+    conn.execute(f"ALTER TABLE {tabela} RENAME TO {tabela}__chave_antiga")
+    conn.execute(_CREATE_TABLE_TPL.format(tabela=tabela))
+    conn.execute(f"INSERT OR REPLACE INTO {tabela} ({', '.join(cols)}) "
+                 f"SELECT {sel} FROM {tabela}__chave_antiga WHERE ad_id IS NOT NULL ORDER BY id")
+    depois = conn.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0]
+    conn.execute(f"DROP TABLE {tabela}__chave_antiga")
+    conn.commit()
+    logger.warning("[%s] chave migrada para (account_id, data, ad_id): %d → %d linhas (%d duplicatas removidas)",
+                   tabela, antes, depois, antes - depois)
 
 # Campos que vamos pedir à API
 # Janela de atribuição padrão — usada em ads_diario E campaign_totals
@@ -382,8 +405,22 @@ def salvar(rows: list[dict], append: bool = False,
     _db.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_db))
     conn.execute("PRAGMA journal_mode=WAL")
+    _migrar_chave(conn, tabela)
     conn.execute(_CREATE_TABLE_TPL.format(tabela=tabela))
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_data ON {tabela}(data)")
+
+    # Filtro de duplicidade/qualidade antes de gravar: sem ad_id não há grão; mesma chave no lote → última vence.
+    sem_ad = sum(1 for r in rows if not r.get("ad_id"))
+    if sem_ad:
+        logger.warning("[%s] %d linhas sem ad_id descartadas", tabela, sem_ad)
+    unicas: dict = {}
+    for r in rows:
+        if r.get("ad_id"):
+            r["account_id"] = str(r.get("account_id") or "").removeprefix("act_")
+            unicas[(r["account_id"], r["data"], str(r["ad_id"]))] = r
+    if len(unicas) < len(rows) - sem_ad:
+        logger.warning("[%s] %d linhas repetidas no lote da API colapsadas", tabela, len(rows) - sem_ad - len(unicas))
+    rows = list(unicas.values())
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_camp ON {tabela}(campanha)")
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_data_camp ON {tabela}(data, campanha)")
 
