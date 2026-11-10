@@ -48,6 +48,12 @@ def main():
     job.result()
     logger.info("✅ load_gold OK")
 
+    from scripts.run_quality_checks import main as run_quality_checks
+    if run_quality_checks() != 0:
+        logger.error("❌ verificações de qualidade com falha (veja correlacao.alertas_qualidade_dados)")
+        sys.exit(1)
+    logger.info("✅ verificações de qualidade OK")
+
 
 if __name__ == "__main__":
     main()

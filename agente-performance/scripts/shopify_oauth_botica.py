@@ -25,7 +25,7 @@ CLIENT_ID     = "57f90faf153f67626703ae5a7422233e"
 CLIENT_SECRET = "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"
 REDIRECT_URI  = "https://guara.com.br/callback"
 SCOPES        = "read_orders,read_products,read_analytics"
-ENV_FILE      = Path("/home/ubuntu/.openclaw/workspace/agente-performance/.env")
+ENV_FILE      = Path(__file__).parent.parent / ".env"
 ENV_KEY       = "SHOPIFY_BOTICA_TOKEN"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

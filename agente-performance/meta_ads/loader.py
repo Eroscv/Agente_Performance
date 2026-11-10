@@ -91,6 +91,7 @@ FIELDS = ",".join([
     "impressions",
     "reach",
     "clicks",
+    "inline_link_clicks",
     "spend",
     "cpm",
     "frequency",
@@ -99,7 +100,6 @@ FIELDS = ",".join([
     "video_thruplay_watched_actions",
     "video_p25_watched_actions",
     "video_p50_watched_actions",
-    "video_view_3_sec_actions",
     "objective",
     "quality_ranking",
     "engagement_rate_ranking",
@@ -168,7 +168,9 @@ def _normalizar(row: dict) -> dict:
     valor_compras = _pixel_val(action_values)
     investimento  = float(row.get("spend", 0) or 0)
     impressoes    = float(row.get("impressions", 0) or 0)
-    cliques_link  = float(row.get("clicks", 0) or 0)
+    # Na API da Meta, `clicks` são TODOS os cliques e `inline_link_clicks` são os cliques no link.
+    cliques_link  = float(row.get("inline_link_clicks", 0) or 0)
+    cliques_todos = float(row.get("clicks", 0) or 0)
 
     roas = round(valor_compras / investimento, 4) if investimento > 0 else None
     cpa  = round(investimento / compras, 2) if compras > 0 else None
@@ -186,7 +188,7 @@ def _normalizar(row: dict) -> dict:
         "impressoes":         impressoes,
         "alcance":            float(row.get("reach", 0) or 0),
         "cliques_link":       cliques_link,
-        "cliques_todos":      float(row.get("unique_clicks", 0) or 0),
+        "cliques_todos":      cliques_todos,
         "investimento":       investimento,
         "compras":            compras,
         "valor_compras":      valor_compras,
@@ -253,6 +255,7 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
 
     url  = f"{API_BASE}/{account_id}/insights"
     rows = []
+    raw_batch: list[dict] = []   # resposta da API como veio, gravada em raw_meta_insights
     page = 0
 
     while url:
@@ -268,6 +271,7 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
 
         batch = data.get("data", [])
         rows.extend([_normalizar(r) for r in batch])
+        raw_batch.extend(batch)
         page += 1
 
         paging   = data.get("paging", {})
@@ -275,6 +279,10 @@ def buscar_insights_periodo(account_id: str, date_start: date, date_end: date,
         url      = next_url if next_url else None
         params   = {}
 
+    from db.raw_writer import salvar_raw
+    salvar_raw("raw_meta_insights", ["account_id", "ad_id", "data"],
+               [{"account_id": account_id, "ad_id": r.get("ad_id"), "data": r.get("date_start"), "payload": r}
+                for r in raw_batch])
     return rows
 
 
@@ -338,13 +346,14 @@ def buscar_insights(account_id: str, dias: int = 30,
                     token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
     """Busca insights de anúncios via API em lotes de 14 dias."""
     _get_token(token_env)  # valida token antes de iterar
-    date_end   = date.today() - timedelta(days=1)
+    date_end   = date.today()  # inclui o dia corrente (parcial); a próxima carga sobrescreve
     date_start = date_end - timedelta(days=dias - 1)
 
     logger.info("[%s] Buscando %d dias (%s → %s) em lotes", account_id, dias, date_start, date_end)
 
     LOTE = 1  # 1 dia por vez — ranges maiores causam HTTP 500 intermitente na Meta API
     all_rows = []
+    dias_falhos: list[date] = []
     cursor   = date_start
 
     while cursor <= date_end:
@@ -362,11 +371,19 @@ def buscar_insights(account_id: str, dias: int = 30,
                     time.sleep(5 * tentativa)
                 else:
                     logger.error("[%s] Dia %s abortado após 3 tentativas", account_id, cursor)
+                    dias_falhos.append(cursor)
         cursor = lote_fim + timedelta(days=1)
         if cursor <= date_end:
             time.sleep(0.5)  # pausa leve entre dias
 
     logger.info("[%s] Total: %d linhas", account_id, len(all_rows))
+    if dias_falhos:
+        logger.error("[%s] %d dia(s) sem dados por erro da API: %s", account_id, len(dias_falhos),
+                     ", ".join(d.isoformat() for d in dias_falhos))
+        # Todos os dias falharam (token inválido/expirado, conta sem acesso): não é "0 linhas", é falha.
+        if len(dias_falhos) == (date_end - date_start).days + 1:
+            raise RuntimeError(f"Meta API falhou em todos os {len(dias_falhos)} dias de {account_id} "
+                               "(veja o log: token inválido ou expirado?)")
     return all_rows
 
 

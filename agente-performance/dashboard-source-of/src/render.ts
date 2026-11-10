@@ -1,9 +1,24 @@
-import { aggCampanhas, aggCriativos, investTotalAds, sumAbandoned, sumAdsAllCanais, sumShopify, weeklySeries } from "./aggregate";
-import { lineChart } from "./charts";
-import { LAST_SYNC } from "./data";
+import {
+  abandonedDiario,
+  aggCampanhas,
+  aggCriativos,
+  aggEstados,
+  aggOrigens,
+  aggSkus,
+  investRoasDiario,
+  investTotalAds,
+  PRIMEIRO_DIA_DOS_DADOS,
+  sumAbandoned,
+  sumAbandonedPorOrigem,
+  sumAdsAllCanais,
+  sumShopify,
+  weeklySeries,
+} from "./aggregate";
+import { barLineChart, lineChart } from "./charts";
+import { LAST_SYNC, RECOMPRA_MENSAL } from "./data";
 import { fmtISO, PERIOD_LABELS, PERIODS, prevPeriodOf, TODAY } from "./dates";
 import { deltaCellHTML, deltaHTML, fmtBRL, fmtBRL2, fmtDateBR, fmtDateTime, fmtInt, fmtPct, fmtRoas } from "./format";
-import type { Canal, CanalTotalsMap, DateRange, PeriodKey, ShopifyTotals, TabKey } from "./types";
+import type { Canal, CanalTotalsMap, DateRange, PeriodKey, ShopifyTotals, TabKey, TopCriativo } from "./types";
 
 export const TABS: [TabKey, string][] = [
   ["overview", "Visão geral"],
@@ -13,6 +28,7 @@ export const TABS: [TabKey, string][] = [
   ["canais", "Canais e Produtos"],
   ["recuperacao", "Recuperação e Orgânico"],
   ["criativos", "Criativos"],
+  ["recompra", "Recompra"],
   ["sync", "Atualização dos dados"],
 ];
 
@@ -35,7 +51,7 @@ function el<T extends HTMLElement = HTMLElement>(id: string): T {
 }
 
 function kpiCard(label: string, val: string, cmpHtml?: string): string {
-  return `<div class="kpi"><div class="lbl">${label}</div><div class="val nums">${val}</div><div class="cmp-slot">${
+  return `<div class="kpi"><div class="lbl">${label}</div><div class="val nums" style="--chars:${Math.max(val.length, 1)}">${val}</div><div class="cmp-slot">${
     cmpHtml || '<span class="cmp">— vs. período anterior</span>'
   }</div></div>`;
 }
@@ -52,6 +68,16 @@ function tableRow(
     prev,
     invert
   )}</td></tr>`;
+}
+
+function invRoasCard(from: Date, to: Date, canais: Canal[], titulo: string): string {
+  const serie = investRoasDiario(from, to, canais);
+  return `<div class="card chartcard">
+    <h3>${titulo}</h3>
+    <div class="sub">Por dia no período selecionado: barras = investimento, linha = ROAS (receita atribuída ÷ investimento).</div>
+    ${barLineChart(serie, "var(--accent)", "var(--ok)", (v) => fmtBRL(v), (v) => v.toFixed(1) + "x")}
+    <div class="legend"><span><i style="background:var(--accent)"></i>Investimento</span><span><i style="background:var(--ok)"></i>ROAS</span></div>
+  </div>`;
 }
 
 interface Period {
@@ -92,7 +118,8 @@ function renderOverview(cur: Period, prev: Period, ads: CanalTotalsMap): string 
     <div class="tablewrap"><table><thead><tr><th>Canal</th><th class="num">Investimento</th><th class="num">Pedidos</th><th class="num">Receita</th><th class="num">ROAS</th></tr></thead><tbody>
       ${canalRows}
     </tbody></table></div>
-  </div>`;
+  </div>
+  ${invRoasCard(cur.from, cur.to, ["meta", "google"], "Investimento e ROAS diário · Meta + Google")}`;
 }
 
 function renderLoja(cur: Period, prev: Period): string {
@@ -163,8 +190,8 @@ function renderCanal(
   ads: CanalTotalsMap,
   adsPrev: CanalTotalsMap
 ): string {
-  const a = ads[canalKey] || { investimento: 0, pedidos: 0, receita: 0, novos_clientes: 0, roas: null, cpa: null };
-  const ap = adsPrev[canalKey] || { investimento: 0, pedidos: 0, receita: 0, novos_clientes: 0, roas: null, cpa: null };
+  const a = ads[canalKey] || { investimento: 0, pedidos: 0, receita: 0, novos_clientes: 0, roas: null, cpa: null, cac: null };
+  const ap = adsPrev[canalKey] || { investimento: 0, pedidos: 0, receita: 0, novos_clientes: 0, roas: null, cpa: null, cac: null };
   const camp = aggCampanhas(cur.from, cur.to)
     .filter((c) => c.plataforma === canalKey)
     .sort((x, y) => y.inv - x.inv);
@@ -188,10 +215,12 @@ function renderCanal(
         ${tableRow("Pedidos", a.pedidos, ap.pedidos, fmtInt)}
         ${tableRow("Receita", a.receita, ap.receita, fmtBRL)}
         ${tableRow("Novos clientes", a.novos_clientes, ap.novos_clientes, fmtInt)}
+        ${tableRow("CAC (invest./novo cliente)", a.cac, ap.cac, fmtBRL2, true)}
         ${tableRow("ROAS", a.roas, ap.roas, (v) => (v != null ? v.toFixed(2) + "x" : "—"))}
       </tbody>
     </table></div>
   </div>
+  ${invRoasCard(cur.from, cur.to, [canalKey], `Investimento e ROAS diário · ${label}`)}
   <div class="card">
     <h3>Campanhas</h3>
     <div class="sub">No período selecionado, ordenado por investimento.</div>
@@ -222,12 +251,15 @@ function renderCanaisProdutos(cur: Period, ads: CanalTotalsMap, adsPrev: CanalTo
 
   const rows = canais
     .map((c) => {
-      const a = ads[c] || { pedidos: 0, receita: 0 };
+      const a = ads[c] || { investimento: 0, pedidos: 0, receita: 0, novos_clientes: 0, cac: null };
       const ap = adsPrev[c] || { receita: 0 };
       const share = totalReceita ? a.receita / totalReceita : 0;
+      const pago = c === "meta" || c === "google";
       return `<tr><td>${canalLabel[c]}</td><td class="num">${fmtInt(a.pedidos)}</td><td class="num">${fmtBRL(
         a.receita
-      )}</td><td class="num">${fmtPct(share)}</td><td class="num">${deltaCellHTML(a.receita, ap.receita)}</td></tr>`;
+      )}</td><td class="num">${fmtPct(share)}</td><td class="num">${deltaCellHTML(a.receita, ap.receita)}</td><td class="num">${
+        pago ? fmtBRL(a.investimento) : "—"
+      }</td><td class="num">${fmtInt(a.novos_clientes)}</td><td class="num">${pago ? fmtBRL2(a.cac) : "—"}</td></tr>`;
     })
     .join("");
 
@@ -242,18 +274,149 @@ function renderCanaisProdutos(cur: Period, ads: CanalTotalsMap, adsPrev: CanalTo
   <p class="lede">Participação de cada canal de aquisição na receita do período.</p>
   <div class="card">
     <h3>Receita por canal</h3>
-    <div class="sub">Classificação por UTM / origem do pedido no Shopify.</div>
+    <div class="sub">Classificação por UTM / origem do pedido no Shopify. CAC = investimento ÷ novos clientes do canal (só mídia paga).</div>
     <div class="tablewrap"><table>
-      <thead><tr><th>Canal</th><th class="num">Pedidos</th><th class="num">Receita</th><th class="num">% do total</th><th class="num">Δ% receita</th></tr></thead>
+      <thead><tr><th>Canal</th><th class="num">Pedidos</th><th class="num">Receita</th><th class="num">% do total</th><th class="num">Δ% receita</th><th class="num">Invest.</th><th class="num">Novos clientes</th><th class="num">CAC</th></tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
   </div>
+  ${renderOrigensEspecificas(cur)}
+  ${renderSkus(cur)}
+  ${renderEstados(cur)}
   <div class="card">
     <h3>Criativos de maior investimento (Meta) — últimos 30 dias</h3>
     <div class="sub">Atalho para a aba Criativos, mostrando os 5 principais.</div>
     <div class="tablewrap"><table>
       <thead><tr><th>Anúncio</th><th class="num">Invest.</th><th class="num">ROAS</th></tr></thead>
       <tbody>${topCriativosRows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+// utm_source de Instagram orgânico: Instagram Shopping, link da bio e posts (medium social). Hoje o
+// resumo da Shopify os soma em Meta, então esta tabela é uma abertura, não uma soma à parte.
+const INSTAGRAM_ORGANICO = /^(igshopping|ig|instagram|l\.instagram\.com|instagram\.com)$/;
+const CHATGPT = /chatgpt|openai/;
+
+function origemRows(rows: { origem: string; pedidos: number; receita: number }[]): string {
+  if (!rows.length) return '<tr><td colspan="3" style="color:var(--fg-muted)">Nenhum pedido no período.</td></tr>';
+  return rows
+    .map((o) => `<tr><td>${o.origem}</td><td class="num">${fmtInt(o.pedidos)}</td><td class="num">${fmtBRL(o.receita)}</td></tr>`)
+    .join("");
+}
+
+function renderOrigensEspecificas(cur: Period): string {
+  const insta = aggOrigens(cur.from, cur.to, INSTAGRAM_ORGANICO);
+  const gpt = aggOrigens(cur.from, cur.to, CHATGPT);
+  const tot = (r: { pedidos: number; receita: number }[]) => ({
+    pedidos: r.reduce((s, x) => s + x.pedidos, 0),
+    receita: r.reduce((s, x) => s + x.receita, 0),
+  });
+  const ti = tot(insta);
+  const tg = tot(gpt);
+  return `
+  <div class="grid2">
+    <div class="card">
+      <h3>Instagram orgânico</h3>
+      <div class="sub">Pedidos por utm_source de Instagram (Shopping, bio e posts): ${fmtInt(ti.pedidos)} pedidos, ${fmtBRL(
+        ti.receita
+      )}. No resumo da Shopify esses pedidos entram em Meta Ads.</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>utm_source</th><th class="num">Pedidos</th><th class="num">Receita</th></tr></thead>
+        <tbody>${origemRows(insta)}</tbody>
+      </table></div>
+    </div>
+    <div class="card">
+      <h3>ChatGPT</h3>
+      <div class="sub">Pedidos vindos do ChatGPT: ${fmtInt(tg.pedidos)} pedidos, ${fmtBRL(
+        tg.receita
+      )}. O investimento em ChatGPT ainda não é carregado no BigQuery, então não há ROAS nem CAC.</div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>utm_source</th><th class="num">Pedidos</th><th class="num">Receita</th></tr></thead>
+        <tbody>${origemRows(gpt)}</tbody>
+      </table></div>
+    </div>
+  </div>`;
+}
+
+function renderSkus(cur: Period): string {
+  const skus = aggSkus(cur.from, cur.to).slice(0, 20);
+  const rows = skus.length
+    ? skus
+        .map(
+          (s) =>
+            `<tr><td>${s.sku}</td><td>${s.produto ?? "—"}</td><td class="num">${fmtInt(s.pedidos)}</td><td class="num">${fmtInt(
+              s.unidades
+            )}</td><td class="num">${fmtBRL(s.receita)}</td></tr>`
+        )
+        .join("")
+    : '<tr><td colspan="5" style="color:var(--fg-muted)">Sem itens no período.</td></tr>';
+  return `
+  <div class="card">
+    <h3>Pedidos por SKU</h3>
+    <div class="sub">Os 20 SKUs de maior receita no período (preço × quantidade − desconto do item).</div>
+    <div class="tablewrap"><table class="criativos">
+      <thead><tr><th>SKU</th><th>Produto</th><th class="num">Pedidos</th><th class="num">Unidades</th><th class="num">Receita</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function renderEstados(cur: Period): string {
+  const estados = aggEstados(cur.from, cur.to);
+  const total = estados.reduce((s, e) => s + e.pedidos, 0);
+  const rows = estados.length
+    ? estados
+        .map(
+          (e) =>
+            `<tr><td>${e.estado}</td><td class="num">${fmtInt(e.pedidos)}</td><td class="num">${fmtPct(
+              total ? e.pedidos / total : null
+            )}</td><td class="num">${fmtBRL(e.receita)}</td><td class="num">${fmtBRL2(e.pedidos ? e.receita / e.pedidos : null)}</td></tr>`
+        )
+        .join("")
+    : '<tr><td colspan="5" style="color:var(--fg-muted)">Sem pedidos no período.</td></tr>';
+  return `
+  <div class="card">
+    <h3>Pedidos por estado</h3>
+    <div class="sub">UF do endereço de entrega dos pedidos pagos no período. "—" = pedido sem endereço de entrega.</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Estado</th><th class="num">Pedidos</th><th class="num">% do total</th><th class="num">Receita</th><th class="num">Ticket médio</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
+}
+
+function renderRecompra(): string {
+  const meses = [...RECOMPRA_MENSAL].reverse();
+  const rows = meses
+    .map((m) => {
+      const [y, mm] = m.mes.split("-");
+      return `<tr><td>${mm}/${y}</td><td class="num">${fmtInt(m.pedidos)}</td><td class="num">${fmtInt(
+        m.novos_clientes
+      )}</td><td class="num">${fmtInt(m.recompradores)}</td><td class="num">${fmtPct(
+        m.pedidos ? m.recompradores / m.pedidos : null
+      )}</td><td class="num">${fmtBRL(m.receita)}</td><td class="num">${fmtBRL2(m.pedidos ? m.receita / m.pedidos : null)}</td></tr>`;
+    })
+    .join("");
+  const atual = RECOMPRA_MENSAL[RECOMPRA_MENSAL.length - 1];
+  const ant = RECOMPRA_MENSAL[RECOMPRA_MENSAL.length - 2];
+  const pct = (m: typeof atual | undefined) => (m && m.pedidos ? m.recompradores / m.pedidos : null);
+  const parcial = '<span class="cmp">mês em andamento</span>';
+  return `
+  <h1>Recompra</h1>
+  <p class="lede">Visão mensal de quem já comprou antes: pedidos de recompra e participação no total. Não depende do filtro de período.</p>
+  <div class="kpis">
+    ${kpiCard("Pedidos de recompra (mês atual)", fmtInt(atual?.recompradores), parcial)}
+    ${kpiCard("% recompra (mês atual)", fmtPct(pct(atual)), deltaHTML(pct(atual), pct(ant)))}
+    ${kpiCard("Novos clientes (mês atual)", fmtInt(atual?.novos_clientes), parcial)}
+    ${kpiCard("Pedidos (mês atual)", fmtInt(atual?.pedidos), parcial)}
+  </div>
+  <div class="card">
+    <h3>Recompra por mês</h3>
+    <div class="sub">Pedidos de recompra = pedidos de clientes que já tinham comprado antes (Shopify). O mês atual está em andamento; a porcentagem é comparada ao mês anterior.</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Mês</th><th class="num">Pedidos</th><th class="num">Novos clientes</th><th class="num">Recompra</th><th class="num">% recompra</th><th class="num">Receita</th><th class="num">Ticket médio</th></tr></thead>
+      <tbody>${rows}</tbody>
     </table></div>
   </div>`;
 }
@@ -270,6 +433,15 @@ function renderRecuperacao(cur: DateRange, prev: DateRange, ads: CanalTotalsMap,
     receita: (adsPrev.direto?.receita || 0) + (adsPrev.outros?.receita || 0),
   };
 
+  const origemRows = sumAbandonedPorOrigem(cur.from, cur.to)
+    .map(
+      (o) =>
+        `<tr><td>${o.origem}</td><td class="num">${fmtInt(o.checkouts)}</td><td class="num">${fmtInt(o.recuperados)}</td><td class="num">${fmtPct(
+          o.taxa_recuperacao
+        )}</td><td class="num">${fmtBRL(o.subtotal)}</td></tr>`
+    )
+    .join("");
+
   return `
   <h1>Recuperação e Orgânico</h1>
   <p class="lede">Checkouts abandonados e recuperados, mais o desempenho dos pedidos de tráfego direto/orgânico.</p>
@@ -278,6 +450,20 @@ function renderRecuperacao(cur: DateRange, prev: DateRange, ads: CanalTotalsMap,
     ${kpiCard("Valor em aberto", fmtBRL(ab.subtotal), deltaHTML(ab.subtotal, abp.subtotal, true))}
     ${kpiCard("Recuperados", fmtInt(ab.recuperados), deltaHTML(ab.recuperados, abp.recuperados))}
     ${kpiCard("Taxa de recuperação", fmtPct(ab.taxa_recuperacao), deltaHTML(ab.taxa_recuperacao, abp.taxa_recuperacao))}
+  </div>
+  <div class="card">
+    <h3>Checkouts por origem</h3>
+    <div class="sub">Origem = UTM do próprio checkout. Recuperado = checkout que foi concluído em compra.</div>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Origem</th><th class="num">Checkouts</th><th class="num">Recuperados</th><th class="num">Taxa</th><th class="num">Valor em aberto</th></tr></thead>
+      <tbody>${origemRows}</tbody>
+    </table></div>
+  </div>
+  <div class="card chartcard">
+    <h3>Checkouts e recuperação por dia</h3>
+    <div class="sub">Barras = checkouts abandonados, linha = % recuperados.</div>
+    ${barLineChart(abandonedDiario(cur.from, cur.to), "var(--accent)", "var(--ok)", (v) => fmtInt(v), (v) => fmtPct(v, 0))}
+    <div class="legend"><span><i style="background:var(--accent)"></i>Checkouts</span><span><i style="background:var(--ok)"></i>% recuperados</span></div>
   </div>
   <div class="card">
     <h3>Direto + Orgânico (sem mídia paga)</h3>
@@ -292,27 +478,71 @@ function renderRecuperacao(cur: DateRange, prev: DateRange, ads: CanalTotalsMap,
   </div>`;
 }
 
-function renderCriativos(cur: Period): string {
-  const sorted = aggCriativos(cur.from, cur.to).sort((a, b) => b.inv - a.inv);
-  const rows = sorted
+function roasOf(c: TopCriativo): number | null {
+  return c.inv ? c.receita / c.inv : null;
+}
+function cacOf(c: TopCriativo): number | null {
+  return c.compras ? c.inv / c.compras : null;
+}
+
+function criativoTable(rows: TopCriativo[], extraHead: string, extraCell: (c: TopCriativo) => string): string {
+  if (!rows.length) return '<div class="sub">Nenhum anúncio atende ao critério no período.</div>';
+  const body = rows
     .map(
       (c) =>
-        `<tr><td>${c.ad}</td><td>${c.campanha}<br><span style="color:var(--fg-muted);font-size:11.5px">${
-          c.adset
-        }</span></td><td class="num">${fmtBRL(c.inv)}</td><td class="num">${fmtInt(c.compras)}</td><td class="num">${fmtBRL(
+        `<tr><td>${c.ad}</td><td>${c.campanha}<br><span style="color:var(--fg-muted);font-size:11.5px">${c.adset}</span></td>${extraCell(
+          c
+        )}<td class="num">${fmtBRL(c.inv)}</td><td class="num">${fmtInt(c.compras)}</td><td class="num">${fmtBRL(
           c.receita
-        )}</td><td class="num">${(c.receita / c.inv).toFixed(2)}x</td><td class="num">${fmtInt(c.cliques)}</td></tr>`
+        )}</td><td class="num">${fmtRoas(roasOf(c))}</td><td class="num">${fmtBRL2(cacOf(c))}</td></tr>`
     )
     .join("");
+  return `<div class="tablewrap"><table class="criativos">
+    <thead><tr><th>Anúncio</th><th>Campanha / Conjunto</th>${extraHead}<th class="num">Invest.</th><th class="num">Compras</th><th class="num">Receita</th><th class="num">ROAS</th><th class="num">CAC</th></tr></thead>
+    <tbody>${body}</tbody>
+  </table></div>`;
+}
+
+const TOP_CRIATIVOS = 10;
+const PISO_INVESTIMENTO = 0.01; // fração do investimento Meta em criativos no período
+
+function renderCriativos(cur: Period): string {
+  const todos = aggCriativos(cur.from, cur.to).filter((c) => c.inv > 0);
+  const total = todos.reduce((s, c) => s + c.inv, 0);
+  const piso = total * PISO_INVESTIMENTO;
+  const relevantes = todos.filter((c) => c.inv >= piso);
+
+  const rentabilidade = relevantes
+    .filter((c) => c.receita > 0)
+    .sort((a, b) => (roasOf(b) ?? 0) - (roasOf(a) ?? 0) || b.inv - a.inv)
+    .slice(0, TOP_CRIATIVOS);
+  const porCac = relevantes
+    .filter((c) => c.compras > 0)
+    .sort((a, b) => (cacOf(a) ?? Infinity) - (cacOf(b) ?? Infinity) || b.inv - a.inv)
+    .slice(0, TOP_CRIATIVOS);
+  const fromISO = fmtISO(cur.from);
+  const testes = todos
+    .filter((c) => c.inicio >= fromISO && c.inicio > PRIMEIRO_DIA_DOS_DADOS)
+    .sort((a, b) => (a.inicio < b.inicio ? 1 : a.inicio > b.inicio ? -1 : b.inv - a.inv))
+    .slice(0, TOP_CRIATIVOS);
 
   return `
   <h1>Criativos</h1>
-  <p class="lede">Anúncios Meta de maior investimento no período selecionado, com retorno por peça.</p>
+  <p class="lede">Anúncios Meta no período selecionado. CAC do criativo = investimento ÷ compras atribuídas pela Meta (a Meta não informa cliente novo por anúncio).</p>
   <div class="card">
-    <div class="tablewrap"><table>
-      <thead><tr><th>Anúncio</th><th>Campanha / Conjunto</th><th class="num">Invest.</th><th class="num">Compras</th><th class="num">Receita</th><th class="num">ROAS</th><th class="num">Cliques</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table></div>
+    <h3>Melhores criativos de rentabilidade</h3>
+    <div class="sub">Maior ROAS entre os anúncios com ao menos ${fmtBRL(piso)} investidos (1% do investimento em criativos no período); empate por investimento.</div>
+    ${criativoTable(rentabilidade, "", () => "")}
+  </div>
+  <div class="card">
+    <h3>Melhores criativos de CAC</h3>
+    <div class="sub">Menor CAC entre os anúncios com ao menos ${fmtBRL(piso)} investidos e pelo menos 1 compra; empate por investimento.</div>
+    ${criativoTable(porCac, "", () => "")}
+  </div>
+  <div class="card">
+    <h3>Testes recentes</h3>
+    <div class="sub">Anúncios que começaram a veicular dentro do período (a carga não traz a data de edição, então vale o primeiro dia com investimento), do mais novo ao mais antigo; empate por investimento.</div>
+    ${criativoTable(testes, '<th>Início</th>', (c) => `<td>${fmtDateBR(c.inicio)}</td>`)}
   </div>`;
 }
 
@@ -325,7 +555,7 @@ function renderSync(): string {
   }
   return `
   <h1>Atualização dos dados</h1>
-  <p class="lede">Última gravação de cada fonte no BigQuery (guara-db). Sincronização automática a cada 6 horas via cron local.</p>
+  <p class="lede">Última gravação de cada fonte no BigQuery (guara-db). Sincronização automática a cada 3 horas.</p>
   <div class="card">
     <div class="tablewrap"><table>
       <thead><tr><th>Fonte</th><th>Última carga</th><th class="num">Há</th><th>Status</th></tr></thead>
@@ -375,6 +605,9 @@ export function render(): void {
       break;
     case "criativos":
       html = renderCriativos(cur);
+      break;
+    case "recompra":
+      html = renderRecompra();
       break;
     case "sync":
       html = renderSync();

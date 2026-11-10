@@ -1,4 +1,4 @@
-import type { WeeklyPoint } from "./types";
+import type { BarLinePoint, WeeklyPoint } from "./types";
 
 type NumericKey = "novos" | "cac" | "ticket" | "conv";
 
@@ -69,5 +69,73 @@ export function lineChart(
     ${labels}
     ${lastA ? `<text x="${W - padR + 4}" y="${yA(lastA[keyA]!).toFixed(1)}" font-size="10" fill="${colorA}" font-family="var(--font-mono)" font-weight="600">${fmtA(lastA[keyA]!)}</text>` : ""}
     ${lastB ? `<text x="${W - padR + 4}" y="${(yB(lastB[keyB]!) + 11).toFixed(1)}" font-size="10" fill="${colorB}" font-family="var(--font-mono)" font-weight="600">${fmtB(lastB[keyB]!)}</text>` : ""}
+  </svg>`;
+}
+
+/** Barras (eixo esquerdo) + linha (eixo direito) por dia, sem bibliotecas. */
+export function barLineChart(
+  series: BarLinePoint[],
+  colorBar: string,
+  colorLine: string,
+  fmtBar: (v: number) => string,
+  fmtLine: (v: number) => string
+): string {
+  if (!series.length) return '<div class="sub">Sem dados no período.</div>';
+  const W = 560,
+    H = 200,
+    padL = 48,
+    padR = 48,
+    padT = 14,
+    padB = 24;
+  const innerW = W - padL - padR;
+  const slot = innerW / series.length;
+  const barW = Math.max(2, Math.min(18, slot * 0.7));
+  const xc = (i: number) => padL + slot * (i + 0.5);
+  const barMax = Math.max(...series.map((d) => d.bar), 1);
+  const lineVals = series.map((d) => d.line).filter((v): v is number => v != null);
+  const lineMax = Math.max(...lineVals, 1);
+  const yBar = (v: number) => H - padB - (v / barMax) * (H - padT - padB);
+  const yLine = (v: number) => H - padB - (v / lineMax) * (H - padT - padB);
+
+  const bars = series
+    .map((d, i) => `<rect x="${(xc(i) - barW / 2).toFixed(1)}" y="${yBar(d.bar).toFixed(1)}" width="${barW.toFixed(1)}" height="${(H - padB - yBar(d.bar)).toFixed(1)}" fill="${colorBar}" opacity="0.35"><title>${d.label}: ${fmtBar(d.bar)}${d.line != null ? " · " + fmtLine(d.line) : ""}</title></rect>`)
+    .join("");
+
+  let path = "";
+  let started = false;
+  series.forEach((d, i) => {
+    if (d.line == null) return;
+    path += `${started ? "L" : "M"}${xc(i).toFixed(1)} ${yLine(d.line).toFixed(1)} `;
+    started = true;
+  });
+  const dots = series
+    .map((d, i) => (d.line != null ? `<circle cx="${xc(i).toFixed(1)}" cy="${yLine(d.line).toFixed(1)}" r="2.2" fill="${colorLine}"/>` : ""))
+    .join("");
+
+  const step = Math.max(1, Math.ceil(series.length / 8));
+  const labels = series
+    .map((d, i) =>
+      i % step === 0 || i === series.length - 1
+        ? `<text x="${xc(i).toFixed(1)}" y="${H - 6}" font-size="9.5" fill="var(--fg-muted)" text-anchor="middle" font-family="var(--font-mono)">${d.label}</text>`
+        : ""
+    )
+    .join("");
+  const grid = [0, 0.5, 1]
+    .map((t) => {
+      const y = padT + t * (H - padT - padB);
+      const barTick = barMax * (1 - t);
+      const lineTick = lineMax * (1 - t);
+      return `<line x1="${padL}" y1="${y.toFixed(1)}" x2="${W - padR}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="1"/>
+        <text x="${padL - 4}" y="${(y + 3).toFixed(1)}" font-size="9.5" fill="${colorBar}" text-anchor="end" font-family="var(--font-mono)">${fmtBar(barTick)}</text>
+        <text x="${W - padR + 4}" y="${(y + 3).toFixed(1)}" font-size="9.5" fill="${colorLine}" font-family="var(--font-mono)">${fmtLine(lineTick)}</text>`;
+    })
+    .join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    ${grid}
+    ${bars}
+    <path d="${path.trim()}" fill="none" stroke="${colorLine}" stroke-width="2.2"/>
+    ${dots}
+    ${labels}
   </svg>`;
 }

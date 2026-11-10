@@ -146,7 +146,8 @@ def main():
             erros += 1
 
     logger.info("Sync Meta concluído: %d sucesso(s), %d erro(s)", sucessos, erros)
-    sys.exit(1 if erros > 0 and sucessos == 0 else 0)
+    # Qualquer cliente com erro faz o passo falhar no cron (antes só falhava se todos falhassem)
+    sys.exit(1 if erros > 0 else 0)
 
 
 if __name__ == "__main__":

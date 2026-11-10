@@ -33,25 +33,17 @@ cada push em `main` que toque esta pasta. Para habilitar:
 
 ## Atualizar os dados
 
-Os dados ficam embutidos (sem backend) em `src/data.ts`, extraídos do
-BigQuery (`guara-db`, dataset `guara_performance`/`correlacao`) para o
-cliente `source_of`. Para atualizar:
+Os dados ficam embutidos (sem backend) em `src/data.ts`, gerado a partir do
+BigQuery (`guara-db`) para o cliente `source_of`. Para atualizar, na raiz do repositório:
 
-1. Rode as consultas abaixo (projeto `guara-db`) e substitua os arrays
-   correspondentes em `src/data.ts`:
-   - `SHOPIFY` ← `guara_performance.shopify_diario` (cliente = source_of)
-   - `ADS` ← `correlacao.fato_performance_diaria` (cliente_id = source_of)
-   - `TOP_CAMPANHAS` ← `guara_performance.ads_diario`, agregado por
-     `plataforma, campanha`, últimos 30 dias
-   - `TOP_CRIATIVOS` ← `guara_performance.ads_diario`, agregado por
-     `plataforma, campanha, adset_name, ad_name` (apenas `ad_id IS NOT NULL`),
-     últimos 30 dias
-   - `ABANDONED` ← `guara_performance.abandoned_checkout_daily`
-     (cliente = source_of)
-   - `LAST_SYNC` ← `MAX(criado_em)` de `shopify_diario`, `pedidos_diario` e
-     `ads_diario`
-2. `npm run build` para confirmar que compila sem erros de tipo.
-3. Commit + push.
+```bash
+python3 scripts/gerar_dados_dashboard_source_of.py
+cd dashboard-source-of && npm run build
+```
+
+Depois, commit + push. O script grava `SHOPIFY`, `ADS`, `CAMPANHAS_DIARIO`,
+`CRIATIVOS_DIARIO`, `ABANDONED`, `ABANDONED_ORIGEM` (por fonte) e `LAST_SYNC`; não edite
+`data.ts` à mão.
 
 ## Estrutura
 

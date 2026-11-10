@@ -59,8 +59,9 @@ _CLIENT_CFG = {
 }
 
 _FIELDS = (
-    "id,created_at,total_price,total_discounts,shipping_lines,"
-    "financial_status,customer,source_name,note_attributes,landing_site"
+    "id,name,created_at,total_price,current_subtotal_price,total_discounts,shipping_lines,"
+    "financial_status,customer,email,source_name,note_attributes,landing_site,"
+    "shipping_address,line_items"
 )
 
 
@@ -69,18 +70,21 @@ def _get_headers(token: str) -> dict:
 
 
 def _paginar_pedidos(store: str, token: str,
-                     date_start: date, date_end: date) -> list[dict]:
-    """Busca todos os pedidos pagos no período com cursor pagination."""
+                     date_start: date, date_end: date,
+                     financial_status: str | None = "paid",
+                     fields: str = _FIELDS) -> list[dict]:
+    """Busca os pedidos do período com cursor pagination (por padrão só os pagos)."""
     url = f"https://{store}.myshopify.com/admin/api/{API_VERSION}/orders.json"
     headers = _get_headers(token)
     params = {
         "limit":            250,
         "status":           "any",
-        "financial_status": "paid",
         "created_at_min":   f"{date_start.isoformat()}T00:00:00-03:00",
         "created_at_max":   f"{date_end.isoformat()}T23:59:59-03:00",
-        "fields":           _FIELDS,
+        "fields":           fields,
     }
+    if financial_status:
+        params["financial_status"] = financial_status
     pedidos = []
     while True:
         r = requests.get(url, headers=headers, params=params, timeout=30)
@@ -155,10 +159,16 @@ def _normalizar(pedido: dict, cliente: str, utm_source_type: str, agora_iso: str
     # novo_cliente: None aqui — será calculado em batch após insert via BQ UPDATE
     customer = pedido.get("customer") or {}
 
+    email = (customer.get("email") or pedido.get("email") or "").strip().lower() or None
+    subtotal = pedido.get("current_subtotal_price")
+
     return {
         "cliente":        cliente,
         "order_id":       str(pedido["id"]),
+        "order_name":     pedido.get("name"),
         "customer_id":    str(customer.get("id", "")) or None,
+        "customer_email": email,
+        "current_subtotal_price": float(subtotal) if subtotal is not None else None,
         "data_brt":       data_brt,
         "created_at_utc": created_utc,
         "status":         pedido.get("financial_status"),
@@ -173,7 +183,38 @@ def _normalizar(pedido: dict, cliente: str, utm_source_type: str, agora_iso: str
         "utm_term":       utms.get("utm_term"),
         "source_name":    pedido.get("source_name"),
         "criado_em":      agora_iso,
+        # só a UF do endereço de entrega: o endereço completo não é guardado
+        "estado":         (pedido.get("shipping_address") or {}).get("province_code"),
     }
+
+
+def _normalizar_itens(pedido: dict, cliente: str, data_brt: str, agora_iso: str) -> list[dict]:
+    """Uma linha por item do pedido (SKU, produto, quantidade, receita do item após desconto)."""
+    itens = []
+    for it in pedido.get("line_items") or []:
+        qtd = int(it.get("quantity") or 0)
+        bruto = float(it.get("price") or 0) * qtd
+        itens.append({
+            "cliente":      cliente,
+            "order_id":     str(pedido["id"]),
+            "line_item_id": str(it["id"]),
+            "data_brt":     data_brt,
+            "sku":          (it.get("sku") or "").strip() or None,
+            "produto":      it.get("title"),
+            "variacao":     it.get("variant_title") or None,
+            "quantidade":   qtd,
+            "receita_item": round(bruto - float(it.get("total_discount") or 0), 2),
+            "criado_em":    agora_iso,
+        })
+    return itens
+
+
+def _sem_endereco(pedido: dict) -> dict:
+    """Cópia do pedido para o raw, com o endereço de entrega reduzido à UF."""
+    p = dict(pedido)
+    if p.get("shipping_address"):
+        p["shipping_address"] = {"province_code": p["shipping_address"].get("province_code")}
+    return p
 
 
 def _atualizar_novo_cliente_bq(cliente: str) -> int:
@@ -231,16 +272,24 @@ def sync_cliente(cliente_key: str, date_start: date, date_end: date) -> int:
 
     agora = datetime.now(timezone.utc).isoformat()
     rows  = [_normalizar(p, cliente_key, utm_source_type, agora) for p in pedidos_raw]
+    itens = [i for p, r in zip(pedidos_raw, rows) for i in _normalizar_itens(p, cliente_key, r["data_brt"], agora)]
+
+    # Resposta da Shopify como veio (só os campos pedidos em _FIELDS: sem endereço nem telefone)
+    from db.raw_writer import salvar_raw
+    salvar_raw("raw_shopify_pedidos", ["cliente", "order_id"],
+               [{"cliente": cliente_key, "order_id": p["id"], "payload": _sem_endereco(p)} for p in pedidos_raw])
 
     try:
         from db.bq_writer import enabled, _insert
         if enabled():
             _insert("pedidos_diario", rows, f"pedidos/{cliente_key}")
+            _insert("pedido_itens", itens, f"pedido_itens/{cliente_key}")
     except Exception as exc:
         logger.warning("[BQ] pedidos/%s falha: %s", cliente_key, exc)
 
     # Recalcula novo_cliente para todo o histórico do cliente
     n_updated = _atualizar_novo_cliente_bq(cliente_key)
+    logger.info("[%s] %d itens de pedido", cliente_key, len(itens))
     logger.info("[%s] ✅ %d pedidos | novo_cliente recalculado: %d linhas",
                 cliente_key, len(rows), n_updated)
     return len(rows)

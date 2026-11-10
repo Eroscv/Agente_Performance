@@ -1,10 +1,25 @@
-import { ABANDONED, ADS, CAMPANHAS_DIARIO, CRIATIVOS_DIARIO, SHOPIFY } from "./data";
+import {
+  ABANDONED,
+  ABANDONED_ORIGEM,
+  ADS,
+  CAMPANHAS_DIARIO,
+  CRIATIVOS_DIARIO,
+  PEDIDOS_ESTADO,
+  PEDIDOS_ORIGEM,
+  PEDIDOS_SKU,
+  SHOPIFY,
+} from "./data";
 import { addDays, inRange, mondayOf, parseISO, TODAY } from "./dates";
 import type {
+  AbandonedOrigemTotals,
   AbandonedTotals,
+  BarLinePoint,
   Canal,
   CanalTotals,
   CanalTotalsMap,
+  EstadoTotals,
+  OrigemTotals,
+  SkuTotals,
   ShopifyTotals,
   TopCampanha,
   TopCriativo,
@@ -77,6 +92,7 @@ export function sumAdsAllCanais(from: Date, to: Date): CanalTotalsMap {
       ...c,
       roas: c.investimento ? c.receita / c.investimento : null,
       cpa: c.pedidos ? c.investimento / c.pedidos : null,
+      cac: c.novos_clientes ? c.investimento / c.novos_clientes : null,
     };
     out[canal] = totals;
   });
@@ -118,11 +134,28 @@ export function aggCampanhas(from: Date, to: Date): TopCampanha[] {
   return [...byKey.values()];
 }
 
+// Primeiro dia com veiculação de cada anúncio em todo o histórico carregado (a carga não traz a data de criação).
+const INICIO_CRIATIVO = new Map<string, string>();
+for (const r of CRIATIVOS_DIARIO) {
+  const atual = INICIO_CRIATIVO.get(r.ad);
+  if (!atual || r.data < atual) INICIO_CRIATIVO.set(r.ad, r.data);
+}
+export const PRIMEIRO_DIA_DOS_DADOS = CRIATIVOS_DIARIO[0].data;
+
 export function aggCriativos(from: Date, to: Date): TopCriativo[] {
   const byAd = new Map<string, TopCriativo>();
   for (const r of CRIATIVOS_DIARIO) {
     if (!inRange(r.data, from, to)) continue;
-    const c = byAd.get(r.ad) ?? { campanha: r.campanha, adset: r.adset, ad: r.ad, inv: 0, compras: 0, receita: 0, cliques: 0 };
+    const c = byAd.get(r.ad) ?? {
+      campanha: r.campanha,
+      adset: r.adset,
+      ad: r.ad,
+      inv: 0,
+      compras: 0,
+      receita: 0,
+      cliques: 0,
+      inicio: INICIO_CRIATIVO.get(r.ad) ?? r.data,
+    };
     c.inv += r.inv;
     c.compras += r.compras;
     c.receita += r.receita;
@@ -150,4 +183,84 @@ export function weeklySeries(to: string, weeks: number): WeeklyPoint[] {
     });
   }
   return out;
+}
+
+export function sumAbandonedPorOrigem(from: Date, to: Date): AbandonedOrigemTotals[] {
+  const byOrigem = new Map<string, AbandonedOrigemTotals>();
+  for (const r of ABANDONED_ORIGEM) {
+    if (!inRange(r.data, from, to)) continue;
+    const o = byOrigem.get(r.origem) ?? { origem: r.origem, checkouts: 0, subtotal: 0, recuperados: 0, taxa_recuperacao: null };
+    o.checkouts += r.checkouts;
+    o.subtotal += r.subtotal;
+    o.recuperados += r.recuperados;
+    byOrigem.set(r.origem, o);
+  }
+  return [...byOrigem.values()]
+    .map((o) => ({ ...o, taxa_recuperacao: o.checkouts ? o.recuperados / o.checkouts : null }))
+    .sort((a, b) => b.checkouts - a.checkouts);
+}
+
+export function abandonedDiario(from: Date, to: Date): BarLinePoint[] {
+  return ABANDONED.filter((r) => inRange(r.data, from, to)).map((r) => ({
+    label: r.data.slice(8) + "/" + r.data.slice(5, 7),
+    bar: r.checkouts,
+    line: r.checkouts ? r.recuperados / r.checkouts : null,
+  }));
+}
+
+/** Investimento e ROAS por dia; `canais` filtra os canais de mídia somados. */
+export function investRoasDiario(from: Date, to: Date, canais: Canal[]): BarLinePoint[] {
+  const byDay = new Map<string, { inv: number; receita: number }>();
+  for (const r of ADS) {
+    if (!canais.includes(r.canal) || !inRange(r.data, from, to)) continue;
+    const d = byDay.get(r.data) ?? { inv: 0, receita: 0 };
+    d.inv += r.investimento || 0;
+    d.receita += r.receita || 0;
+    byDay.set(r.data, d);
+  }
+  return [...byDay.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([data, d]) => ({
+      label: data.slice(8) + "/" + data.slice(5, 7),
+      bar: d.inv,
+      line: d.inv ? d.receita / d.inv : null,
+    }));
+}
+
+export function aggEstados(from: Date, to: Date): EstadoTotals[] {
+  const by = new Map<string, EstadoTotals>();
+  for (const r of PEDIDOS_ESTADO) {
+    if (!inRange(r.data, from, to)) continue;
+    const e = by.get(r.estado) ?? { estado: r.estado, pedidos: 0, receita: 0 };
+    e.pedidos += r.pedidos;
+    e.receita += r.receita;
+    by.set(r.estado, e);
+  }
+  return [...by.values()].sort((a, b) => b.pedidos - a.pedidos);
+}
+
+export function aggSkus(from: Date, to: Date): SkuTotals[] {
+  const by = new Map<string, SkuTotals>();
+  for (const r of PEDIDOS_SKU) {
+    if (!inRange(r.data, from, to)) continue;
+    const s = by.get(r.sku) ?? { sku: r.sku, produto: r.produto, unidades: 0, pedidos: 0, receita: 0 };
+    s.unidades += r.unidades;
+    s.pedidos += r.pedidos;
+    s.receita += r.receita;
+    by.set(r.sku, s);
+  }
+  return [...by.values()].sort((a, b) => b.receita - a.receita);
+}
+
+/** Pedidos por utm_source no período, filtrados pelas origens em `casa`. */
+export function aggOrigens(from: Date, to: Date, casa: RegExp): OrigemTotals[] {
+  const by = new Map<string, OrigemTotals>();
+  for (const r of PEDIDOS_ORIGEM) {
+    if (!casa.test(r.origem) || !inRange(r.data, from, to)) continue;
+    const o = by.get(r.origem) ?? { origem: r.origem, pedidos: 0, receita: 0 };
+    o.pedidos += r.pedidos;
+    o.receita += r.receita;
+    by.set(r.origem, o);
+  }
+  return [...by.values()].sort((a, b) => b.pedidos - a.pedidos);
 }

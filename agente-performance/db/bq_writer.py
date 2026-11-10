@@ -78,6 +78,7 @@ def _insert(table_id: str, rows: list[dict], desc: str) -> int:
                 "abandoned_checkout_daily":   ["cliente", "data", "utm_source_norm"],
                 "meta_campaign_totals":       ["cliente", "data_inicio", "data_fim", "campaign_id"],
                 "pedidos_diario":             ["cliente", "order_id"],
+                "pedido_itens":               ["cliente", "order_id", "line_item_id"],
                 "novos_clientes_semanal":     ["cliente", "semana_inicio", "semana_fim"],
             }
             keys = merge_keys.get(table_id, [])

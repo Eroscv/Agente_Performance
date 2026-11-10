@@ -1,4 +1,8 @@
 """
+DEFASADO: as views em produção estão versionadas em bigquery/scripts/views/. Este gerador
+não reproduz as definições atuais e rodá-lo desfaz correções já aplicadas. Não executar.
+"""
+"""
 Cria/recria as views específicas por página do dashboard no BigQuery.
 
 Views criadas:
@@ -38,14 +42,14 @@ bq = bigquery.Client(project=P)
 
 # Bloco de deduplicação reutilizável
 _DEDUP = f"""
-    SELECT * EXCEPT(rn)
+    SELECT * EXCEPT(rn, nivel, dq_cliques_todos_ausente)
     FROM (
         SELECT *,
             ROW_NUMBER() OVER (
                 PARTITION BY cliente, plataforma, data, campaign_id, adset_id, ad_id
                 ORDER BY criado_em DESC
             ) AS rn
-        FROM `{P}.{D}.ads_diario`
+        FROM `{P}.ingestao.ing_ads_diario`
     )
     WHERE rn = 1
 """
@@ -187,7 +191,7 @@ FROM (
             PARTITION BY cliente, data
             ORDER BY criado_em DESC
         ) AS rn
-    FROM `{P}.{D}.shopify_diario`
+    FROM `{P}.ingestao.ing_shopify_resumo_diario`
 )
 WHERE rn = 1
 """

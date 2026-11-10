@@ -61,6 +61,7 @@ export interface TopCriativo {
   compras: number;
   receita: number;
   cliques: number;
+  inicio: string;
 }
 
 export interface AbandonedDay {
@@ -68,6 +69,10 @@ export interface AbandonedDay {
   checkouts: number;
   subtotal: number;
   recuperados: number;
+}
+
+export interface AbandonedOrigemDay extends AbandonedDay {
+  origem: string;
 }
 
 export interface LastSync {
@@ -88,6 +93,7 @@ export interface CanalTotals {
   novos_clientes: number;
   roas: number | null;
   cpa: number | null;
+  cac: number | null;
 }
 
 export type CanalTotalsMap = Partial<Record<Canal, CanalTotals>>;
@@ -123,6 +129,7 @@ export type TabKey =
   | "canais"
   | "recuperacao"
   | "criativos"
+  | "recompra"
   | "sync";
 
 export type PeriodKey =
@@ -140,4 +147,69 @@ export interface WeeklyPoint {
   cac: number | null;
   ticket: number | null;
   conv: number | null;
+}
+
+export interface BarLinePoint {
+  label: string;
+  bar: number;
+  line: number | null;
+}
+
+export interface AbandonedOrigemTotals {
+  origem: string;
+  checkouts: number;
+  subtotal: number;
+  recuperados: number;
+  taxa_recuperacao: number | null;
+}
+
+export interface EstadoDay {
+  data: string;
+  estado: string;
+  pedidos: number;
+  receita: number;
+}
+
+export interface SkuDay {
+  data: string;
+  sku: string;
+  produto: string | null;
+  unidades: number;
+  pedidos: number;
+  receita: number;
+}
+
+export interface OrigemDay {
+  data: string;
+  origem: string;
+  pedidos: number;
+  receita: number;
+}
+
+export interface RecompraMes {
+  mes: string;
+  pedidos: number;
+  novos_clientes: number;
+  recompradores: number;
+  receita: number;
+}
+
+export interface EstadoTotals {
+  estado: string;
+  pedidos: number;
+  receita: number;
+}
+
+export interface SkuTotals {
+  sku: string;
+  produto: string | null;
+  unidades: number;
+  pedidos: number;
+  receita: number;
+}
+
+export interface OrigemTotals {
+  origem: string;
+  pedidos: number;
+  receita: number;
 }

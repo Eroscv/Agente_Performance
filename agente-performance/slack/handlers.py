@@ -1067,7 +1067,7 @@ Monitora continuamente os dados de mídia paga dos clientes Guará (Meta Ads, Go
 
 *💡 Dicas*
 • Dê 👍 nas respostas certas — o agente aprende
-• Dados atualizados a cada 6h — `/status` mostra a última sync
+• Dados atualizados a cada 3h — `/status` mostra a última sync
 _Só você está vendo esta mensagem._
 """
     await respond(text=texto, response_type="ephemeral")

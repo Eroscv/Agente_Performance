@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard-source-of",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "preview", "--prefix", "/home/linuxferdora/curriculo/Agente_Performance/agente-performance/dashboard-source-of", "--", "--port", "4173"],
+      "port": 4173
+    }
+  ]
+}

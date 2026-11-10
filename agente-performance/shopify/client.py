@@ -177,7 +177,7 @@ def get_client_for(cliente_key: str):
 # Campos mínimos para reduzir payload
 _ORDER_FIELDS = (
     "id,created_at,total_price,subtotal_price,total_discounts,"
-    "financial_status,fulfillment_status,note_attributes,"
+    "financial_status,fulfillment_status,note_attributes,landing_site,referring_site,"
     "line_items,billing_address,shipping_address,customer"
 )
 

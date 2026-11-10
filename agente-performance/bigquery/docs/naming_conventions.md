@@ -12,21 +12,39 @@ em uso** nas três camadas — este arquivo formaliza, não renomeia nada.
   `ingestao` (silver), `correlacao` (gold).
 - Evitar nomes reservados do GoogleSQL.
 
+## Mapeamento camada → dataset
+
+| Camada | Dataset | Nome na metodologia de referência |
+|---|---|---|
+| Bronze | `guara_performance` | `bronze` |
+| Silver | `ingestao` | `silver` |
+| Gold | `correlacao` | `gold` |
+
+Os datasets mantêm os nomes históricos de propósito: renomear (o BigQuery não
+renomeia dataset, só copia) quebraria procedures, views, scripts de sync, o agente
+e o dashboard. A camada é identificada por este mapeamento, e as tabelas
+carregam a camada no prefixo (`ing_` na silver, `dim_`/`fato_` no gold).
+`guara_performance` também guarda as views `v_*` e as tabelas do pipeline de
+transcrição (`tickets_alerta`, `metricas_sla`, `analise_reunioes`, `transcricao`).
+
 ## Bronze (`guara_performance`)
 
 `<entidade>`, nome da entidade como a fonte a expõe, sem prefixo de
 sistema (diferente do repositório de referência, que usa
 `<sistema>_<entidade>` porque mistura CRM + ERP num único dataset — aqui
 cada entidade já é inequívoca: `shopify_diario`, `ads_diario`,
-`pedidos_diario`, `abandoned_checkout_daily`, `dooki_pedidos_diario`).
+`pedidos_diario`, `abandoned_checkout_daily`, `dooki_pedidos`).
+
+`raw_<fonte>`: resposta original da API, no mesmo dataset do bronze (`raw_yampi_pedidos`,
+`raw_shopify_pedidos`, `raw_meta_insights`, `raw_google_ads`).
 
 ## Silver (`ingestao`)
 
 `ing_<entidade>`, mesmo nome de entidade do bronze, prefixado com `ing_`
 para deixar explícito a camada ao ler o nome da tabela isolado (ex: num
-JOIN). Sem renomear colunas em relação ao bronze — a única adição permitida
-é uma coluna derivada quando ela é reutilizada por múltiplas consultas
-gold (caso de `ing_ads_diario.nivel`).
+JOIN). Sem renomear colunas em relação ao bronze. Colunas derivadas só entram quando
+reutilizadas por mais de uma consulta gold (`ing_ads_diario.nivel`) ou para
+marcar qualidade (`dq_<regra>`, ex: `dq_cliques_todos_ausente`).
 
 | Bronze | Silver |
 |---|---|
@@ -37,6 +55,10 @@ gold (caso de `ing_ads_diario.nivel`).
 | `abandoned_checkout_detail` | `ing_checkout_abandonado_detalhe` |
 | `meta_campaign_totals` | `ing_meta_campaign_totals` |
 | `novos_clientes_semanal` | `ing_novos_clientes_semanal` |
+| `dooki_pedidos` | `ing_yampi_pedidos` |
+| `shopify_clientes_historico` | `ing_shopify_clientes_historico` |
+| `tickets_alerta` | `ing_tickets` |
+| `metricas_sla` | `ing_metricas_sla` |
 
 ## Gold (`correlacao`)
 
