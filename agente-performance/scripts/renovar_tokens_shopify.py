@@ -3,7 +3,7 @@ scripts/renovar_tokens_shopify.py — Renova os tokens da Shopify (client_creden
 
 Os apps das lojas emitem token que expira em ~24h; sem renovação, todo sync da Shopify dá 401.
 Roda pelo timer guara-shopify-token (2x/dia). Quem lê o .env a cada execução (guara-job@) pega o
-token novo sozinho; o bot é reiniciado pelo ExecStartPost do drop-in do timer.
+token novo sozinho; o bot e o RPTN são reiniciados pelo ExecStartPost do drop-in do timer.
 ponytail: reinício do bot 2x/dia; se incomodar, trocar por leitura do token em tempo de execução.
 
 Exit 1 se alguma loja falhar (a unit aparece como falha).
@@ -20,6 +20,8 @@ import requests
 BASE_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BASE_DIR))
 ENV_FILE = BASE_DIR / ".env"
+# Outros serviços que usam o mesmo app da loja (o token novo vai também para o .env deles)
+COPIAS = {"source_of": [(Path("/home/guara/reportana_api_shopify/.env"), "SHOPIFY_ACCESS_TOKEN")]}  # RPTN
 
 
 def _lojas() -> list[tuple[str, str, str, str]]:
@@ -57,6 +59,10 @@ def main() -> int:
             falhas.append(f"{rotulo}: {str(e)[:150]}")
             continue
         texto = gravar(texto, chave, token)
+        for arq, k in COPIAS.get(rotulo, []):
+            if arq.exists():
+                arq.write_text(gravar(arq.read_text(), k, token))
+                arq.chmod(0o600)
         print(f"[{rotulo}] token renovado (expira em ~{r.json().get('expires_in', 0) // 3600}h)")
     ENV_FILE.write_text(texto)
     ENV_FILE.chmod(0o600)
