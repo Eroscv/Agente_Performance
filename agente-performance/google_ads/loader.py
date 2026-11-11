@@ -14,6 +14,7 @@ Uso CLI:
 
 import argparse
 import logging
+import os
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -28,6 +29,12 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+def _fim_janela() -> date:
+    """Ontem; ou hoje (BRT, parcial) quando SYNC_ATE_HOJE=1 — usado pelo ciclo de 3h."""
+    from agent.tz import hoje_brt
+    return hoje_brt() if os.getenv("SYNC_ATE_HOJE") == "1" else date.today() - timedelta(days=1)
 
 BASE_DIR = Path(__file__).parent.parent
 DB_PATH  = BASE_DIR / "data" / "campanhas.db"
@@ -89,7 +96,7 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
     client   = get_client()
     service  = client.get_service("GoogleAdsService")
 
-    date_end   = date.today() - timedelta(days=1)  # ontem
+    date_end   = _fim_janela()
     date_start = date_end - timedelta(days=dias - 1)
 
     query = QUERY.format(

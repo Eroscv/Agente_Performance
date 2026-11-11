@@ -133,14 +133,12 @@ def _alertar(texto: str, chave: str) -> None:
                 raise RuntimeError(f"Slack recusou o alerta: {r.text[:200]}")
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--dias", type=int, default=7)
-    a = ap.parse_args()
-    fim = date.today() - timedelta(days=1)
-    ini = fim - timedelta(days=a.dias - 1)
+def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[str]:
+    """Divergências local × API (e grãos duplicados) no período; lista vazia = tudo confere."""
     problemas: list[str] = []
     for c in contas():
+        if clientes and c["cliente"] not in clientes:
+            continue
         rotulo = f"{c['cliente']}/{c['plat']}/{c['conta']}"
         if not (c["db"] and c["tabela"]):
             problemas.append(f"{rotulo}: sem banco/tabela configurados")
@@ -161,6 +159,16 @@ def main() -> int:
             problemas.append(f"{rotulo} {d}: local R$ {lo:,.2f} × API R$ {apv:,.2f}")
         if dup:
             problemas.append(f"{rotulo}: {dup} grão(s) duplicado(s)")
+    return problemas
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dias", type=int, default=7)
+    a = ap.parse_args()
+    fim = date.today() - timedelta(days=1)
+    ini = fim - timedelta(days=a.dias - 1)
+    problemas = verificar(ini, fim)
     if not problemas:
         log.info("✅ dados conferem com a fonte (%s → %s)", ini, fim)
         return 0

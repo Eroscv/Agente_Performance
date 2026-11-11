@@ -33,6 +33,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def _fim_janela() -> date:
+    """Ontem; ou hoje (BRT, parcial) quando SYNC_ATE_HOJE=1 — usado pelo ciclo de 3h."""
+    from agent.tz import hoje_brt
+    return hoje_brt() if os.getenv("SYNC_ATE_HOJE") == "1" else date.today() - timedelta(days=1)
+
 BASE_DIR  = Path(__file__).parent.parent
 DB_PATH   = BASE_DIR / "data" / "campanhas.db"
 API_BASE  = "https://graph.facebook.com/v20.0"
@@ -370,7 +376,7 @@ def buscar_insights(account_id: str, dias: int = 30,
                     token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
     """Busca insights de anúncios via API em lotes de 14 dias."""
     _get_token(token_env)  # valida token antes de iterar
-    date_end   = date.today() - timedelta(days=1)
+    date_end   = _fim_janela()
     date_start = date_end - timedelta(days=dias - 1)
 
     logger.info("[%s] Buscando %d dias (%s → %s) em lotes", account_id, dias, date_start, date_end)
