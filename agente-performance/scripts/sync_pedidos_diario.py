@@ -11,6 +11,11 @@ UTMs — por cliente:
   POD: vêm de note_attributes [{name: utm_*, value: ...}]
   SO:  vêm de landing_site (query string: ?utm_source=...&utm_campaign=...)
 
+tipo_cliente (Source Of): 'novo' se o customer.orders_count da Shopify é 1, senão 'recorrente';
+             o mesmo critério do resumo diário oficial (shopify/sync.py), então a soma dos
+             'novo' por dia bate com shopify_diario.novos_clientes. Pedido sem customer fica nulo.
+             Chave para CAC por campanha/adset (correlacao.fato_cac_campanha_adset).
+
 novo_cliente: True se é o primeiro order_id do cliente no histórico completo do BQ
              (calculado post-load via UPDATE, independente do orders_count atual)
 
@@ -50,6 +55,7 @@ _CLIENT_CFG = {
         "store_env":    "SHOPIFY_STORE",
         "token_env":    "SHOPIFY_TOKEN",
         "utm_source":   "landing_site",   # UTMs no query string do landing_site
+        "tipo_cliente": True,             # grava novo/recorrente (critério oficial)
     },
     "pod_kombucha": {
         "store_env":    "SHOPIFY_POD_STORE",
@@ -109,6 +115,35 @@ def _paginar_pedidos(store: str, token: str,
     return pedidos
 
 
+def _orders_count_por_cliente(store: str, token: str, customer_ids: list[str]) -> dict[str, int]:
+    """
+    {customer_id: orders_count} atual na Shopify. Mesma chamada do resumo oficial
+    (shopify/client.py): customers.json?ids=, 250 por vez. Cliente não devolvido pela API
+    conta 1 (igual ao oficial); lote que falha fica fora do mapa, e o pedido sai sem tipo.
+    """
+    url = f"https://{store}.myshopify.com/admin/api/{API_VERSION}/customers.json"
+    headers = _get_headers(token)
+    contagem: dict[str, int] = {}
+    for i in range(0, len(customer_ids), 250):
+        lote = customer_ids[i:i + 250]
+        try:
+            for _ in range(3):
+                r = requests.get(url, headers=headers, timeout=30,
+                                 params={"ids": ",".join(lote), "fields": "id,orders_count", "limit": 250})
+                if r.status_code == 429:
+                    import time; time.sleep(float(r.headers.get("Retry-After", 2)))
+                    continue
+                r.raise_for_status()
+                break
+            else:
+                raise RuntimeError("rate limit persistente")
+            achados = {str(c["id"]): int(c.get("orders_count") or 1) for c in r.json().get("customers", [])}
+            contagem.update({cid: achados.get(cid, 1) for cid in lote})
+        except Exception as exc:
+            logger.warning("customers.json lote %d falhou: %s", i // 250 + 1, exc)
+    return contagem
+
+
 def _utms_from_note_attributes(note_attributes: list) -> dict:
     """Extrai UTMs de note_attributes [{name, value}] — POD."""
     utms = {}
@@ -135,7 +170,8 @@ def _utms_from_landing_site(landing_site: str) -> dict:
         return {}
 
 
-def _normalizar(pedido: dict, cliente: str, utm_source_type: str, agora_iso: str) -> dict:
+def _normalizar(pedido: dict, cliente: str, utm_source_type: str, agora_iso: str,
+                orders_count: dict[str, int] | None = None) -> dict:
     """Converte pedido Shopify para schema pedidos_diario."""
     created_raw = pedido.get("created_at", "")
     try:
@@ -161,12 +197,14 @@ def _normalizar(pedido: dict, cliente: str, utm_source_type: str, agora_iso: str
 
     email = (customer.get("email") or pedido.get("email") or "").strip().lower() or None
     subtotal = pedido.get("current_subtotal_price")
+    customer_id = str(customer.get("id", "")) or None
+    oc = (orders_count or {}).get(customer_id)
 
     return {
         "cliente":        cliente,
         "order_id":       str(pedido["id"]),
         "order_name":     pedido.get("name"),
-        "customer_id":    str(customer.get("id", "")) or None,
+        "customer_id":    customer_id,
         "customer_email": email,
         "current_subtotal_price": float(subtotal) if subtotal is not None else None,
         "data_brt":       data_brt,
@@ -176,6 +214,8 @@ def _normalizar(pedido: dict, cliente: str, utm_source_type: str, agora_iso: str
         "frete":          round(frete, 2),
         "desconto":       float(pedido.get("total_discounts") or 0),
         "novo_cliente":   None,   # calculado em _atualizar_novo_cliente_bq
+        "tipo_cliente":   None if oc is None else ("novo" if oc == 1 else "recorrente"),
+        "customer_orders_count": oc,
         "utm_source":     utms.get("utm_source"),
         "utm_medium":     utms.get("utm_medium"),
         "utm_campaign":   utms.get("utm_campaign"),
@@ -271,7 +311,12 @@ def sync_cliente(cliente_key: str, date_start: date, date_end: date) -> int:
     logger.info("[%s] %d pedidos recebidos", cliente_key, len(pedidos_raw))
 
     agora = datetime.now(timezone.utc).isoformat()
-    rows  = [_normalizar(p, cliente_key, utm_source_type, agora) for p in pedidos_raw]
+    orders_count = None
+    if cfg.get("tipo_cliente"):
+        ids = sorted({str(p["customer"]["id"]) for p in pedidos_raw if (p.get("customer") or {}).get("id")})
+        orders_count = _orders_count_por_cliente(store, token, ids)
+        logger.info("[%s] orders_count de %d/%d clientes", cliente_key, len(orders_count), len(ids))
+    rows  = [_normalizar(p, cliente_key, utm_source_type, agora, orders_count) for p in pedidos_raw]
     itens = [i for p, r in zip(pedidos_raw, rows) for i in _normalizar_itens(p, cliente_key, r["data_brt"], agora)]
 
     # Resposta da Shopify como veio (só os campos pedidos em _FIELDS: sem endereço nem telefone)
