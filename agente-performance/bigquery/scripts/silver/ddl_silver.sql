@@ -51,3 +51,9 @@ CLUSTER BY cliente
 AS
 SELECT * FROM `guara-db.guara_performance.pedido_itens`
 WHERE FALSE;
+
+-- Tipo de cliente da Shopify por pedido (Source Of): 'novo' (orders_count = 1) ou 'recorrente',
+-- o mesmo critério do resumo diário oficial. Base do CAC por campanha/adset.
+ALTER TABLE `guara-db.ingestao.ing_shopify_pedidos`
+  ADD COLUMN IF NOT EXISTS tipo_cliente STRING,
+  ADD COLUMN IF NOT EXISTS customer_orders_count INT64;
