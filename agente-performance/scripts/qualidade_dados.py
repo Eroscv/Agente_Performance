@@ -5,9 +5,14 @@ Para cada conta ativa (Meta e Google Ads), nos últimos N dias fechados:
   1. Reconciliação: investimento por dia no SQLite × total da própria API no nível da conta.
      Pega dia faltando, duplicação e filtro errado no sync (ex.: campanha removida sumindo).
   2. Duplicidade: linhas repetidas pelo grão da tabela (deveria ser sempre zero; o UNIQUE garante).
+  3. Teste-ouro da leitura: investimento por dia na view v_performance (o que relatórios, alertas e bot
+     leem) × soma da API das contas do cliente. Pega erro na camada de leitura com o SQLite certo
+     (ex.: campanha duplicada por anúncio na view, nov/2026).
 
 Saída: tabela no log; se houver divergência, alerta no Slack (SLACK_ALERT_CHANNEL), uma vez por dia
 por conjunto de problemas, e exit 1 para a unit aparecer como falha.
+
+Roda todo dia às 07:30 UTC (depois dos syncs, antes do relatório das 13h).
 
 Uso:
   python scripts/qualidade_dados.py            # últimos 7 dias
@@ -22,6 +27,7 @@ import logging
 import os
 import sqlite3
 import sys
+from collections import defaultdict
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -35,6 +41,7 @@ log = logging.getLogger("qualidade")
 
 TOLERANCIA_REL = 0.01   # 1%: atribuição tardia da Meta mexe em centavos
 TOLERANCIA_ABS = 1.00   # R$ 1
+BR = str.maketrans(",.", ".,")  # 1,234.50 -> 1.234,50
 GRAOS = {"meta_ads": ("account_id", "data", "ad_id"), "google_ads": ("data", "campaign_id")}
 
 
@@ -62,6 +69,19 @@ def _duplicatas(db: Path, tabela: str, grao: tuple) -> int:
             return c.execute(f"SELECT COUNT(*) FROM (SELECT 1 FROM {tabela} GROUP BY {g} HAVING COUNT(*) > 1)").fetchone()[0]
         except sqlite3.OperationalError:
             return 0
+
+
+def _view(cliente: str, plat: str, ini: str, fim: str) -> dict[str, float]:
+    """Investimento por dia como os relatórios enxergam (DuckDB sobre todos os SQLite)."""
+    from db.connections import query_fed
+    rows = query_fed("SELECT CAST(data AS VARCHAR) AS d, SUM(investimento) AS v FROM v_performance "
+                     "WHERE cliente_key = ? AND plataforma = ? AND data BETWEEN ? AND ? GROUP BY 1",
+                     [cliente, plat, ini, fim])
+    return {r["d"]: float(r["v"] or 0) for r in rows}
+
+
+def _brl(v: float) -> str:
+    return f"R$ {v:,.2f}".translate(BR)
 
 
 def _api_meta(conta: str, token_env: str, ini: str, fim: str) -> dict[str, float]:
@@ -136,6 +156,8 @@ def _alertar(texto: str, chave: str) -> None:
 def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[str]:
     """Divergências local × API (e grãos duplicados) no período; lista vazia = tudo confere."""
     problemas: list[str] = []
+    api_grupo: dict[tuple, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    sem_api: set[tuple] = set()
     for c in contas():
         if clientes and c["cliente"] not in clientes:
             continue
@@ -148,7 +170,10 @@ def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[st
                    else _api_gads(c["conta"], ini.isoformat(), fim.isoformat()))
         except Exception as e:
             problemas.append(f"{rotulo}: API indisponível ({str(e)[:120]})")
+            sem_api.add((c["cliente"], c["plat"]))
             continue
+        for d, v in api.items():
+            api_grupo[(c["cliente"], c["plat"])][d] += v
         local = _local(Path(c["db"]), c["tabela"], ini.isoformat(), fim.isoformat(),
                        c["conta"] if c["plat"] == "meta_ads" else None)
         ruins = comparar(local, api, ini, fim)
@@ -156,9 +181,23 @@ def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[st
         log.info("%-45s local R$ %12.2f | API R$ %12.2f | dias divergentes %d | grãos duplicados %d",
                  rotulo, sum(local.values()), sum(api.values()), len(ruins), dup)
         for d, lo, apv in ruins:
-            problemas.append(f"{rotulo} {d}: local R$ {lo:,.2f} × API R$ {apv:,.2f}")
+            problemas.append(f"{rotulo} {d}: banco {_brl(lo)} × API {_brl(apv)}")
         if dup:
             problemas.append(f"{rotulo}: {dup} grão(s) duplicado(s)")
+
+    for (cli, plat), api in api_grupo.items():
+        if (cli, plat) in sem_api:  # soma parcial da API daria falso alarme; o problema já foi listado
+            continue
+        try:
+            vis = _view(cli, plat, ini.isoformat(), fim.isoformat())
+        except Exception as e:
+            problemas.append(f"{cli}/{plat}: view dos relatórios ilegível ({str(e)[:120]})")
+            continue
+        ruins = comparar(vis, api, ini, fim)
+        log.info("%-45s relatório R$ %12.2f | API R$ %12.2f | dias divergentes %d",
+                 f"{cli}/{plat} (v_performance)", sum(vis.values()), sum(api.values()), len(ruins))
+        for d, lo, apv in ruins:
+            problemas.append(f"{cli}/{plat} {d}: relatório mostra {_brl(lo)} × API {_brl(apv)}")
     return problemas
 
 

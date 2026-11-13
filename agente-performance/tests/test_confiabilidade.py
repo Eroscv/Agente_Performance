@@ -76,3 +76,16 @@ def test_insights_sem_roas_da_loja_inteira():
     import relatorio.insights as ins
     src = inspect.getsource(ins.gerar_insights)
     assert "ROAS real (Shopify" not in src and "loja inteira" in src
+
+
+@pytest.mark.parametrize("view_dia12,esperado", [(1000.0, []), (2000.0, ["pod_kombucha/meta_ads 2026-11-12: relatório mostra R$ 2.000,00 × API R$ 1.000,00"])])
+def test_teste_ouro_confere_a_view_dos_relatorios(monkeypatch, view_dia12, esperado):
+    """SQLite certo e view errada (campanha duplicada) passava pela conferência; agora não passa."""
+    from scripts import qualidade_dados as q
+    monkeypatch.setattr(q, "contas", lambda: [
+        {"cliente": "pod_kombucha", "plat": "meta_ads", "conta": c, "token": "T", "db": "/x.db", "tabela": "t"} for c in ("1", "2")])
+    monkeypatch.setattr(q, "_api_meta", lambda conta, *a: {"2026-11-12": 600.0 if conta == "1" else 400.0})
+    monkeypatch.setattr(q, "_local", lambda db, tab, ini, fim, conta: {"2026-11-12": 600.0 if conta == "1" else 400.0})
+    monkeypatch.setattr(q, "_duplicatas", lambda *a: 0)
+    monkeypatch.setattr(q, "_view", lambda *a: {"2026-11-12": view_dia12})
+    assert q.verificar(date(2026, 11, 12), date(2026, 11, 12)) == esperado
