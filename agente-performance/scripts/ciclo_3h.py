@@ -3,9 +3,11 @@ scripts/ciclo_3h.py — Ciclo de 3 em 3 horas para Source Of e POD Kombucha.
 
   1. Sync com o dia de hoje (parcial): Meta Ads e Google Ads (ontem + hoje), pedidos Shopify (2 dias).
   2. Saúde dos dados: sync que falhou, dado atrasado, local × API nos 3 últimos dias fechados.
-  3. Metas de performance (clientes.json → "metas" do cliente; sem metas, pula).
+  3. Plano semanal (cenário otimizado das planilhas de planejamento, scripts/metas_planilha.py):
+     semana corrente até ontem, por plataforma — ROAS, ritmo de investimento, CPC, CPM, taxa de
+     conversão e ticket, com tolerância de TOLERANCIA (20%) contra o plano.
   4. Alerta no Slack (SLACK_ALERT_CHANNEL) se algo estiver fora; o mesmo conjunto de problemas
-     alerta uma vez por dia (livro-razão de idempotência), problema novo alerta na hora.
+     (ignorando os números) alerta uma vez por dia, problema novo alerta na hora.
 
 Sessões da Shopify continuam no sync diário (ShopifyQL só fecha o dia no dia seguinte).
 Exit 1 se houver problema, para a unit aparecer como falha.
@@ -16,9 +18,10 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import sys
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -31,7 +34,8 @@ from scripts import cron_shopify_sync, qualidade_dados, sync_gads_diario, sync_m
 log = logging.getLogger("ciclo_3h")
 CLIENTES = ("source_of", "pod_kombucha")
 DADOS = BASE_DIR / "data" / "performance"
-HORA_MIN_ROAS_HOJE = 12  # antes do meio-dia o ROAS parcial do dia é ruído
+TOLERANCIA = 0.20  # desvio aceito contra o plano antes de alertar
+PLATAFORMAS = {"meta_ads": "Meta", "google_ads": "Google"}
 
 
 def _sincronizar(cfg: dict) -> list[str]:
@@ -85,26 +89,66 @@ def _frescor(cfg: dict) -> list[str]:
             if (ult := _max_data(db, tab)) < ontem]
 
 
-def _dia(cli: str, cfg: dict, dia: str) -> tuple[float, float]:
-    """(investimento Meta+Google, receita Shopify) do dia."""
-    t = _tabelas(cli, cfg)
-    inv = sum(_soma(db, f"SELECT SUM(investimento) FROM {tab} WHERE data = ?", dia) for _, db, tab in t[:2])
-    return inv, _soma(t[2][1], "SELECT receita FROM shopify_receita_diaria WHERE data = ?", dia)
+def _real(cli: str, plat: str, ini: date, fim: date) -> dict:
+    from db.connections import query_fed_one
+    return query_fed_one("""
+        SELECT SUM(investimento) AS inv, SUM(impressoes) AS imp, SUM(cliques) AS cli,
+               SUM(conversoes) AS conv, SUM(receita) AS rec
+        FROM v_performance WHERE cliente_key = ? AND plataforma = ? AND data BETWEEN ? AND ?
+    """, (cli, plat, ini.isoformat(), fim.isoformat())) or {}
 
 
-def avaliar_metas(cli: str, metas: dict, hoje: tuple[float, float], ontem: tuple[float, float], hora: int) -> list[str]:
-    """Regras de performance. metas: roas_min (receita Shopify ÷ investimento Meta+Google), invest_max_dia, invest_min_dia."""
+def _div(a, b):
+    return a / b if a is not None and b else None
+
+
+def comparar_plano(rotulo: str, plano: dict, real: dict, dias: int, tol: float = TOLERANCIA) -> list[str]:
+    """Desvios da semana até agora contra o plano semanal. real: inv, imp, cli, conv, rec (somas)."""
+    g = {k: float(real.get(k) or 0) for k in ("inv", "imp", "cli", "conv", "rec")}
+    obs = {  # métrica: (valor real, valor do plano, maior é pior?)
+        "Investimento": (g["inv"], plano.get("invest", 0) * dias / 7, None),
+        "ROAS": (_div(g["rec"], g["inv"]), plano.get("roas"), False),
+        "CPC": (_div(g["inv"], g["cli"]), plano.get("cpc"), True),
+        "CPM": (_div(g["inv"] * 1000, g["imp"]), plano.get("cpm"), True),
+        "Conversão": (_div(g["conv"], g["cli"]), plano.get("conv"), False),
+        "Ticket": (_div(g["rec"], g["conv"]), plano.get("ticket"), False),
+    }
     out = []
-    (inv_h, rec_h), (inv_o, rec_o) = hoje, ontem
-    if "invest_max_dia" in metas and inv_h > metas["invest_max_dia"]:
-        out.append(f"{cli}: investimento de hoje R$ {inv_h:,.2f} acima do teto R$ {metas['invest_max_dia']:,.2f}")
-    if "invest_min_dia" in metas and inv_o < metas["invest_min_dia"]:
-        out.append(f"{cli}: investimento de ontem R$ {inv_o:,.2f} abaixo do mínimo R$ {metas['invest_min_dia']:,.2f}")
-    if "roas_min" in metas:
-        if inv_o and rec_o / inv_o < metas["roas_min"]:
-            out.append(f"{cli}: ROAS de ontem {rec_o / inv_o:.2f} abaixo da meta {metas['roas_min']:.2f}")
-        if hora >= HORA_MIN_ROAS_HOJE and inv_h and rec_h / inv_h < metas["roas_min"]:
-            out.append(f"{cli}: ROAS de hoje até agora {rec_h / inv_h:.2f} abaixo da meta {metas['roas_min']:.2f}")
+    for nome, (v, p, maior_pior) in obs.items():
+        if v is None or not p:
+            continue
+        desvio = v / p - 1
+        fora = abs(desvio) > tol if maior_pior is None else (desvio > tol if maior_pior else desvio < -tol)
+        if fora:
+            fmt = (lambda x: f"{x:.2%}") if nome == "Conversão" else (
+                lambda x: f"R$ {x:,.2f}") if nome != "ROAS" else (lambda x: f"{x:.2f}")
+            extra = " (ritmo esperado até ontem)" if nome == "Investimento" else ""
+            out.append(f"{rotulo}: {nome} {fmt(v)} × plano {fmt(p)}{extra} ({desvio:+.0%})")
+    return out
+
+
+def _plano_semana(cfg: dict) -> list[str]:
+    """Semana corrente até ontem (na segunda, a semana anterior inteira) contra o plano das planilhas."""
+    from scripts import metas_planilha
+    fim = hoje_brt() - timedelta(days=1)
+    ini = fim - timedelta(days=fim.weekday())
+    dias = (fim - ini).days + 1
+    sem = (ini - metas_planilha.S40).days // 7 + 40
+    out = []
+    for cli in CLIENTES:
+        try:
+            plano = metas_planilha.plano(cli)
+        except Exception as e:
+            out.append(f"{cli}: planilha de metas indisponível ({str(e)[:100]})")
+            continue
+        for plat, nome in PLATAFORMAS.items():
+            if not cfg[cli]["plataformas"].get(plat, {}).get("ativo"):
+                continue
+            p = plano.get(plat, {}).get(ini)
+            if not p:
+                out.append(f"{cli}/{nome}: plano da S{sem} não encontrado na planilha")
+                continue
+            out += comparar_plano(f"{cli}/{nome} S{sem} ({dias}d)", p, _real(cli, plat, ini, fim), dias)
     return out
 
 
@@ -115,10 +159,7 @@ def main() -> int:
 
     problemas = _sincronizar(cfg) + _frescor(cfg)
     problemas += qualidade_dados.verificar(hoje - timedelta(days=3), hoje - timedelta(days=1), set(CLIENTES))
-    for cli in CLIENTES:
-        if metas := cfg[cli].get("metas"):
-            problemas += avaliar_metas(cli, metas, _dia(cli, cfg, hoje.isoformat()),
-                                       _dia(cli, cfg, (hoje - timedelta(days=1)).isoformat()), agora_brt().hour)
+    problemas += _plano_semana(cfg)
 
     if not problemas:
         log.info("✅ ciclo 3h: dados em dia, conferem com a fonte e dentro das metas")
@@ -126,13 +167,18 @@ def main() -> int:
     texto = (f":rotating_light: *Ciclo 3h* ({agora_brt():%d/%m %H:%M}): {len(problemas)} ponto(s) fora do esperado\n• "
              + "\n• ".join(problemas[:25]) + ("\n…" if len(problemas) > 25 else ""))
     log.error(texto)
-    chave = hashlib.sha1("\n".join(sorted(problemas)).encode()).hexdigest()[:12]
+    # números fora da chave: o mesmo desvio com valor atualizado não realerta no mesmo dia
+    chave = hashlib.sha1("\n".join(sorted(re.sub(r"[\d.,%+-]+", "#", p) for p in problemas)).encode()).hexdigest()[:12]
     qualidade_dados._alertar(texto, f"ciclo_3h:{hoje}:{chave}")
     return 1
 
 
 if __name__ == "__main__":
-    assert avaliar_metas("x", {"roas_min": 3}, (100, 200), (100, 400), 13) == ["x: ROAS de hoje até agora 2.00 abaixo da meta 3.00"]
-    assert avaliar_metas("x", {"roas_min": 3}, (100, 200), (100, 400), 9) == []
-    assert len(avaliar_metas("x", {"invest_max_dia": 50, "invest_min_dia": 200}, (60, 0), (100, 0), 9)) == 2
+    _p = {"invest": 700, "roas": 5, "cpc": 3, "cpm": 50, "conv": 0.05, "ticket": 300}
+    _ok = {"inv": 300, "imp": 6000, "cli": 100, "conv": 5, "rec": 1500}  # 3 dias, tudo no plano
+    assert comparar_plano("x", _p, _ok, 3) == [], comparar_plano("x", _p, _ok, 3)
+    _ruim = dict(_ok, inv=500)  # gasto 67% acima do ritmo, ROAS 3 (−40%), CPC e CPM 67% mais caros
+    _r = comparar_plano("x", _p, _ruim, 3)
+    assert [l.split(":")[1].split()[0] for l in _r] == ["Investimento", "ROAS", "CPC", "CPM"], _r
+    assert comparar_plano("x", {"invest": 700}, {}, 3) == ["x: Investimento R$ 0.00 × plano R$ 300.00 (ritmo esperado até ontem) (-100%)"]
     sys.exit(main())
