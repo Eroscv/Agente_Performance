@@ -89,3 +89,18 @@ def test_teste_ouro_confere_a_view_dos_relatorios(monkeypatch, view_dia12, esper
     monkeypatch.setattr(q, "_duplicatas", lambda *a: 0)
     monkeypatch.setattr(q, "_view", lambda *a: {"2026-11-12": view_dia12})
     assert q.verificar(date(2026, 11, 12), date(2026, 11, 12)) == esperado
+
+
+def test_saude_verde_e_vermelho():
+    from scripts.saude import _nome, _quando, montar
+    assert _nome("guara-job@relatorio_diario.service") == "relatorio_diario" and _nome("guara-transcricao.service") == "transcricao"
+    assert _quando("Fri 2026-11-13 13:00:35 UTC") == "13/11 13:00 UTC"
+    ok = {"rodou": True, "Result": "success", "ExecMainStatus": "0", "ExecMainExitTimestamp": "Fri 2026-11-13 13:00:35 UTC"}
+    rot = [{"nome": "relatorio_diario", **ok}, {"nome": "qualidade_dados", **ok},
+           {"nome": "sync_meta_semanal", "rodou": False, "Result": "", "ExecMainStatus": "", "ExecMainExitTimestamp": ""}]
+    texto, prob = montar("13/11", rot, [], 551, 38.0)
+    assert prob == [] and texto.startswith(":large_green_circle:") and "2 de 3 ok" in texto and "Teste-ouro (banco e relatórios × API): ok" in texto
+    rot[1] = {**rot[1], "Result": "exit-code", "ExecMainStatus": "1"}
+    texto, prob = montar("13/11", rot, ["pod_kombucha: Meta parado em 2026-11-10 (esperado ≥ 2026-11-12)"], 120, 38.0)
+    assert len(prob) == 3 and texto.startswith(":red_circle:") and "*divergência*" in texto
+    assert "rotina *qualidade_dados* falhou (código 1) em 13/11 13:00 UTC" in texto
