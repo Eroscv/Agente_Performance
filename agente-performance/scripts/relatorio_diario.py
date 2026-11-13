@@ -158,12 +158,33 @@ def _alertas(data: str, cliente_key: str, plataforma: str) -> list[dict]:
     """, (data, cliente_key, plataforma))
 
 
+def conferir_fonte(data: str, cliente_key: str, plataforma: str, invest_local: float) -> tuple[str, str]:
+    """Investimento do dia no banco × API da plataforma (todas as contas do cliente).
+
+    ("ok", selo) | ("divergente", detalhe) | ("sem_conferencia", motivo). Mesma tolerância da
+    conferência semanal (qualidade_dados): 1% ou R$ 1.
+    """
+    from scripts import qualidade_dados as q
+    contas = [c for c in q.contas() if c["cliente"] == cliente_key and c["plat"] == plataforma]
+    if not contas:
+        return "sem_conferencia", "conta não configurada"
+    try:
+        api = sum(sum((q._api_meta(c["conta"], c["token"], data, data) if plataforma == "meta_ads"
+                       else q._api_gads(c["conta"], data, data)).values()) for c in contas)
+    except Exception as e:
+        return "sem_conferencia", f"API indisponível ({str(e)[:80]})"
+    d = date.fromisoformat(data)
+    if q.comparar({data: invest_local}, {data: api}, d, d):
+        return "divergente", f"banco {fmt_brl(invest_local)} × API {fmt_brl(api)}"
+    return "ok", f"investimento conferido com a API ({fmt_brl(api)})"
+
+
 # ── Builder de blocos Block Kit ───────────────────────────────────────────────
 
 def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
                        d: dict, camps: list, alts: list,
                        ant: dict | None, shopify: dict | None,
-                       notion_url: str | None) -> list[dict]:
+                       notion_url: str | None, selo: str = "") -> list[dict]:
     """Monta lista completa de blocos Block Kit — tudo em tabelas de código."""
 
     nome_c   = LABELS_CLIENTE.get(cliente_key, cliente_key)
@@ -283,7 +304,7 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
         blocos.append(_bk_divider())
 
     # ── 8. Rodapé ─────────────────────────────────────────────────────────
-    rodape = f"_Gerado em {time.strftime('%d/%m/%Y %H:%M')} · Dados via API direta_"
+    rodape = f"_Gerado em {time.strftime('%d/%m/%Y %H:%M')} · {selo}_"
     if notion_url:
         rodape += f" · <{notion_url}|📎 Ver no Notion>"
     blocos.append(_bk_context(rodape))
@@ -318,6 +339,16 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
     if not d or not d.get("investimento"):
         logger.info("[%s·%s] Sem dados para %s — pulando", cliente_key, plataforma, data)
         return False
+
+    status, detalhe = conferir_fonte(data, cliente_key, plataforma, float(d["investimento"]))
+    if status == "divergente":
+        from scripts.qualidade_dados import _alertar
+        logger.error("[%s·%s] %s: %s — relatório retido", cliente_key, plataforma, data, detalhe)
+        _alertar(f":no_entry: *Relatório diário retido* — {cliente_key}/{plataforma} {data}: {detalhe}. "
+                 f"Nada foi postado no canal de relatórios; o próximo sync corrige e o relatório sai na execução seguinte.",
+                 f"relatorio_retido:{cliente_key}:{plataforma}:{data}")
+        return False
+    selo = f"✅ {detalhe}" if status == "ok" else f"⚠️ não conferido: {detalhe}"
 
     camps   = _campanhas_dia(data, cliente_key, plataforma)
     alts    = _alertas(data, cliente_key, plataforma)
@@ -367,7 +398,7 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
         resumo_rows.insert(2, ["💸 c/ Imposto",  fmt_brl(invest_imp)])
     ancora_blocos = [
         _bk_section(_tabela_codigo(["Métrica", "Valor"], resumo_rows)),
-        _bk_context(f"_{data_fmt} · {nome_c} · {nome_p} · {d.get('campanhas', 0)} campanhas ativas_"),
+        _bk_context(f"_{data_fmt} · {nome_c} · {nome_p} · {d.get('campanhas', 0)} campanhas ativas · {selo}_"),
     ]
     _post({
         "channel": SLACK_CHANNEL,
@@ -377,7 +408,7 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
     })
 
     # ── Msg 3+ (thread): relatório completo ──────────────────────────────
-    blocos = _blocos_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url)
+    blocos = _blocos_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url, selo)
     ok = _enviar_blocos(SLACK_CHANNEL, thread_ts, blocos,
                         fallback_txt=f"Relatório diário {nome_c} · {nome_p} · {data_fmt}")
     if ok:
@@ -393,7 +424,8 @@ def main():
     parser.add_argument("--cliente", default=None, help="Filtrar por cliente_key")
     args = parser.parse_args()
 
-    data = args.data or (date.today() - timedelta(days=1)).isoformat()
+    from agent.tz import hoje_brt
+    data = args.data or (hoje_brt() - timedelta(days=1)).isoformat()
     logger.info("Gerando relatório diário para %s", data)
 
     clientes_json = json.loads((BASE_DIR / "clientes.json").read_text())
@@ -402,7 +434,7 @@ def main():
         if not cfg.get("ativo", False): continue
         if args.cliente and key != args.cliente: continue
         for plat, pcfg in cfg.get("plataformas", {}).items():
-            if pcfg.get("ativo", False):
+            if pcfg.get("ativo", False) and plat in LABELS_PLAT:  # Shopify entra como bloco do relatório
                 segmentos.append((key, plat))
 
     from utils.idempotencia import uma_vez
