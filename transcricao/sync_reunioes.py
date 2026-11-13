@@ -53,10 +53,7 @@ BQ_DATASET  = os.getenv("BQ_DATASET",  "transcricao")
 BQ_TABLE    = os.getenv("BQ_TABLE",    "transcricao")
 BQ_CREDS    = os.getenv("BQ_CREDS",    str(BASE_DIR / "credentials" / "gdrive-service-account.json"))
 
-MONGO_URI  = os.getenv(
-    "MONGODB_URI",
-    "mongodb+srv://erosvital9_db_user:6oDGHngGEDAgwLce@transcricoesefeedbacks.dmbgfdg.mongodb.net"
-)
+MONGO_URI  = os.getenv("MONGODB_URI", "")  # opcional; Mongo desativado na VPS FEQ (nov/2026)
 MONGO_DB   = "agente_performance"
 MONGO_COL  = "reunioes"
 
@@ -210,7 +207,7 @@ def ja_processado(conn: sqlite3.Connection, file_id: str) -> bool:
     """
     if conn.execute("SELECT id FROM reunioes WHERE fonte_id = ?", (file_id,)).fetchone():
         return True
-    if os.getenv("TRANSCRICAO_SEM_MONGO") == "1":  # escape explícito para rodar sem Mongo
+    if os.getenv("TRANSCRICAO_SEM_MONGO") == "1" or not MONGO_URI:  # sem Mongo configurado: só SQLite
         return False
     col = get_mongo_col()
     if col is None:
@@ -496,7 +493,7 @@ _mongo_client = None
 def get_mongo_col():
     """Retorna a collection MongoDB, criando índice único na primeira vez."""
     global _mongo_client
-    if not _MONGO_AVAILABLE:
+    if not (_MONGO_AVAILABLE and MONGO_URI):
         return None
     try:
         if _mongo_client is None:
