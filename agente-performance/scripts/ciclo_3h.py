@@ -36,6 +36,7 @@ CLIENTES = ("source_of", "pod_kombucha")
 DADOS = BASE_DIR / "data" / "performance"
 TOLERANCIA = 0.20  # desvio aceito contra o plano antes de alertar
 PLATAFORMAS = {"meta_ads": "Meta", "google_ads": "Google"}
+BR = str.maketrans(",.", ".,")  # 1,234.50 -> 1.234,50
 
 
 def _sincronizar(cfg: dict) -> list[str]:
@@ -120,8 +121,8 @@ def comparar_plano(rotulo: str, plano: dict, real: dict, dias: int, tol: float =
         desvio = v / p - 1
         fora = abs(desvio) > tol if maior_pior is None else (desvio > tol if maior_pior else desvio < -tol)
         if fora:
-            fmt = (lambda x: f"{x:.2%}") if nome == "Conversão" else (
-                lambda x: f"R$ {x:,.2f}") if nome != "ROAS" else (lambda x: f"{x:.2f}")
+            molde = "{:.2%}" if nome == "Conversão" else "{:.2f}" if nome == "ROAS" else "R$ {:,.2f}"
+            fmt = lambda x: molde.format(x).translate(BR)  # noqa: E731
             extra = " (ritmo esperado até ontem)" if nome == "Investimento" else ""
             out.append(f"{rotulo}: {nome} {fmt(v)} × plano {fmt(p)}{extra} ({desvio:+.0%})")
     return out
@@ -180,5 +181,5 @@ if __name__ == "__main__":
     _ruim = dict(_ok, inv=500)  # gasto 67% acima do ritmo, ROAS 3 (−40%), CPC e CPM 67% mais caros
     _r = comparar_plano("x", _p, _ruim, 3)
     assert [l.split(":")[1].split()[0] for l in _r] == ["Investimento", "ROAS", "CPC", "CPM"], _r
-    assert comparar_plano("x", {"invest": 700}, {}, 3) == ["x: Investimento R$ 0.00 × plano R$ 300.00 (ritmo esperado até ontem) (-100%)"]
+    assert comparar_plano("x", {"invest": 700}, {}, 3) == ["x: Investimento R$ 0,00 × plano R$ 300,00 (ritmo esperado até ontem) (-100%)"]
     sys.exit(main())
