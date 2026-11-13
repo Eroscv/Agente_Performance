@@ -40,6 +40,8 @@ from google.oauth2 import service_account as _sa
 # ── Config ────────────────────────────────────────────────────────────────────
 
 BASE_DIR    = Path(__file__).parent
+sys.path.insert(0, str(BASE_DIR))
+from glossario import CLIENTES  # noqa: E402
 AGENTE_DIR  = BASE_DIR.parent / "agente-performance"
 ENV_FILE    = AGENTE_DIR / ".env"
 DB_PATH     = BASE_DIR / "db" / "reunioes.db"
@@ -100,6 +102,8 @@ Regras:
 - "urgente": deadline próximo, cliente pediu urgência, risco de perder conta
 - "sem_acesso": falta de acesso a conta de anúncio, sistema, plataforma
 - "bloqueio": algo impedindo a equipe de avançar num cliente
+- Nomes de clientes: use exatamente a grafia oficial — """ + CLIENTES + """.
+  A transcrição é automática e pode deturpar nomes; corrija para a grafia oficial, nunca invente cliente novo
 """
 
 # ── SQLite ────────────────────────────────────────────────────────────────────
@@ -269,7 +273,8 @@ Detalhes:
             raw = raw[4:]
     raw = raw.strip()
 
-    return json.loads(raw)
+    from glossario import normalizar  # o texto de entrada já vem corrigido; isto pega o que o LLM reescrever
+    return json.loads(normalizar(raw))
 
 
 # ── Slack ─────────────────────────────────────────────────────────────────────

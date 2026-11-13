@@ -419,15 +419,16 @@ def parsear_reuniao(texto: str, nome_arquivo: str, doc=None) -> dict:
         ]
         detalhes = "\n\n".join(extras)[:4000]
 
+    from glossario import normalizar  # ASR do Meet: "Sorso Soft" -> "Source Of", "FEC" -> "FEQ"
     return {
         "data":            data_str,
         "hora":            hora_str,
-        "titulo":          titulo,
+        "titulo":          normalizar(titulo),
         "participantes":   participantes,
-        "resumo":          resumo,
-        "decisoes":        decisoes,
-        "proximas_etapas": proximas,
-        "detalhes":        detalhes,
+        "resumo":          normalizar(resumo),
+        "decisoes":        normalizar(decisoes),
+        "proximas_etapas": normalizar(proximas),
+        "detalhes":        normalizar(detalhes),
     }
 
 
