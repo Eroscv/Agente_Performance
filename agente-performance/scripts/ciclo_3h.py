@@ -158,9 +158,9 @@ def main() -> int:
     cfg = json.loads((BASE_DIR / "clientes.json").read_text())["clientes"]
     hoje = hoje_brt()
 
-    problemas = _sincronizar(cfg) + _frescor(cfg)
-    problemas += qualidade_dados.verificar(hoje - timedelta(days=3), hoje - timedelta(days=1), set(CLIENTES))
-    problemas += _plano_semana(cfg)
+    tecnicos = _sincronizar(cfg) + _frescor(cfg)
+    tecnicos += qualidade_dados.verificar(hoje - timedelta(days=3), hoje - timedelta(days=1), set(CLIENTES))
+    problemas = tecnicos + _plano_semana(cfg)
 
     if not problemas:
         log.info("✅ ciclo 3h: dados em dia, conferem com a fonte e dentro das metas")
@@ -171,7 +171,8 @@ def main() -> int:
     # números fora da chave: o mesmo desvio com valor atualizado não realerta no mesmo dia
     chave = hashlib.sha1("\n".join(sorted(re.sub(r"[\d.,%+-]+", "#", p) for p in problemas)).encode()).hexdigest()[:12]
     qualidade_dados._alertar(texto, f"ciclo_3h:{hoje}:{chave}")
-    return 1
+    # exit 1 só para falha técnica: desvio do plano é negócio (já alertado) e não deve pintar o post de saúde
+    return 1 if tecnicos else 0
 
 
 if __name__ == "__main__":
