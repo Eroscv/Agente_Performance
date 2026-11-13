@@ -50,6 +50,8 @@ _SQLITE_DBS = {
     "shopify_src":     DATA_DIR / "performance/source_of/shopify_receita.db",
     "shopify_sess_src": DATA_DIR / "performance/source_of/shopify.db",
     "botica_meta":     DATA_DIR / "performance/botica/meta_ads.db",
+    "pod_shopify":     DATA_DIR / "performance/pod_kombucha/shopify_receita.db",
+    "botica_shopify":  DATA_DIR / "performance/botica/shopify_receita.db",
 }
 
 # ── DDL das views (idêntico ao connections.py para garantir paridade) ─────────
@@ -206,6 +208,20 @@ WH_DIR = BASE_DIR / "data" / "warehouse"
 
 # ── DDL views DW ─────────────────────────────────────────────────────────────
 
+# Pedidos Shopify de todas as lojas, com cliente_key. shopify_receita_diaria (abaixo) continua só
+# Source OF porque ~40 consultas leem sem filtro de cliente.
+_SHOPIFY_POR_CLIENTE_DDL = """
+CREATE OR REPLACE VIEW shopify_por_cliente AS
+SELECT 'source_of' AS cliente_key, CAST(data AS VARCHAR) AS data, receita, pedidos, novos_clientes,
+       recompradores, ticket_medio, total_desconto, pedidos_acima_300 FROM shopify_src.shopify_receita_diaria
+UNION ALL
+SELECT 'pod_kombucha', CAST(data AS VARCHAR), receita, pedidos, novos_clientes,
+       recompradores, ticket_medio, total_desconto, pedidos_acima_300 FROM pod_shopify.shopify_receita_diaria
+UNION ALL
+SELECT 'botica', CAST(data AS VARCHAR), receita, pedidos, novos_clientes,
+       recompradores, ticket_medio, total_desconto, pedidos_acima_300 FROM botica_shopify.shopify_receita_diaria
+"""
+
 _SHOPIFY_DDL = """
 CREATE OR REPLACE VIEW shopify_receita_diaria AS
 SELECT
@@ -281,6 +297,7 @@ def _build_duck_conn() -> duckdb.DuckDBPyConnection:
 
     try:
         conn.execute(_SHOPIFY_DDL)
+        conn.execute(_SHOPIFY_POR_CLIENTE_DDL)
         logger.debug("[duck] View shopify_receita_diaria criada")
     except Exception as e:
         logger.warning("[duck] Erro ao criar view Shopify: %s", e)

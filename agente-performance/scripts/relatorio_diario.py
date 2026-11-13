@@ -130,12 +130,12 @@ def _campanhas_dia(data: str, cliente_key: str, plataforma: str) -> list[dict]:
     """, (data, cliente_key, plataforma))
 
 
-def _shopify_dia(data: str) -> dict | None:
+def _shopify_dia(data: str, cliente_key: str) -> dict | None:
     return query_one("""
         SELECT receita, pedidos, novos_clientes, recompradores,
                ticket_medio, total_desconto, pedidos_acima_300
-        FROM shopify_receita_diaria WHERE data = ?
-    """, (data,))
+        FROM shopify_por_cliente WHERE data = ? AND cliente_key = ?
+    """, (data, cliente_key))
 
 
 def _dia_anterior(data: str, cliente_key: str, plataforma: str) -> dict | None:
@@ -267,8 +267,8 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
             )))
             blocos.append(_bk_divider())
 
-    # ── 7. Shopify (Source OF) ────────────────────────────────────────────
-    if shopify and cliente_key == "source_of":
+    # ── 7. Shopify (loja inteira, todos os canais) ────────────────────────
+    if shopify:
         blocos.append(_bk_section("*🛒 Shopify — Dados da Loja*"))
         shp_rows = [
             ["📦 Pedidos",           fmt_n(shopify.get("pedidos"))],
@@ -322,7 +322,7 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
     camps   = _campanhas_dia(data, cliente_key, plataforma)
     alts    = _alertas(data, cliente_key, plataforma)
     ant     = _dia_anterior(data, cliente_key, plataforma)
-    shopify = _shopify_dia(data) if cliente_key == "source_of" else None
+    shopify = _shopify_dia(data, cliente_key)
 
     # ── Publica no Notion ─────────────────────────────────────────────────
     notion_url = None
