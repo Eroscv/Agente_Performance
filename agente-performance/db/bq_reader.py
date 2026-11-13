@@ -44,7 +44,11 @@ def _credencial() -> str:
 
 
 def enabled() -> bool:
-    """True se credenciais BQ estão configuradas e o arquivo existe."""
+    """True só com BQ_LEITURA=1 e credencial presente. A base de verdade é o SQLite (VPS FEQ);
+    a credencial do GCP existe para transcrição/backup e não deve desviar relatórios e o bot
+    para o BigQuery, que não é alimentado com o histórico e tem outro esquema."""
+    if os.environ.get("BQ_LEITURA") != "1":
+        return False
     creds = _credencial()
     return bool(creds and Path(creds).exists())
 

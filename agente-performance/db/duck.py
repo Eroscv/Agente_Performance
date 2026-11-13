@@ -55,7 +55,7 @@ _SQLITE_DBS = {
 # ── DDL das views (idêntico ao connections.py para garantir paridade) ─────────
 
 _V_PERFORMANCE_DDL = """
-CREATE OR REPLACE VIEW v_performance AS
+CREATE OR REPLACE VIEW v_performance_linhas AS
 
 SELECT
     'source_of'   AS cliente_key, 'Source OF'    AS cliente_nome, 'google_ads' AS plataforma,
@@ -141,6 +141,29 @@ SELECT
     NULL,
     COALESCE(video_3s, 0), COALESCE(thruplays, 0)
 FROM botica_meta.botica_meta_ads_diario
+"""
+
+# Meta grava uma linha por anúncio; quem lê v_performance espera uma linha por campanha/dia
+# (somar ROAS/CTR de anúncios, contar campanhas e listar "por campanha" saía duplicado).
+# Taxas recalculadas sobre as somas; Meta de Source OF e POD mantém o investimento com imposto
+# (1,1215) no ROAS/CPA, como na view por linha.
+_V_PERFORMANCE_AGG_DDL = """
+CREATE OR REPLACE VIEW v_performance AS
+SELECT
+    cliente_key, ANY_VALUE(cliente_nome) AS cliente_nome, plataforma, data, campanha,
+    ANY_VALUE(campaign_id) AS campaign_id, ANY_VALUE(objetivo) AS objetivo, ANY_VALUE(status) AS status,
+    SUM(impressoes) AS impressoes, SUM(cliques) AS cliques,
+    CASE WHEN plataforma = 'meta_ads' THEN MAX(alcance) END AS alcance,  -- alcance não soma entre anúncios
+    SUM(investimento) AS investimento, SUM(conversoes) AS conversoes, SUM(receita) AS receita,
+    ROUND(SUM(receita) / NULLIF(SUM(investimento) * imp, 0), 4)     AS roas,
+    ROUND(SUM(investimento) * imp / NULLIF(SUM(conversoes), 0), 2)  AS cpa,
+    ROUND(SUM(cliques) * 100.0 / NULLIF(SUM(impressoes), 0), 4)     AS ctr,
+    ROUND(SUM(investimento) / NULLIF(SUM(cliques), 0), 2)           AS cpc_medio,
+    SUM(video_3s) AS video_3s, SUM(thruplays) AS thruplays
+FROM (SELECT *, CASE WHEN plataforma = 'meta_ads' AND cliente_key IN ('source_of', 'pod_kombucha')
+                     THEN 1.1215 ELSE 1 END AS imp
+      FROM v_performance_linhas)
+GROUP BY cliente_key, plataforma, data, campanha, imp
 """
 
 _CAMPANHAS_UNIFICADA_DDL = """
@@ -250,6 +273,7 @@ def _build_duck_conn() -> duckdb.DuckDBPyConnection:
     # Cria views — só as que têm os DBs necessários
     try:
         conn.execute(_V_PERFORMANCE_DDL)
+        conn.execute(_V_PERFORMANCE_AGG_DDL)
         conn.execute(_CAMPANHAS_UNIFICADA_DDL)
         logger.debug("[duck] Views v_performance e campanhas_unificada criadas")
     except Exception as e:

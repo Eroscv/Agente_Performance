@@ -115,16 +115,17 @@ def _resumo_dia(data: str, cliente_key: str, plataforma: str) -> dict | None:
 def _campanhas_dia(data: str, cliente_key: str, plataforma: str) -> list[dict]:
     return query("""
         SELECT campanha,
-               ROUND(investimento, 2) AS invest,
-               ROUND(receita, 2)      AS receita,
-               ROUND(roas, 2)         AS roas,
-               ROUND(conversoes, 0)   AS conv,
-               ROUND(cliques, 0)      AS cliques,
-               ROUND(ctr, 2)          AS ctr,
-               ROUND(cpc_medio, 2)    AS cpc
+               ROUND(SUM(investimento), 2)                                AS invest,
+               ROUND(SUM(receita), 2)                                     AS receita,
+               ROUND(SUM(receita) / NULLIF(SUM(investimento), 0), 2)      AS roas,
+               ROUND(SUM(conversoes), 0)                                  AS conv,
+               ROUND(SUM(cliques), 0)                                     AS cliques,
+               ROUND(SUM(cliques) / NULLIF(SUM(impressoes), 0) * 100, 2)  AS ctr,
+               ROUND(SUM(investimento) / NULLIF(SUM(cliques), 0), 2)      AS cpc
         FROM v_performance
         WHERE data = ? AND cliente_key = ? AND plataforma = ?
-        ORDER BY investimento DESC
+        GROUP BY campanha  -- Meta grava uma linha por anúncio
+        ORDER BY invest DESC
         LIMIT 15
     """, (data, cliente_key, plataforma))
 
@@ -145,14 +146,15 @@ def _dia_anterior(data: str, cliente_key: str, plataforma: str) -> dict | None:
 def _alertas(data: str, cliente_key: str, plataforma: str) -> list[dict]:
     return query("""
         SELECT campanha,
-               ROUND(investimento, 2) AS invest,
-               ROUND(roas, 2)         AS roas,
-               ROUND(conversoes, 0)   AS conv
+               ROUND(SUM(investimento), 2)                            AS invest,
+               ROUND(SUM(receita) / NULLIF(SUM(investimento), 0), 2)  AS roas,
+               ROUND(SUM(conversoes), 0)                              AS conv
         FROM v_performance
         WHERE data = ? AND cliente_key = ? AND plataforma = ?
-          AND investimento > 50
-          AND (roas IS NULL OR roas < 1.5 OR conversoes = 0)
-        ORDER BY investimento DESC LIMIT 5
+        GROUP BY campanha
+        HAVING SUM(investimento) > 50
+           AND (SUM(receita) / NULLIF(SUM(investimento), 0) < 1.5 OR SUM(conversoes) = 0)
+        ORDER BY invest DESC LIMIT 5
     """, (data, cliente_key, plataforma))
 
 
@@ -182,7 +184,6 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
         [f"{roas_e} ROAS",        fmt_x(d.get("roas"))],
         ["🛒 Conversões",         fmt_n(d.get("conversoes"))],
         ["📊 Campanhas Ativas",   str(d.get("campanhas", "—"))],
-        ["👥 Alcance",            fmt_n(d.get("alcance"))],
     ]
     if invest_imp:
         vg_rows.insert(1, ["💸 c/ Imposto (1,1215x)",  fmt_brl(invest_imp)])
@@ -226,7 +227,7 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
             ["🎯 CTR",          fmt_pct(ant.get("ctr")),          fmt_pct(d.get("ctr")),
              delta_str(d.get("ctr"),          ant.get("ctr"))],
         ]
-        blocos.append(_bk_section(_tabela_codigo(["Métrica", "Ontem", "Hoje", "Var."], comp_rows)))
+        blocos.append(_bk_section(_tabela_codigo(["Métrica", "Dia anterior", data_fmt[:5], "Var."], comp_rows)))
         blocos.append(_bk_divider())
 
     # ── 5. Desempenho por Campanha ────────────────────────────────────────
