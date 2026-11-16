@@ -16,7 +16,7 @@ Sistema de análise de mídia paga com IA que responde perguntas em linguagem na
 - Bot Slack conversacional (perguntas em português, NLP + Claude Haiku)
 - Relatórios automáticos: diário, semanal, mensal (Slack + Notion)
 - Alertas proativos de ROAS
-- ROAS real calculado com fator de imposto Meta (×1,1215)
+- ROAS real calculado com fator de imposto Meta (×1,1383)
 - Data Warehouse local (SQLite + DuckDB + Parquet, star schema)
 - Sincronização horária de dados via crons OpenClaw
 - Integração Notion (publicação de relatórios por cliente/data)

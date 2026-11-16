@@ -8,8 +8,8 @@ Nenhuma dependência de banco ou API aqui.
 """
 
 # ── Fator de imposto ──────────────────────────────────────────────────────────
-# Bianca confirmou 1,1215.  (1,1225 foi citado em outro momento — ignorar)
-FATOR_IMPOSTO: float = 1.1215
+# Bianca confirmou 1,1383.  (1,1225 foi citado em outro momento — ignorar)
+FATOR_IMPOSTO: float = 1.1383
 
 
 # ── Funções de cálculo ────────────────────────────────────────────────────────

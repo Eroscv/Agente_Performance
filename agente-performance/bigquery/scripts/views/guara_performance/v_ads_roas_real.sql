@@ -4,18 +4,18 @@ CREATE OR REPLACE VIEW `guara-db.guara_performance.v_ads_roas_real` AS
 SELECT
     *,
     ROUND(
-        CASE WHEN plataforma = 'meta' THEN investimento * 1.1215
+        CASE WHEN plataforma = 'meta' THEN investimento * 1.1383
              ELSE investimento
         END, 2
     ) AS investimento_ajustado,
     ROUND(
         receita / NULLIF(
-            CASE WHEN plataforma = 'meta' THEN investimento * 1.1215
+            CASE WHEN plataforma = 'meta' THEN investimento * 1.1383
                  ELSE investimento
             END, 0), 2
     ) AS roas_real,
     ROUND(
-        CASE WHEN plataforma = 'meta' THEN investimento * 1.1215
+        CASE WHEN plataforma = 'meta' THEN investimento * 1.1383
              ELSE investimento
         END / NULLIF(compras, 0), 2
     ) AS cpa_real

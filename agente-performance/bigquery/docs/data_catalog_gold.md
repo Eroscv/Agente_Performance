@@ -94,7 +94,7 @@
 | `receita` | FLOAT64 | Receita paga do canal/dia. POD: sem frete (Colab). Source Of/Botica: `valor_pago`. |
 | `novos_clientes` | INT64 | Novos clientes que pagaram, no canal/dia. |
 | `roas_real` | FLOAT64 | `receita / investimento` (investimento bruto, sem imposto). Para ROAS pago como no Colab use `receita / investimento_ajustado`. |
-| `investimento_ajustado` | FLOAT64 | `investimento` com imposto: Meta × 1,1215 (12,15%), Google × 1. Fonte única do fator para dashboards. |
+| `investimento_ajustado` | FLOAT64 | `investimento` com imposto: Meta × 1,1383 (13,83%), Google × 1. Fonte única do fator para dashboards. |
 | `pedidos_criados` | INT64 | Só POD: pedidos criados no canal/dia, qualquer status (NULL para os demais clientes). |
 | `receita_criada` | FLOAT64 | Só POD: receita sem frete de todos os pedidos criados (NULL para os demais clientes). |
 
@@ -175,7 +175,7 @@ quem comprou pela primeira vez entre 01 e 05/09 e recomprou depois aparece como 
 - **Propósito:** CAC mensal por cliente, desde 09/2026.
 - **Atualização:** `correlacao.load_gold()`, full rebuild, derivada de `fato_performance_diaria`
   (acompanha qualquer mudança de regra na mesma carga).
-- **Cálculo:** `cac` = `investimento_total` (Meta ×1,1215, Google ×1) ÷ `novos_clientes` do mês.
+- **Cálculo:** `cac` = `investimento_total` (Meta ×1,1383, Google ×1) ÷ `novos_clientes` do mês.
   Só a POD tem `cac_primeira_compra_paga`, que divide pelo número de `primeira_compra_paga`.
   O mês corrente é parcial (o `periodo_fim` mostra até que dia há dado).
 
@@ -215,7 +215,7 @@ quem comprou pela primeira vez entre 01 e 05/09 e recomprou depois aparece como 
 | `campaign_id` / `campanha` | STRING | Campanha Meta; nulo = pedido Meta sem campanha identificável. |
 | `adset_id` / `adset_name` | STRING | Adset; nulo quando só a campanha foi identificada. |
 | `investimento` | FLOAT64 | Gasto Meta do dia. |
-| `investimento_ajustado` | FLOAT64 | `investimento` x 1,1215 (imposto Meta). |
+| `investimento_ajustado` | FLOAT64 | `investimento` x 1,1383 (imposto Meta). |
 | `pedidos` | INT64 | Pedidos pagos atribuídos. |
 | `receita` | FLOAT64 | Receita sem frete (`valor_pago - frete`). |
 | `novos_clientes` / `clientes_recorrentes` | INT64 | Pedidos por `tipo_cliente`. |

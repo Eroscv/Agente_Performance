@@ -313,15 +313,15 @@ BEGIN
     SAFE_DIVIDE(a.investimento, a.cliques_todos) AS cpc_todos, a.impressoes, COALESCE(p.pedidos, 0) AS pedidos, COALESCE(p.receita, 0) AS receita,
     COALESCE(p.novos_clientes, 0) AS novos_clientes,
     SAFE_DIVIDE(COALESCE(p.receita, 0), COALESCE(a.investimento, 0)) AS roas_real,
-    -- Meta com imposto de 12,15% (Google sem imposto). Use esta coluna, não um fator próprio.
+    -- Meta com imposto de 13,83% (Google sem imposto). Use esta coluna, não um fator próprio.
     CASE WHEN COALESCE(a.canal, p.canal) = 'meta'
-         THEN COALESCE(a.investimento, 0) * 1.1215
+         THEN COALESCE(a.investimento, 0) * 1.1383
          ELSE COALESCE(a.investimento, 0) END AS investimento_ajustado,
     p.pedidos_criados, p.receita_criada
   FROM ads a
   FULL OUTER JOIN pedidos p ON a.cliente_id = p.cliente_id AND a.data = p.data AND a.canal = p.canal;
 
-  -- fato_cac (full rebuild): CAC mensal = investimento ajustado (Meta x1,1215, Google x1)
+  -- fato_cac (full rebuild): CAC mensal = investimento ajustado (Meta x1,1383, Google x1)
   -- dividido por clientes novos pela regra de cliente novo de cada cliente. Por ser derivado de
   -- fato_performance_diaria, acompanha qualquer mudança nas regras na mesma carga.
   -- cac_primeira_compra_paga (só POD) usa a primeira compra paga em vez do primeiro pedido.
@@ -361,7 +361,7 @@ BEGIN
   -- primeiro dia com tipo gravado. Pedido -> anúncio por utm_content = ad_id (-> adset e campanha)
   -- ou, sem anúncio, utm_campaign = campaign_id. Pedido de origem Meta (utm_source/utm_medium, regra do
   -- resumo oficial, menos o referring_site, que o bronze não guarda) sem campanha identificável cai em campaign_id NULL, para os totais fecharem.
-  -- Investimento: ing_ads_diario (entra_no_total) da Meta; investimento_ajustado = x1,1215.
+  -- Investimento: ing_ads_diario (entra_no_total) da Meta; investimento_ajustado = x1,1383.
   CREATE OR REPLACE TABLE `guara-db.correlacao.fato_cac_campanha_adset`
   PARTITION BY data
   CLUSTER BY cliente_id
@@ -433,10 +433,10 @@ BEGIN
      AND IFNULL(i.adset_id, '') = IFNULL(p.adset_id, '')
   )
   SELECT j.cliente_id, j.data, j.campaign_id, c.campanha, j.adset_id, a.adset_name,
-    j.investimento, j.investimento * 1.1215 AS investimento_ajustado,
+    j.investimento, j.investimento * 1.1383 AS investimento_ajustado,
     j.pedidos, j.receita, j.novos_clientes, j.clientes_recorrentes,
     SAFE_DIVIDE(j.clientes_recorrentes, j.novos_clientes + j.clientes_recorrentes) AS taxa_recorrencia,
-    SAFE_DIVIDE(j.investimento * 1.1215, j.novos_clientes) AS cac,
+    SAFE_DIVIDE(j.investimento * 1.1383, j.novos_clientes) AS cac,
     SAFE_DIVIDE(j.receita, j.investimento) AS roas_real
   FROM junto j
   LEFT JOIN campanhas c ON c.cliente_id = j.cliente_id AND c.campaign_id = j.campaign_id

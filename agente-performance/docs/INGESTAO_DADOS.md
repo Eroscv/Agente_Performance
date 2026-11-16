@@ -147,7 +147,7 @@ dias=30 → Lote 1 (dia 1-14) + Lote 2 (dia 15-28) + Lote 3 (dia 29-30)
 | `roas_compras` | `valor_compras / investimento` |
 | `cpa_meta` | `investimento / compras` |
 
-> **ROAS real** (usado nos relatórios): `Receita Shopify ÷ (Investimento Meta × 1,1215)` — o fator `1.1215` corrige o imposto sobre investimento em mídia.
+> **ROAS real** (usado nos relatórios): `Receita Shopify ÷ (Investimento Meta × 1,1383)` — o fator `1.1383` corrige o imposto sobre investimento em mídia.
 
 #### Estratégia de upsert
 

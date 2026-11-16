@@ -13,7 +13,7 @@ Módulos disponíveis:
   - scheduler.py→ agendamento automático (semanal, mensal)                   [TODO]
 
 Regras de negócio Meta Ads (reunião Bianca/Eros):
-  - Fator de imposto: 1,1215
+  - Fator de imposto: 1,1383
   - ROAS = Receita Shopify / Invest. c/ Imposto  (NÃO usa ROAS do Meta)
   - CAC  = Invest. c/ Imposto / Novos Clientes   (Shopify via UTM)
   - CPA  = Invest. c/ Imposto / Compras          (NÃO usa CPA do Meta)

@@ -30,10 +30,10 @@ SELECT
     -- investimento bruto (sem ajuste)
     ROUND(investimento, 2)                                              AS investimento,
 
-    -- investimento ajustado fiscal (Meta ×1.1215, Google inalterado)
+    -- investimento ajustado fiscal (Meta ×1.1383, Google inalterado)
     ROUND(
         CASE WHEN plataforma = 'meta'
-             THEN investimento * 1.1215
+             THEN investimento * 1.1383
              ELSE investimento
         END, 2
     )                                                                   AS investimento_ajustado,
@@ -46,7 +46,7 @@ SELECT
     ROUND(
         receita / NULLIF(
             CASE WHEN plataforma = 'meta'
-                 THEN investimento * 1.1215
+                 THEN investimento * 1.1383
                  ELSE investimento
             END, 0), 4
     )                                                                   AS roas_real,
@@ -54,7 +54,7 @@ SELECT
     -- CPA real
     ROUND(
         CASE WHEN plataforma = 'meta'
-             THEN investimento * 1.1215
+             THEN investimento * 1.1383
              ELSE investimento
         END / NULLIF(compras, 0), 2
     )                                                                   AS cpa_real,

@@ -20,7 +20,7 @@ FROM (
         cliente,
         DATE_TRUNC(data, MONTH)                                   AS mes,
         ROUND(SUM(CASE WHEN plataforma='meta'
-                       THEN investimento * 1.1215 ELSE 0 END), 2) AS investimento_meta,
+                       THEN investimento * 1.1383 ELSE 0 END), 2) AS investimento_meta,
         ROUND(SUM(CASE WHEN plataforma='google'
                        THEN investimento ELSE 0 END), 2)          AS investimento_google,
         ROUND(SUM(CASE WHEN plataforma='meta'

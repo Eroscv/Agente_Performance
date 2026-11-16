@@ -9,7 +9,7 @@ Garante que:
   - CPM  = SUM(invest) / SUM(impressoes) * 1000
   - CTR  = SUM(cliques) / SUM(impressoes) * 100
   - Frequência = SUM(impressoes) / SUM(alcance)
-  - CPA  = SUM(invest) * 1.1215 / SUM(compras)
+  - CPA  = SUM(invest) * 1.1383 / SUM(compras)
 
 Usa dados reais do banco (junho 2026) como referência.
 """
@@ -243,6 +243,6 @@ class TestConsistenciaBanco:
         assert raw_june["total_receita"] > 0, "Receita total deve ser positiva"
 
     def test_fator_imposto_valor(self):
-        """FATOR_IMPOSTO deve ser 1.1215 (ISS + PIS/COFINS padrão)."""
-        assert FATOR_IMPOSTO == 1.1215, \
-            f"FATOR_IMPOSTO esperado 1.1215, obtido {FATOR_IMPOSTO}"
+        """FATOR_IMPOSTO deve ser 1.1383 (ISS + PIS/COFINS padrão)."""
+        assert FATOR_IMPOSTO == 1.1383, \
+            f"FATOR_IMPOSTO esperado 1.1383, obtido {FATOR_IMPOSTO}"

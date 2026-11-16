@@ -13,7 +13,7 @@ SELECT
   CASE WHEN ad.plataforma = 'google' OR ad.objetivo IS NULL OR ad.objetivo = '' THEN 'Google' ELSE ad.objetivo END AS campaign_type,
   ad.status,
   ROUND(SUM(ad.investimento), 2) AS investimento,
-  ROUND(SUM(CASE WHEN ad.plataforma = 'meta' THEN ad.investimento * 1.1215 ELSE ad.investimento END), 2) AS amount_spent,
+  ROUND(SUM(CASE WHEN ad.plataforma = 'meta' THEN ad.investimento * 1.1383 ELSE ad.investimento END), 2) AS amount_spent,
   ROUND(SUM(ad.compras), 0) AS compras,
   ROUND(SUM(ad.receita), 2) AS receita_plataforma,
   ROUND(SUM(ad.cliques_todos), 0) AS cliques

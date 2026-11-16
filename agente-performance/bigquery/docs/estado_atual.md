@@ -77,7 +77,7 @@ Carregada por `correlacao.load_gold()` (`scripts/gold/proc_load_gold.sql`), lend
 | `dim_cliente`, `dim_cliente_alias` | 8, 19 | cadastro de clientes e aliases de UTM |
 | `fato_pedidos` | ~8.925 | pedidos pagos com canal (Shopify + poddi da Yampi); MERGE insert-only (guarda correções históricas) |
 | `fato_pedidos_pod` | 7.563 | POD, um pedido por linha: Shopify (pod.com.br) + Yampi poddi, pelas regras do Colab da Bia |
-| `fato_performance_diaria` | 1.170 | investimento, receita, ROAS e novos por cliente/canal/dia; `investimento_ajustado` (Meta ×1,1215) |
+| `fato_performance_diaria` | 1.170 | investimento, receita, ROAS e novos por cliente/canal/dia; `investimento_ajustado` (Meta ×1,1383) |
 | `fato_tickets`, `alertas_qualidade_dados`, `qualidade_dados_checks` | 46, 8, 14 | subsistema de tickets |
 | `fato_cac` | 8 | CAC mensal por cliente (desde 09/2026), recalculado a cada `load_gold` |
 | `log_alteracoes_bq` | — | quem aplicou qual SQL em produção, quando, commit e revisor (`scripts/apply_bq_sql.py`) |
@@ -93,7 +93,7 @@ Views para o dashboard: `v_dash_overview_corrigida`, `v_dash_campaigns_corrigida
 - Canal pelo `utm_source`: Meta, Google, Outros (revi, e-mail, sms, shopper) ou Orgânico/Direto.
 - Cliente novo: pod.com.br = primeiro pedido da vida na Shopify (5 min); poddi = e-mail que nunca
   comprou no pod.com.br e primeiro pedido na poddi desde 01/10.
-- Imposto Meta ×1,1215 em `investimento_ajustado`; o dashboard ainda aplica 1,12.
+- Imposto Meta ×1,1383 em `investimento_ajustado`; o dashboard ainda aplica 1,12.
 
 ## Verificação e revisão
 
