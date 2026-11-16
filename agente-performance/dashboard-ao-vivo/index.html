@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Painel Guará ao vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* Layout: barra de filtros fixa no topo; resumo (KPIs) antes do detalhe; tabelas roláveis por dentro. */
+:root {
+  --bg: #f6f5f4; --surface: #ffffff; --ink: #1d1a19; --muted: #6d6563; --line: #e4dfdd;
+  --accent: #c8372d; --accent-soft: #fbe9e6;
+  --meta: #3b5bdb; --google: #e8a317; --outros: #8a7f7c; --direto: #2f9e77;
+  --good: #2f9e44; --bad: #c92a2a; --warn-bg: #fff4dc; --warn-ink: #7a5300; --warn-line: #e9c46a;
+  --f-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141212; --surface: #1d1a1a; --ink: #f1ecea; --muted: #a59c99; --line: #332e2d;
+    --accent: #f0624f; --accent-soft: #3a1f1b;
+    --meta: #7b93f2; --google: #f2bd4b; --outros: #a99f9c; --direto: #4cc49a;
+    --good: #5fcf73; --bad: #ff6b6b; --warn-bg: #332810; --warn-ink: #f5d58a; --warn-line: #6b5420;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141212; --surface: #1d1a1a; --ink: #f1ecea; --muted: #a59c99; --line: #332e2d;
+  --accent: #f0624f; --accent-soft: #3a1f1b;
+  --meta: #7b93f2; --google: #f2bd4b; --outros: #a99f9c; --direto: #4cc49a;
+  --good: #5fcf73; --bad: #ff6b6b; --warn-bg: #332810; --warn-ink: #f5d58a; --warn-line: #6b5420;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--f-body); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-block: 0 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2 { font-family: var(--f-display); font-weight: 600; margin: 0; text-wrap: balance; }
+h1 { font-size: 20px; letter-spacing: -0.01em; }
+h2 { font-size: 15px; }
+.num { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* barra de filtros */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg);
+  border-bottom: 1px solid var(--line); }
+.bar .wrap { padding-block: 12px; display: flex; flex-direction: column; gap: 10px; }
+.bar-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand small { color: var(--muted); }
+.live { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 0 var(--good); animation: pulse 2s infinite; }
+.live.paused .dot { background: var(--muted); animation: none; }
+.live.erro .dot { background: var(--bad); animation: none; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 60%, transparent); } 70% { box-shadow: 0 0 0 7px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .dot { animation: none; } }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 6px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+select, input[type="date"], input[type="search"] { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 4px 11px 4px 9px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.chip i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.chip[aria-pressed="false"] { opacity: .45; }
+.chip[aria-pressed="false"] i { background: transparent; border: 1.5px solid var(--c); }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+.btn:hover, .chip:hover, .seg button:hover { border-color: var(--muted); }
+.custom { display: none; gap: 6px; align-items: center; }
+.custom.on { display: inline-flex; }
+.lbl { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+/* aviso de frescor */
+.aviso { margin-top: 16px; padding: 10px 14px; border: 1px solid var(--warn-line); background: var(--warn-bg); color: var(--warn-ink); border-radius: 10px; }
+.aviso[hidden] { display: none; }
+
+/* KPIs */
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
+@media (min-width: 1200px) { .kpis { grid-template-columns: repeat(7, minmax(0, 1fr)); } .kpi .v { font-size: 20px; } }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.kpi .v { font-family: var(--f-num); font-size: 22px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi .d { font-size: 12px; font-family: var(--f-num); color: var(--muted); }
+.kpi .d.up { color: var(--good); } .kpi .d.down { color: var(--bad); }
+.kpi.hero { border-color: var(--accent); background: linear-gradient(var(--accent-soft), var(--surface) 70%); }
+
+/* seções */
+.grid2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+@media (max-width: 1100px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
+.card-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.card-h p { margin: 0; color: var(--muted); font-size: 12px; }
+.chart { position: relative; height: 280px; }
+section.card { margin-top: 12px; }
+
+/* tabelas */
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child, th.txt, td.txt { text-align: left; }
+td.txt { max-width: 340px; overflow: hidden; text-overflow: ellipsis; }
+th { font-weight: 500; color: var(--muted); font-size: 12px; position: sticky; top: 0; background: var(--surface); }
+th[data-k] { cursor: pointer; user-select: none; }
+th[data-k]:hover { color: var(--ink); }
+th.sorted::after { content: " ↓"; } th.sorted.asc::after { content: " ↑"; }
+td { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+td.txt { font-family: var(--f-body); }
+tbody tr:hover { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 11px; font-family: var(--f-body); color: #fff; background: var(--c); }
+.roas-ok { color: var(--good); } .roas-bad { color: var(--bad); }
+.vazio { color: var(--muted); padding: 18px 0; text-align: center; }
+.scroll { max-height: 440px; overflow: auto; }
+@media (max-width: 600px) { .bar { position: static; } .kpi .v { font-size: 18px; } .kpi { padding: 12px; } .chart { height: 220px; } }
+.foot { margin-top: 18px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="bar">
+  <div class="wrap">
+    <div class="bar-top">
+      <div class="brand"><h1>Painel Guará</h1><small id="sub">performance de mídia e loja</small></div>
+      <div class="live" id="live"><span class="dot"></span><span id="liveTxt">conectando…</span>
+        <button class="btn" id="pausar" type="button">Pausar</button>
+        <button class="btn" id="agora" type="button">Atualizar agora</button>
+      </div>
+    </div>
+    <div class="filters">
+      <div class="seg" id="clientes" role="group" aria-label="Cliente">
+        <button type="button" data-v="source_of">Source Of</button>
+        <button type="button" data-v="pod_kombucha">POD Kombucha</button>
+        <button type="button" data-v="botica">Botica</button>
+      </div>
+      <label class="lbl" for="periodo">Período</label>
+      <select id="periodo">
+        <option value="hoje">Hoje</option>
+        <option value="ontem">Ontem</option>
+        <option value="7">Últimos 7 dias</option>
+        <option value="14">Últimos 14 dias</option>
+        <option value="30">Últimos 30 dias</option>
+        <option value="mes">Este mês</option>
+        <option value="mes_ant">Mês passado</option>
+        <option value="custom">Personalizado…</option>
+      </select>
+      <span class="custom" id="custom">
+        <input type="date" id="ini" aria-label="Início"> até <input type="date" id="fim" aria-label="Fim">
+      </span>
+      <span class="lbl">Canais</span>
+      <div class="chips" id="canais">
+        <button type="button" class="chip" data-v="meta" style="--c: var(--meta)"><i></i>Meta</button>
+        <button type="button" class="chip" data-v="google" style="--c: var(--google)"><i></i>Google</button>
+        <button type="button" class="chip" data-v="outros" style="--c: var(--outros)"><i></i>Outros</button>
+        <button type="button" class="chip" data-v="direto" style="--c: var(--direto)"><i></i>Orgânico/Direto</button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="aviso" id="aviso" hidden></div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid2">
+    <div class="card" id="card-diario">
+      <div class="card-h"><h2>Investimento e receita por dia</h2><p>Investimento com imposto do Meta (×1,1383)</p></div>
+      <div class="chart"><canvas id="chDiario" aria-label="Investimento e receita por dia"></canvas></div>
+    </div>
+    <div class="card" id="card-canais">
+      <div class="card-h"><h2>Por canal</h2><p>vs. período anterior</p></div>
+      <div class="tbl"><table id="tbCanais"></table></div>
+    </div>
+  </div>
+
+  <section class="card" id="card-campanhas">
+    <div class="card-h"><h2>Campanhas</h2>
+      <input type="search" id="buscaCamp" placeholder="Buscar campanha" aria-label="Buscar campanha">
+    </div>
+    <div class="tbl scroll"><table id="tbCamp"></table></div>
+  </section>
+
+  <section class="card" id="card-criativos">
+    <div class="card-h"><h2>Anúncios do Meta</h2>
+      <input type="search" id="buscaAd" placeholder="Buscar anúncio ou campanha" aria-label="Buscar anúncio">
+    </div>
+    <div class="tbl scroll"><table id="tbAds"></table></div>
+  </section>
+
+  <section class="card" id="card-loja">
+    <div class="card-h"><h2>Loja (Shopify)</h2><p>Resumo diário da loja, sem atribuição de canal</p></div>
+    <div class="tbl scroll"><table id="tbLoja"></table></div>
+  </section>
+
+  <p class="foot" id="foot"></p>
+</main>
+
+<script>
+(() => {
+  const INTERVALO = 30;
+  const TZ = "America/Sao_Paulo";
+  const CANAIS = ["meta", "google", "outros", "direto"];
+  const NOME_CANAL = { meta: "Meta", google: "Google", outros: "Outros", direto: "Orgânico/Direto" };
+  const $ = (s) => document.querySelector(s);
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  // ---------- estado (lembrado na URL e no navegador) ----------
+  const salvo = (() => { try { return JSON.parse(localStorage.getItem("painel-guara") || "{}"); } catch { return {}; } })();
+  const url = new URLSearchParams(location.search);
+  const st = {
+    cliente: url.get("cliente") || salvo.cliente || "source_of",
+    periodo: url.get("periodo") || salvo.periodo || "7",
+    ini: url.get("ini") || salvo.ini || "", fim: url.get("fim") || salvo.fim || "",
+    canais: new Set((url.get("canais") || salvo.canais || CANAIS.join(",")).split(",").filter((c) => CANAIS.includes(c))),
+    pausado: false,
+    sortCamp: { k: "investimento", asc: false }, sortAd: { k: "investimento", asc: false },
+    atual: null, anterior: null,
+  };
+  if (!st.canais.size) CANAIS.forEach((c) => st.canais.add(c));
+  function guardar() {
+    const o = { cliente: st.cliente, periodo: st.periodo, ini: st.ini, fim: st.fim, canais: [...st.canais].join(",") };
+    try { localStorage.setItem("painel-guara", JSON.stringify(o)); } catch {}
+    const p = new URLSearchParams(o); if (st.periodo !== "custom") { p.delete("ini"); p.delete("fim"); }
+    history.replaceState(null, "", "?" + p.toString());
+  }
+
+  // ---------- datas (dia de Brasília) ----------
+  const hojeBRT = () => new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
+  const addDias = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+  const diffDias = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 86400000);
+  function intervalo() {
+    const h = hojeBRT();
+    switch (st.periodo) {
+      case "hoje": return [h, h];
+      case "ontem": return [addDias(h, -1), addDias(h, -1)];
+      case "mes": return [h.slice(0, 8) + "01", h];
+      case "mes_ant": { const f = addDias(h.slice(0, 8) + "01", -1); return [f.slice(0, 8) + "01", f]; }
+      case "custom": return [st.ini || addDias(h, -6), st.fim || h];
+      default: return [addDias(h, -(Number(st.periodo) - 1)), h];
+    }
+  }
+  function anterior([i, f]) {
+    if (st.periodo === "mes_ant" || st.periodo === "mes") {
+      const ini = addDias(i, -1).slice(0, 8) + "01";
+      return [ini, addDias(ini, diffDias(i, f))];
+    }
+    const n = diffDias(i, f) + 1;
+    return [addDias(i, -n), addDias(i, -1)];
+  }
+  const fmtData = (d) => d ? d.slice(8, 10) + "/" + d.slice(5, 7) : "—";
+
+  // ---------- formatação ----------
+  const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
+  const brl2 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 });
+  const int = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
+  const dec = new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const pct = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 1 });
+  const n = (v) => Number(v) || 0;
+  const div = (a, b) => (b ? a / b : null);
+  const F = { brl: (v) => v == null ? "—" : brl.format(v), brl2: (v) => v == null ? "—" : brl2.format(v),
+    int: (v) => v == null ? "—" : int.format(v), x: (v) => v == null ? "—" : dec.format(v) + "×", pct: (v) => v == null ? "—" : pct.format(v) };
+
+  // ---------- busca ----------
+  async function buscar([inicio, fim]) {
+    const q = new URLSearchParams({ cliente: st.cliente, inicio, fim });
+    const r = await fetch("/api/dados?" + q, { cache: "no-store" });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.erro || "HTTP " + r.status);
+    return j;
+  }
+
+  let proximo = INTERVALO, carregando = false, ultimoOk = null, seq = 0;
+  async function atualizar() {
+    if (carregando) return;
+    carregando = true; proximo = INTERVALO;
+    const meu = ++seq;
+    const atual = intervalo();
+    try {
+      const [a, b] = await Promise.all([buscar(atual), buscar(anterior(atual))]);
+      if (meu !== seq) return;
+      st.atual = a; st.anterior = b; st.range = atual; ultimoOk = new Date();
+      $("#live").classList.remove("erro");
+      desenhar();
+    } catch (e) {
+      $("#live").classList.add("erro");
+      $("#liveTxt").textContent = "Não consegui ler o BigQuery (" + e.message + "). Tento de novo em " + INTERVALO + "s.";
+    } finally { carregando = false; }
+  }
+
+  setInterval(() => {
+    if (st.pausado || document.hidden) return;
+    proximo -= 1;
+    if (!$("#live").classList.contains("erro")) {
+      const ha = ultimoOk ? Math.round((Date.now() - ultimoOk) / 1000) : null;
+      $("#liveTxt").textContent = carregando ? "atualizando…" : `Ao vivo · lido há ${ha ?? "—"}s · próxima em ${Math.max(proximo, 0)}s`;
+    }
+    if (proximo <= 0) atualizar();
+  }, 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && !st.pausado && ultimoOk && Date.now() - ultimoOk > INTERVALO * 1000) atualizar(); });
+
+  // ---------- agregações ----------
+  function totais(d) {
+    const linhas = (d?.diario || []).filter((r) => st.canais.has(r.canal));
+    const t = { inv: 0, invAj: 0, receita: 0, pedidos: 0, novos: 0, cliques: 0, impr: 0 };
+    for (const r of linhas) {
+      t.inv += n(r.investimento); t.invAj += n(r.investimento_ajustado); t.receita += n(r.receita);
+      t.pedidos += n(r.pedidos); t.novos += n(r.novos_clientes); t.cliques += n(r.cliques_link); t.impr += n(r.impressoes);
+    }
+    t.roas = div(t.receita, t.invAj); t.cac = div(t.invAj, t.novos); t.ticket = div(t.receita, t.pedidos);
+    return t;
+  }
+  function porCanal(d) {
+    const m = Object.fromEntries(CANAIS.map((c) => [c, { inv: 0, receita: 0, pedidos: 0, novos: 0 }]));
+    for (const r of d?.diario || []) { const x = m[r.canal]; if (!x) continue;
+      x.inv += n(r.investimento_ajustado); x.receita += n(r.receita); x.pedidos += n(r.pedidos); x.novos += n(r.novos_clientes); }
+    return m;
+  }
+
+  // ---------- desenho ----------
+  function delta(atual, ant, menorMelhor) {
+    if (atual == null || !ant) return { txt: "sem base anterior", cls: "" };
+    const v = (atual - ant) / Math.abs(ant);
+    const bom = menorMelhor ? v < 0 : v > 0;
+    return { txt: (v > 0 ? "▲ " : v < 0 ? "▼ " : "") + pct.format(Math.abs(v)) + " vs. anterior", cls: Math.abs(v) < 0.005 ? "" : bom ? "up" : "down" };
+  }
+  function desenharKpis() {
+    const a = totais(st.atual), b = totais(st.anterior);
+    const itens = [
+      ["Investimento", F.brl(a.invAj), delta(a.invAj, b.invAj), "hero"],
+      ["Receita", F.brl(a.receita), delta(a.receita, b.receita)],
+      ["ROAS", F.x(a.roas), delta(a.roas, b.roas)],
+      ["Pedidos", F.int(a.pedidos), delta(a.pedidos, b.pedidos)],
+      ["Novos clientes", F.int(a.novos), delta(a.novos, b.novos)],
+      ["CAC", F.brl2(a.cac), delta(a.cac, b.cac, true)],
+      ["Ticket médio", F.brl2(a.ticket), delta(a.ticket, b.ticket)],
+    ];
+    const box = $("#kpis"); box.replaceChildren();
+    for (const [rot, val, d, cls] of itens) {
+      const el = document.createElement("div"); el.className = "kpi" + (cls ? " " + cls : "");
+      const l = document.createElement("span"); l.className = "lbl"; l.textContent = rot;
+      const v = document.createElement("span"); v.className = "v"; v.textContent = val; v.title = val;
+      const dd = document.createElement("span"); dd.className = "d " + d.cls; dd.textContent = d.txt;
+      el.append(l, v, dd); box.append(el);
+    }
+  }
+
+  let chart = null;
+  function desenharDiario() {
+    const [i, f] = st.range;
+    const dias = []; for (let d = i; d <= f; d = addDias(d, 1)) dias.push(d);
+    const inv = Object.fromEntries(CANAIS.map((c) => [c, dias.map(() => 0)]));
+    const rec = dias.map(() => 0);
+    for (const r of st.atual.diario) {
+      if (!st.canais.has(r.canal)) continue;
+      const k = dias.indexOf(r.data); if (k < 0) continue;
+      if (inv[r.canal]) inv[r.canal][k] += n(r.investimento_ajustado);
+      rec[k] += n(r.receita);
+    }
+    const ink = css("--ink"), muted = css("--muted"), line = css("--line");
+    const ds = CANAIS.filter((c) => st.canais.has(c) && inv[c].some((v) => v > 0)).map((c) => ({
+      type: "bar", label: "Investimento " + NOME_CANAL[c], data: inv[c], backgroundColor: css("--" + c), stack: "inv", yAxisID: "y", borderRadius: 3,
+    }));
+    ds.push({ type: "line", label: "Receita", data: rec, borderColor: css("--accent"), backgroundColor: css("--accent"),
+      tension: 0.3, pointRadius: dias.length > 31 ? 0 : 3, borderWidth: 2, yAxisID: "y" });
+    const data = { labels: dias.map(fmtData), datasets: ds };
+    const opts = {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: {
+        legend: { labels: { color: muted, boxWidth: 10, boxHeight: 10, font: { family: "IBM Plex Sans" } } },
+        tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${brl.format(c.parsed.y)}` } },
+      },
+      scales: {
+        x: { stacked: true, ticks: { color: muted, maxRotation: 0, autoSkip: true }, grid: { display: false }, border: { color: line } },
+        y: { stacked: true, beginAtZero: true, ticks: { color: muted, callback: (v) => "R$ " + int.format(v / 1000) + " mil" }, grid: { color: line }, border: { display: false } },
+      },
+    };
+    if (!chart) chart = new Chart($("#chDiario"), { data, options: opts });
+    else { chart.data = data; chart.options = opts; chart.update("none"); }
+    Chart.defaults.color = ink;
+  }
+
+  function td(txt, cls) { const c = document.createElement("td"); c.textContent = txt; if (cls) c.className = cls; return c; }
+  function cabecalho(tbl, cols, sort, onSort) {
+    const thead = document.createElement("thead"); const tr = document.createElement("tr");
+    for (const [k, rot, txt] of cols) {
+      const th = document.createElement("th"); th.textContent = rot; if (txt) th.className = "txt";
+      if (sort && k) { th.dataset.k = k; th.tabIndex = 0;
+        if (sort.k === k) th.classList.add("sorted", ...(sort.asc ? ["asc"] : []));
+        const go = () => { sort.asc = sort.k === k ? !sort.asc : false; sort.k = k; onSort(); };
+        th.addEventListener("click", go); th.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); }); }
+      tr.append(th);
+    }
+    thead.append(tr); tbl.replaceChildren(thead); return tbl;
+  }
+  const roasCls = (v) => v == null ? "" : v >= 1.5 ? "roas-ok" : v < 1 ? "roas-bad" : "";
+  function vazio(tbl, cols, msg) { const tb = document.createElement("tbody"); const tr = document.createElement("tr");
+    const c = document.createElement("td"); c.colSpan = cols; c.className = "vazio"; c.textContent = msg; tr.append(c); tb.append(tr); tbl.append(tb); }
+
+  function desenharCanais() {
+    const a = porCanal(st.atual), b = porCanal(st.anterior);
+    const tbl = cabecalho($("#tbCanais"), [[null, "Canal", 1], [null, "Invest."], [null, "Receita"], [null, "ROAS"], [null, "Novos"], [null, "CAC"]]);
+    const tb = document.createElement("tbody");
+    for (const c of CANAIS) {
+      if (!st.canais.has(c)) continue;
+      const x = a[c], y = b[c]; if (!x.inv && !x.receita && !x.pedidos && !y.receita) continue;
+      const tr = document.createElement("tr");
+      const nome = document.createElement("td"); nome.className = "txt";
+      const p = document.createElement("span"); p.className = "pill"; p.style.setProperty("--c", `var(--${c})`); p.textContent = NOME_CANAL[c]; nome.append(p);
+      const roas = div(x.receita, x.inv), dR = delta(x.receita, y.receita);
+      const rec = td(F.brl(x.receita)); rec.title = dR.txt;
+      tr.append(nome, td(x.inv ? F.brl(x.inv) : "—"), rec, td(x.inv ? F.x(roas) : "—", roasCls(roas)), td(F.int(x.novos)), td(x.inv ? F.brl2(div(x.inv, x.novos)) : "—"));
+      tb.append(tr);
+    }
+    tbl.append(tb);
+    if (!tb.children.length) vazio(tbl, 6, "Sem dados nos canais escolhidos.");
+  }
+
+  function ordenar(arr, s) { return arr.sort((p, q) => { const a = p[s.k], b = q[s.k];
+    if (typeof a === "string" || typeof b === "string") return (s.asc ? 1 : -1) * String(a ?? "").localeCompare(String(b ?? ""), "pt-BR");
+    return (s.asc ? 1 : -1) * ((a ?? -Infinity) - (b ?? -Infinity)); }); }
+
+  function desenharCampanhas() {
+    const busca = $("#buscaCamp").value.trim().toLowerCase();
+    const linhas = (st.atual.campanhas || []).filter((r) => st.canais.has(r.plataforma) && (!busca || (r.campanha || "").toLowerCase().includes(busca)))
+      .map((r) => ({ ...r, investimento: n(r.investimento), receita: n(r.receita), compras: n(r.compras),
+        roas: div(n(r.receita), n(r.investimento)), cpa: div(n(r.investimento), n(r.compras)), ctr: div(n(r.cliques), n(r.impressoes)) }));
+    const tbl = cabecalho($("#tbCamp"), [["campanha", "Campanha", 1], ["plataforma", "Canal", 1], ["investimento", "Invest. (bruto)"], ["receita", "Receita (plataforma)"],
+      ["roas", "ROAS plat."], ["compras", "Compras"], ["cpa", "CPA"], ["ctr", "CTR"]], st.sortCamp, desenharCampanhas);
+    const tb = document.createElement("tbody");
+    for (const r of ordenar(linhas, st.sortCamp)) {
+      const tr = document.createElement("tr"); const nome = td(r.campanha || "(sem nome)", "txt"); nome.title = r.campanha || "";
+      const pc = document.createElement("td"); pc.className = "txt"; const p = document.createElement("span"); p.className = "pill";
+      p.style.setProperty("--c", `var(--${r.plataforma})`); p.textContent = NOME_CANAL[r.plataforma] || r.plataforma; pc.append(p);
+      tr.append(nome, pc, td(F.brl(r.investimento)), td(F.brl(r.receita)), td(F.x(r.roas), roasCls(r.roas)), td(dec.format(r.compras)), td(F.brl2(r.cpa)), td(F.pct(r.ctr)));
+      tb.append(tr);
+    }
+    tbl.append(tb);
+    if (!linhas.length) vazio(tbl, 8, busca ? "Nenhuma campanha com esse nome." : "Sem campanhas com investimento no período.");
+  }
+
+  function desenharAnuncios() {
+    const box = $("#card-criativos");
+    box.hidden = !st.canais.has("meta");
+    if (box.hidden) return;
+    const busca = $("#buscaAd").value.trim().toLowerCase();
+    const linhas = (st.atual.criativos || []).filter((r) => !busca || [r.anuncio, r.campanha, r.conjunto].some((s) => (s || "").toLowerCase().includes(busca)))
+      .map((r) => ({ ...r, investimento: n(r.investimento), receita: n(r.receita), compras: n(r.compras),
+        roas: div(n(r.receita), n(r.investimento)), cpa: div(n(r.investimento), n(r.compras)), ctr: div(n(r.cliques), n(r.impressoes)) }));
+    const tbl = cabecalho($("#tbAds"), [["anuncio", "Anúncio", 1], ["campanha", "Campanha", 1], ["investimento", "Invest. (bruto)"], ["receita", "Receita (Meta)"],
+      ["roas", "ROAS"], ["compras", "Compras"], ["cpa", "CPA"], ["ctr", "CTR"]], st.sortAd, desenharAnuncios);
+    const tb = document.createElement("tbody");
+    for (const r of ordenar(linhas, st.sortAd)) {
+      const tr = document.createElement("tr");
+      const a = td(r.anuncio || r.ad_id, "txt"); a.title = (r.anuncio || "") + (r.conjunto ? " · " + r.conjunto : "");
+      const c = td(r.campanha || "", "txt"); c.title = r.campanha || "";
+      tr.append(a, c, td(F.brl(r.investimento)), td(F.brl(r.receita)), td(F.x(r.roas), roasCls(r.roas)), td(dec.format(r.compras)), td(F.brl2(r.cpa)), td(F.pct(r.ctr)));
+      tb.append(tr);
+    }
+    tbl.append(tb);
+    if (!linhas.length) vazio(tbl, 8, busca ? "Nenhum anúncio encontrado." : "Sem anúncios com investimento no período.");
+  }
+
+  function desenharLoja() {
+    const linhas = st.atual.loja || [];
+    $("#card-loja").hidden = !linhas.length;
+    if (!linhas.length) return;
+    const tbl = cabecalho($("#tbLoja"), [[null, "Dia", 1], [null, "Receita"], [null, "Pedidos"], [null, "Novos"], [null, "Recompra"], [null, "Ticket"], [null, "Sessões"], [null, "Conversão"]]);
+    const tb = document.createElement("tbody");
+    for (const r of [...linhas].reverse()) {
+      const tr = document.createElement("tr");
+      tr.append(td(fmtData(r.data), "txt"), td(F.brl(n(r.receita))), td(F.int(r.pedidos)), td(F.int(r.novos_clientes)), td(F.int(r.recompradores)),
+        td(F.brl2(r.ticket_medio)), td(r.sessoes == null ? "—" : F.int(r.sessoes)), td(r.taxa_conversao == null ? "—" : F.pct(r.taxa_conversao)));
+      tb.append(tr);
+    }
+    tbl.append(tb);
+  }
+
+  function desenharAviso() {
+    const fr = Object.fromEntries((st.atual.frescor || []).map((r) => [r.fonte, r.ate]));
+    const ontem = addDias(hojeBRT(), -1), [, fim] = st.range;
+    const atrasadas = [["midia_meta", "Meta Ads"], ["midia_google", "Google Ads"], ["loja", "Shopify"]]
+      .filter(([k]) => fr[k] && fr[k] < ontem && fr[k] < fim).map(([k, nome]) => `${nome} até ${fmtData(fr[k])}`);
+    const av = $("#aviso");
+    av.hidden = !atrasadas.length;
+    av.textContent = atrasadas.length ? `Dados atrasados no BigQuery: ${atrasadas.join(", ")}. Os dias seguintes aparecem sem esses dados até a próxima carga.` : "";
+    const carga = st.atual.carga ? new Date(st.atual.carga.replace(" ", "T").replace(/\+00$/, "Z")) : null;
+    $("#foot").textContent = `Fonte: BigQuery guara-db (correlacao.fato_performance_diaria, ingestao.ing_ads_diario, ingestao.ing_shopify_resumo_diario). `
+      + `Última carga do gold: ${carga && !isNaN(carga) ? carga.toLocaleString("pt-BR", { timeZone: TZ }) : "—"}. `
+      + `Mídia: Meta até ${fmtData(fr.midia_meta)}, Google até ${fmtData(fr.midia_google)}. `
+      + `Período anterior para comparação: ${fmtData(anterior(st.range)[0])} a ${fmtData(anterior(st.range)[1])}.`;
+  }
+
+  function desenhar() {
+    if (!st.atual) return;
+    const [i, f] = st.range;
+    $("#sub").textContent = i === f ? fmtData(i) : `${fmtData(i)} a ${fmtData(f)}`;
+    desenharAviso(); desenharKpis(); desenharDiario(); desenharCanais(); desenharCampanhas(); desenharAnuncios(); desenharLoja();
+  }
+
+  // ---------- controles ----------
+  function syncControles() {
+    document.querySelectorAll("#clientes button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === st.cliente));
+    document.querySelectorAll("#canais .chip").forEach((b) => b.setAttribute("aria-pressed", st.canais.has(b.dataset.v)));
+    $("#periodo").value = st.periodo;
+    $("#custom").classList.toggle("on", st.periodo === "custom");
+    const [i, f] = intervalo(); $("#ini").value = i; $("#fim").value = f;
+    $("#pausar").textContent = st.pausado ? "Retomar" : "Pausar";
+    $("#live").classList.toggle("paused", st.pausado);
+  }
+  function mudou(recarregar) { guardar(); syncControles(); if (recarregar) { st.atual = null; atualizar(); } else desenhar(); }
+
+  $("#clientes").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; st.cliente = b.dataset.v; mudou(true); });
+  $("#canais").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (!b) return;
+    const c = b.dataset.v; if (st.canais.has(c) && st.canais.size === 1) return; st.canais.has(c) ? st.canais.delete(c) : st.canais.add(c); mudou(false); });
+  $("#periodo").addEventListener("change", (e) => { st.periodo = e.target.value; if (st.periodo === "custom") { const [i, f] = intervalo(); st.ini = i; st.fim = f; } mudou(true); });
+  ["#ini", "#fim"].forEach((s) => $(s).addEventListener("change", () => {
+    let i = $("#ini").value, f = $("#fim").value; if (!i || !f) return; if (i > f) [i, f] = [f, i];
+    st.ini = i; st.fim = f; mudou(true); }));
+  $("#buscaCamp").addEventListener("input", () => st.atual && desenharCampanhas());
+  $("#buscaAd").addEventListener("input", () => st.atual && desenharAnuncios());
+  $("#pausar").addEventListener("click", () => { st.pausado = !st.pausado; syncControles();
+    if (st.pausado) $("#liveTxt").textContent = "Pausado"; else atualizar(); });
+  $("#agora").addEventListener("click", () => atualizar());
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => desenhar());
+
+  syncControles(); guardar(); atualizar();
+})();
+</script>
+</body>
+</html>

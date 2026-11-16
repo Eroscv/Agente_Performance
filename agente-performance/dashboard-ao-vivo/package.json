@@ -1,0 +1,11 @@
+{
+  "name": "painel-guara-ao-vivo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "local": "node servidor-local.js"
+  },
+  "dependencies": {
+    "@google-cloud/bigquery": "7.9.4"
+  }
+}
