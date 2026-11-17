@@ -85,17 +85,27 @@ def _enviar_alerta_slack(cliente_key: str, plataforma: str, erro: str, falhas: i
         import requests as _req
         token   = os.getenv("SLACK_BOT_TOKEN", "")
         channel = os.getenv("SLACK_ALERT_CHANNEL") or os.getenv("SLACK_CHANNEL", "performance")
-        if not token:
-            logger.warning("[SyncAlert] SLACK_BOT_TOKEN não configurado")
-            return
+        webhook = os.getenv("SLACK_WEBHOOK_URL", "")
 
         plural = "falha" if falhas == 1 else "falhas"
         texto = (
             f":warning: *Sync falhou — {cliente_key} / {plataforma}*\n"
             f"*{falhas} {plural} consecutiva(s)*\n"
             f"Erro: `{erro[:300]}`\n"
-            f"_Verifique com_ `journalctl -u agente-guara -n 50`"
+            f"_Verifique com_ `journalctl -u agente-performance-sync -n 50`"
         )
+        if not token:
+            # Sem bot, usa o mesmo webhook da carga (#alertas-tecnicos).
+            if not webhook:
+                logger.warning("[SyncAlert] nem SLACK_BOT_TOKEN nem SLACK_WEBHOOK_URL configurados — alerta não enviado")
+                return
+            resp = _req.post(webhook, json={"text": texto}, timeout=10)
+            if resp.ok:
+                logger.info("[SyncAlert] ✅ Alerta enviado (webhook): %s/%s (%d falhas)", cliente_key, plataforma, falhas)
+            else:
+                logger.warning("[SyncAlert] webhook do Slack recusou: HTTP %s", resp.status_code)
+            return
+
         resp = _req.post(
             "https://slack.com/api/chat.postMessage",
             headers={"Authorization": f"Bearer {token}"},
@@ -126,6 +136,13 @@ def registrar_resultado(
         sucesso:     True se sync ok, False se falhou
         erro:        mensagem de erro (só quando sucesso=False)
     """
+    # Registro no BigQuery (ingestao.log_cargas_fontes): separa "zero vendas" de "carga falhou".
+    try:
+        from db.bq_writer import write_log_carga
+        write_log_carga(cliente_key, plataforma, sucesso, erro)
+    except Exception as exc:
+        logger.warning("[SyncAlert] registro no BigQuery falhou: %s", exc)
+
     try:
         db    = _get_db()
         agora = time.time()

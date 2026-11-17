@@ -1,0 +1,11 @@
+[Unit]
+Description=Carga do BigQuery a cada 3h (0h, 3h, ..., 21h de Brasília)
+
+[Timer]
+OnCalendar=*-*-* 00/3:00:00 America/Sao_Paulo
+# Se a VM estiver desligada num horário, roda assim que voltar (o cron perdia).
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
