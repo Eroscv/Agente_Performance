@@ -5,9 +5,15 @@
 # pedidos com UTM, Google Ads, Meta Ads, e reconstrução das camadas
 # ingestao/correlacao no BigQuery.
 #
-# Pensado para rodar via cron a cada poucas horas. Cada etapa é tolerante a
-# falha isolada (continua as próximas mesmo se uma etapa falhar) e tudo fica
-# registrado no log.
+# Pensado para rodar a cada 3h (timer systemd na VM, ver deploy/vm/). Cada etapa
+# é tolerante a falha isolada (continua as próximas mesmo se uma etapa falhar) e
+# tudo fica registrado no log.
+#
+# Fallback: etapa que falha é tentada de novo (SYNC_TENTATIVAS, padrão 3, com
+# SYNC_ESPERA_S segundos entre tentativas, padrão 120). Se alguma etapa terminar
+# falhando, o script sai com código 1 e, se SLACK_WEBHOOK_URL estiver no ambiente
+# ou no .env, avisa no Slack quais etapas falharam. Carga sem falha também avisa
+# (hora, duração e etapas), a menos que SLACK_AVISAR_SUCESSO=0.
 #
 # Uso:
 #   bash scripts/cron_master_sync.sh
@@ -21,18 +27,75 @@ LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/cron_master_sync.log"
 
+SYNC_TENTATIVAS="${SYNC_TENTATIVAS:-3}"
+SYNC_ESPERA_S="${SYNC_ESPERA_S:-120}"
+SLACK_AVISAR_SUCESSO="${SLACK_AVISAR_SUCESSO:-1}"
+FALHAS=()
+ETAPAS_OK=0
+RECUPERADAS=()   # etapas que só passaram numa nova tentativa
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
 }
 
+# Uma execução por vez: se a anterior ainda roda, esta sai sem fazer nada.
+exec 9>"$LOG_DIR/.cron_master_sync.lock"
+if ! flock -n 9; then
+    log "⏭ execução anterior ainda em andamento — pulando esta"
+    exit 0
+fi
+
 run_step() {
     local desc="$1"; shift
-    log "▶ $desc"
-    if "$@" >> "$LOG_FILE" 2>&1; then
-        log "✅ $desc OK"
-    else
-        log "❌ $desc FALHOU (exit $?) — seguindo para próxima etapa"
+    local tentativa rc
+    for ((tentativa = 1; tentativa <= SYNC_TENTATIVAS; tentativa++)); do
+        log "▶ $desc (tentativa $tentativa/$SYNC_TENTATIVAS)"
+        "$@" >> "$LOG_FILE" 2>&1
+        rc=$?
+        if [ "$rc" -eq 0 ]; then
+            log "✅ $desc OK"
+            ETAPAS_OK=$((ETAPAS_OK + 1))
+            if [ "$tentativa" -gt 1 ]; then RECUPERADAS+=("$desc (tentativa $tentativa)"); fi
+            return 0
+        fi
+        log "❌ $desc FALHOU (exit $rc)"
+        if [ "$tentativa" -lt "$SYNC_TENTATIVAS" ]; then
+            sleep "$SYNC_ESPERA_S"
+        fi
+    done
+    log "❌ $desc falhou após $SYNC_TENTATIVAS tentativas — seguindo para próxima etapa"
+    FALHAS+=("$desc")
+}
+
+# Posta no Slack (SLACK_WEBHOOK_URL do ambiente ou do .env). Quebra de linha no texto: \\n.
+avisar_slack() {
+    local url="${SLACK_WEBHOOK_URL:-}"
+    if [ -z "$url" ] && [ -f "$BASE_DIR/.env" ]; then
+        url="$(grep -m1 '^SLACK_WEBHOOK_URL=' "$BASE_DIR/.env" | cut -d= -f2- | tr -d "\"'")"
     fi
+    [ -z "$url" ] && return 0
+    curl -sS -m 15 -X POST -H 'Content-Type: application/json' \
+        --data "{\"text\":\"$1\"}" "$url" >> "$LOG_FILE" 2>&1 || true
+    echo >> "$LOG_FILE"
+}
+
+duracao() {
+    printf '%dmin' $(( (SECONDS + 30) / 60 ))
+}
+
+avisar_falhas() {
+    local lista
+    lista="$(printf '• %s\\n' "${FALHAS[@]}")"
+    avisar_slack ":x: *Carga do BigQuery ($(hostname)) terminou com falhas* em $(duracao)\\n${lista}Etapas OK: ${ETAPAS_OK}. Log: logs/cron_master_sync.log"
+}
+
+avisar_sucesso() {
+    [ "$SLACK_AVISAR_SUCESSO" = "1" ] || return 0
+    local extra=""
+    if [ "${#RECUPERADAS[@]}" -gt 0 ]; then
+        extra="\\nPassaram numa nova tentativa: $(printf '%s; ' "${RECUPERADAS[@]}")"
+    fi
+    avisar_slack ":white_check_mark: Carga do BigQuery ($(hostname)) concluída às $(date '+%H:%M') em $(duracao): ${ETAPAS_OK} etapas OK.${extra}"
 }
 
 log "===== cron_master_sync iniciado ====="
@@ -70,4 +133,22 @@ fi
 # 9. Reconstrói camadas ingestao/ e correlacao/ no BigQuery
 run_step "Reconstruir camadas BigQuery" python3 scripts/rebuild_bq_layers.py
 
+# 10. Comparação BigQuery x API dos últimos 7 dias fechados (métrica de aceite: divergência
+#     abaixo de 2%). Uma vez por semana, na primeira carga da semana que conseguir (segunda 0h;
+#     se a máquina estiver desligada, na carga seguinte). O histórico fica em
+#     correlacao.comparacao_bq_api.
+SEMANA="$(date +%G-%V)"
+MARCA_COMPARACAO="$LOG_DIR/.comparacao_bq_api_semana"
+if [ -f scripts/comparar_bq_api.py ] && [ "$(cat "$MARCA_COMPARACAO" 2>/dev/null)" != "$SEMANA" ]; then
+    falhas_antes="${#FALHAS[@]}"
+    run_step "Comparar BigQuery x API" python3 scripts/comparar_bq_api.py --dias 7
+    if [ "${#FALHAS[@]}" -eq "$falhas_antes" ]; then echo "$SEMANA" > "$MARCA_COMPARACAO"; fi
+fi
+
+if [ "${#FALHAS[@]}" -gt 0 ]; then
+    log "===== cron_master_sync concluído com ${#FALHAS[@]} etapa(s) com falha ====="
+    avisar_falhas
+    exit 1
+fi
 log "===== cron_master_sync concluído ====="
+avisar_sucesso

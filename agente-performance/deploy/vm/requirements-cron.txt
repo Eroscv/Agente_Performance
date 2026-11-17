@@ -1,0 +1,7 @@
+# Dependências só da carga (scripts/cron_master_sync.sh). Versões iguais às que
+# rodam hoje no notebook (16/11/2026).
+google-cloud-bigquery==3.47.0
+google-auth==2.62.1
+google-ads==35.0.0
+python-dotenv==1.2.4
+requests==2.33.1
