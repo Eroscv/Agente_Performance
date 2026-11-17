@@ -133,6 +133,18 @@ fi
 # 9. Reconstrói camadas ingestao/ e correlacao/ no BigQuery
 run_step "Reconstruir camadas BigQuery" python3 scripts/rebuild_bq_layers.py
 
+# 10. Comparação BigQuery x API dos últimos 7 dias fechados (métrica de aceite: divergência
+#     abaixo de 2%). Uma vez por semana, na primeira carga da semana que conseguir (segunda 0h;
+#     se a máquina estiver desligada, na carga seguinte). O histórico fica em
+#     correlacao.comparacao_bq_api.
+SEMANA="$(date +%G-%V)"
+MARCA_COMPARACAO="$LOG_DIR/.comparacao_bq_api_semana"
+if [ -f scripts/comparar_bq_api.py ] && [ "$(cat "$MARCA_COMPARACAO" 2>/dev/null)" != "$SEMANA" ]; then
+    falhas_antes="${#FALHAS[@]}"
+    run_step "Comparar BigQuery x API" python3 scripts/comparar_bq_api.py --dias 7
+    if [ "${#FALHAS[@]}" -eq "$falhas_antes" ]; then echo "$SEMANA" > "$MARCA_COMPARACAO"; fi
+fi
+
 if [ "${#FALHAS[@]}" -gt 0 ]; then
     log "===== cron_master_sync concluído com ${#FALHAS[@]} etapa(s) com falha ====="
     avisar_falhas
