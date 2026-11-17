@@ -219,233 +219,113 @@ def _replace_cast_types(sql: str) -> str:
     return "".join(result)
 
 
-def _extract_agg_calls(text: str) -> list[str]:
-    """
-    Extrai todas as chamadas de agregação (SUM, COUNT, AVG, MAX, MIN) no nível superior
-    de uma expressão, com balanceamento de parênteses.
-    Ex: 'ROUND(SUM(COALESCE(x, 0)), 2)' -> ['SUM(COALESCE(x, 0))']
-    Ex: 'SUM(a) / NULLIF(SUM(b), 0)'  -> ['SUM(a)', 'SUM(b)']
-    """
-    agg_re = re.compile(r"\b(SUM|COUNT|AVG|MAX|MIN)\s*\(", re.IGNORECASE)
-    results = []
-    n = len(text)
-    for m in agg_re.finditer(text):
-        # Encontra o fechamento balanceado
-        depth = 1
-        j = m.end()  # j aponta após '('
-        while j < n and depth > 0:
-            if text[j] == '(':   depth += 1
-            elif text[j] == ')': depth -= 1
-            j += 1
-        full_agg = text[m.start(): j]  # inclui '('
-        results.append(full_agg)
-    return results
+# Colunas das views de consumo (correlacao.v_agente_*). Usadas só para qualificar colunas
+# dentro de agregações em HAVING/ORDER BY; manter em dia com bigquery/scripts/views/correlacao/.
+_VIEW_COLUMNS = frozenset("""
+    cliente_key cliente_nome plataforma data data_inicio data_fim campanha campaign_id objetivo status
+    impressoes cliques cliques_link alcance investimento conversoes compras receita valor_compras
+    roas roas_compras cpa custo_por_compra ctr ctr_link cpc_medio video_3s thruplays
+    frequencia cpm compras_app compras_site cliques_todos cpc_link visualizacoes_landing
+    reproducoes_video conversas_iniciadas adicoes_carrinho checkout_iniciado
+    frete pedidos novos_clientes recompradores ticket_medio total_desconto pedidos_acima_300
+    receita_criada pedidos_criados pedidos_meta receita_meta novos_meta pedidos_google receita_google
+    novos_google pedidos_outros receita_outros novos_outros gross_sales pedidos_gt300 sessoes
+    sessoes_com_carrinho sessoes_checkout sessoes_compra taxa_conversao is_bot_suspect
+""".split())
+
+_SQL_KEYWORDS = frozenset(
+    "WHERE GROUP ORDER HAVING LIMIT UNION JOIN LEFT RIGHT INNER OUTER CROSS FULL ON USING "
+    "WINDOW QUALIFY EXCEPT INTERSECT".split()
+)
+_VIEW_REF_RE = re.compile(r"`[\w-]+\.[\w-]+\.v_agente_\w+`")
+_CLAUSE_RE = re.compile(r"\b(FROM|HAVING|ORDER\s+BY|LIMIT|UNION|QUALIFY|WINDOW)\b", re.IGNORECASE)
+_AGG_RE = re.compile(r"\b(SUM|COUNT|AVG|MAX|MIN)\s*\(", re.IGNORECASE)
+_ALIAS_RE = re.compile(r"\s+(?:AS\s+)?([A-Za-z_]\w*)", re.IGNORECASE)
+_VIEW_ALIAS = "_v"
 
 
-def _fix_having_agg(sql: str) -> str:
-    """
-    No BigQuery, HAVING SUM(coluna) falha com "Aggregations of aggregations"
-    quando a query ja tem outras agregacoes no SELECT.
-
-    Estrategia:
-    1. Extrai mapa completo de agg -> alias do SELECT (inclui agg compostas)
-    2. Substitui todas as agg no HAVING pelos aliases correspondentes
-    3. Condicoes HAVING que resolveram totalmente ficam no HAVING inner (sem agg)
-    4. Condicoes residuais (com agg nao mapeada) sao movidas para WHERE na outer query
-    5. ORDER BY/LIMIT vao para outer com agg substituidas
-    """
-    import re
-
-    having_re = re.compile(
-        r"(\bHAVING\b)(.+?)(?=\bORDER\s+BY\b|\bLIMIT\b|\bUNION\b|$)",
-        re.IGNORECASE | re.DOTALL,
-    )
-    m = having_re.search(sql)
-    if not m:
-        return sql
-
-    having_body = m.group(2)
-    if not re.search(r"\b(?:SUM|COUNT|AVG|MAX|MIN)\s*\(", having_body, re.IGNORECASE):
-        return sql
-
-    # Extrai mapa completo: qualquer agg call -> alias do SELECT
-    # Prioridade: colunas com exatamente 1 agg (ex: SUM(investimento) -> investimento)
-    # depois colunas compostas (ex: SUM(investimento) dentro de roas -> roas, se nao mapeado)
-    select_re = re.compile(r"\bSELECT\b(.+?)\bFROM\b", re.IGNORECASE | re.DOTALL)
-    sm = select_re.search(sql)
-    agg_to_alias: dict[str, str] = {}
-    if sm:
-        cols = _split_top_level(sm.group(1))
-        # Primeira passagem: colunas com exatamente 1 agg (prioridade)
-        for col in cols:
-            col = col.strip()
-            as_m = re.search(r"\bAS\s+(\w+)\s*$", col, re.IGNORECASE)
-            if not as_m:
-                continue
-            alias = as_m.group(1)
-            expr = col[: as_m.start()].strip()
-            agg_calls = _extract_agg_calls(expr)
-            if len(agg_calls) == 1:  # so mapeia colunas simples primeiro
-                agg = agg_calls[0]
-                if agg not in agg_to_alias:
-                    agg_to_alias[agg] = alias
-        # Segunda passagem: colunas compostas (so mapeia agg ainda nao mapeadas)
-        for col in cols:
-            col = col.strip()
-            as_m = re.search(r"\bAS\s+(\w+)\s*$", col, re.IGNORECASE)
-            if not as_m:
-                continue
-            alias = as_m.group(1)
-            expr = col[: as_m.start()].strip()
-            agg_calls = _extract_agg_calls(expr)
-            if len(agg_calls) > 1:
-                for agg in agg_calls:
-                    if agg not in agg_to_alias:
-                        agg_to_alias[agg] = alias
-        # Terceira passagem: mapeia variacoes de agg pela coluna base
-        # Ex: SUM(COALESCE(receita, 0)) e SUM(receita) -> ambos mapeam para 'receita'
-        # Garante que aliases simples (nome = coluna base) tem prioridade sobre aliases compostos
-        extra_mappings: dict[str, str] = {}
-        for agg_expr, alias in list(agg_to_alias.items()):
-            inner_col_m = re.search(r"\b(?:SUM|COUNT|AVG|MAX|MIN)\s*\(\s*(?:COALESCE\s*\(\s*)?(\w+)",
-                                    agg_expr, re.IGNORECASE)
-            if not inner_col_m:
-                continue
-            base_col = inner_col_m.group(1).lower()
-            # Alias simples: nome == coluna base (ex: investimento -> investimento)
-            if alias.lower() != base_col:
-                continue
-            fn = re.match(r"\b(SUM|COUNT|AVG|MAX|MIN)", agg_expr, re.IGNORECASE).group(1).upper()
-            # Adiciona e SOBRESCREVE variacoes que podem ter sido mapeadas para alias errado
-            for variant in [f"{fn}({base_col})",
-                            f"{fn}(COALESCE({base_col}, 0))",
-                            f"{fn}(COALESCE({base_col},0))"]:
-                # Sobrescreve se o alias atual nao corresponde a coluna base
-                current_alias = agg_to_alias.get(variant, "")
-                if current_alias.lower() != base_col:
-                    extra_mappings[variant] = alias
-        agg_to_alias.update(extra_mappings)
-
-    # Substitui todas as agg no HAVING pelos aliases
-    new_having = having_body
-    for agg_expr, alias in sorted(agg_to_alias.items(), key=lambda x: -len(x[0])):
-        new_having = re.sub(re.escape(agg_expr), alias, new_having, flags=re.IGNORECASE)
-
-    # Verifica se ainda sobrou agg
-    still_has_agg = bool(re.search(r"\b(?:SUM|COUNT|AVG|MAX|MIN)\s*\(", new_having, re.IGNORECASE))
-
-    if not still_has_agg:
-        # Tudo resolvido -- aplica HAVING e tambem substitui agg no ORDER BY
-        sql_fixed = sql[: m.start(2)] + new_having + sql[m.end(2):]
-        order_re = re.compile(r"\bORDER\s+BY\b(.+?)(?=\bLIMIT\b|$)", re.IGNORECASE | re.DOTALL)
-        om = order_re.search(sql_fixed)
-        if om:
-            new_order = om.group(1)
-            for agg_expr, alias in sorted(agg_to_alias.items(), key=lambda x: -len(x[0])):
-                new_order = re.sub(re.escape(agg_expr), alias, new_order, flags=re.IGNORECASE)
-            sql_fixed = sql_fixed[: om.start(1)] + new_order + sql_fixed[om.end(1):]
-        return sql_fixed
-
-    # Sobrou agg nao mapeada -- precisa de subquery
-    # Divide condicoes do HAVING em: resolvidas (sem agg) e residuais (com agg)
-    having_parts = _split_top_level_by_and(new_having)
-    inner_having_parts = []
-    outer_where_parts = []
-
-    for part in having_parts:
-        part_stripped = part.strip()
-        if re.search(r"\b(?:SUM|COUNT|AVG|MAX|MIN)\s*\(", part_stripped, re.IGNORECASE):
-            # Ainda tem agg -- substitui pelo alias e vai para outer WHERE
-            resolved_part = part_stripped
-            for agg_expr, alias in sorted(agg_to_alias.items(), key=lambda x: -len(x[0])):
-                resolved_part = re.sub(re.escape(agg_expr), alias, resolved_part, flags=re.IGNORECASE)
-            outer_where_parts.append(resolved_part)
-        else:
-            inner_having_parts.append(part_stripped)
-
-    # Reconstroi o SQL inner sem ORDER BY/LIMIT
-    inner_sql = sql
-    outer_parts = []
-    for clause in (r"ORDER\s+BY", r"LIMIT"):
-        clause_re = re.compile(rf"\b{clause}\b(.+?)$", re.IGNORECASE | re.DOTALL)
-        cm = clause_re.search(inner_sql)
-        if cm:
-            outer_clause = cm.group(0)
-            for agg_e, alias_e in sorted(agg_to_alias.items(), key=lambda x: -len(x[0])):
-                outer_clause = re.sub(re.escape(agg_e), alias_e, outer_clause, flags=re.IGNORECASE)
-            outer_parts.insert(0, outer_clause)
-            inner_sql = inner_sql[: cm.start()].rstrip()
-
-    # Atualiza o HAVING inner: so condicoes sem agg residual
-    m2 = having_re.search(inner_sql)
-    if m2:
-        if inner_having_parts:
-            new_inner_having = " AND ".join(inner_having_parts)
-            inner_sql = inner_sql[: m2.start(2)] + " " + new_inner_having + " " + inner_sql[m2.end(2):]
-        else:
-            # Remove HAVING completamente
-            inner_sql = inner_sql[: m2.start()] + " " + inner_sql[m2.end():]
-
-    # Monta outer query
-    wrapped = "SELECT * FROM (\n" + inner_sql + "\n)"
-    if outer_where_parts:
-        wrapped += " WHERE " + " AND ".join(outer_where_parts)
-    if outer_parts:
-        wrapped += " " + " ".join(p.strip() for p in outer_parts)
-    return wrapped
-
-
-def _split_top_level_by_and(text: str) -> list[str]:
-    """Divide string por AND de nivel superior (nao dentro de parenteses)."""
-    parts = []
-    depth = 0
-    current = []
-    i = 0
-    n = len(text)
-    while i < n:
-        if text[i] == '(':
-            depth += 1
-            current.append(text[i])
-        elif text[i] == ')':
+def _depths(sql: str) -> list[int]:
+    """Profundidade de parênteses de cada caractere (ignora o que está entre aspas simples)."""
+    out, depth, in_str = [], 0, False
+    for ch in sql:
+        if ch == "'":
+            in_str = not in_str
+        elif not in_str and ch == ")":
             depth -= 1
-            current.append(text[i])
-        elif depth == 0 and text[i:i+4].upper() == ' AND':
-            after = text[i+4] if i+4 < n else ' '
-            if not (after.isalnum() or after == '_'):
-                parts.append(''.join(current))
-                current = []
-                i += 4
-                continue
+        out.append(depth)
+        if not in_str and ch == "(":
+            depth += 1
+    return out
+
+
+def _qualify_agg_columns(sql: str) -> str:
+    """
+    Qualifica com o apelido da view as colunas dentro de agregações em HAVING e ORDER BY.
+
+    No BigQuery, um apelido do SELECT vale dentro do HAVING e do ORDER BY. Em
+        SELECT ROUND(SUM(investimento), 2) AS investimento ... HAVING SUM(investimento) >= 50
+    o `investimento` do HAVING vira o apelido e a consulta falha com "Aggregations of
+    aggregations are not allowed". No SQLite/DuckDB ele é a coluna. Com `SUM(_v.investimento)`
+    o BigQuery também lê a coluna, sem reescrever a consulta.
+
+    Só mexe em HAVING/ORDER BY cujo FROM, no mesmo nível de parênteses, é uma view de consumo.
+    """
+    depths = _depths(sql)
+    clauses = [(m.start(), m.end(), re.sub(r"\s+", " ", m.group(1).upper())) for m in _CLAUSE_RE.finditer(sql)]
+    edits: list[tuple[int, int, str]] = []      # (início, fim, texto novo)
+    aliased: dict[int, str] = {}                # posição do FROM → apelido
+
+    for idx, (start, end, kind) in enumerate(clauses):
+        if kind not in ("HAVING", "ORDER BY"):
+            continue
+        d = depths[start]
+        # FROM mais próximo antes desta cláusula, no mesmo grupo de parênteses
+        from_end = None
+        for p_start, p_end, p_kind in reversed(clauses[:idx]):
+            if min(depths[p_start:start + 1]) < d:
+                break                           # saiu do grupo de parênteses
+            if p_kind == "FROM" and depths[p_start] == d:
+                from_end = p_end
+                break
+        if from_end is None:
+            continue
+        view = _VIEW_REF_RE.match(sql, from_end + len(sql[from_end:]) - len(sql[from_end:].lstrip()))
+        if not view:
+            continue
+        if from_end not in aliased:
+            am = _ALIAS_RE.match(sql, view.end())
+            if am and am.group(1).upper() not in _SQL_KEYWORDS:
+                aliased[from_end] = am.group(1)
             else:
-                current.append(text[i])
-        else:
-            current.append(text[i])
-        i += 1
-    if current:
-        parts.append(''.join(current))
-    return [p.strip() for p in parts if p.strip()]
+                aliased[from_end] = _VIEW_ALIAS
+                edits.append((view.end(), view.end(), f" AS {_VIEW_ALIAS}"))
+        alias = aliased[from_end]
 
+        # Corpo da cláusula: até a próxima cláusula no mesmo nível ou o fim do grupo
+        body_end = len(sql)
+        for q in range(end, len(sql)):
+            if depths[q] < d:
+                body_end = q
+                break
+        for n_start, _n_end, n_kind in clauses[idx + 1:]:
+            if n_start >= body_end:
+                break
+            if depths[n_start] == d and n_kind != "FROM":
+                body_end = n_start
+                break
 
-def _split_top_level(text: str) -> list[str]:
-    """Divide string por vírgula no nível superior (não dentro de parênteses)."""
-    parts = []
-    depth = 0
-    current = []
-    for ch in text:
-        if ch == '(':
-            depth += 1
-            current.append(ch)
-        elif ch == ')':
-            depth -= 1
-            current.append(ch)
-        elif ch == ',' and depth == 0:
-            parts.append(''.join(current))
-            current = []
-        else:
-            current.append(ch)
-    if current:
-        parts.append(''.join(current))
-    return parts
+        for am in _AGG_RE.finditer(sql, end, body_end):
+            arg_start = am.end()
+            arg_end = arg_start
+            while arg_end < body_end and depths[arg_end] > depths[am.end() - 1]:
+                arg_end += 1
+            for cm in re.finditer(r"(?<![\w.`@])([A-Za-z_]\w*)\b(?!\s*\(|\.)", sql[arg_start:arg_end]):
+                if cm.group(1).lower() in _VIEW_COLUMNS:
+                    edits.append((arg_start + cm.start(1), arg_start + cm.end(1), f"{alias}.{cm.group(1)}"))
+
+    for a, b, text in sorted(set(edits), reverse=True):
+        sql = sql[:a] + text + sql[b:]
+    return sql
 
 
 def translate(sql: str, params: tuple = ()) -> tuple[str, list]:
@@ -487,8 +367,9 @@ def translate(sql: str, params: tuple = ()) -> tuple[str, list]:
     # 4. Traduz parâmetros ? → @p0, @p1, ...
     translated, bq_params = _translate_params(translated, params)
 
-    # 5. Fix HAVING com agregações (BQ não aceita HAVING SUM() quando há múltiplas agg)
-    translated = _fix_having_agg(translated)
+    # 5. Colunas dentro de agregações em HAVING/ORDER BY apontam para a view, não para o
+    #    apelido de mesmo nome do SELECT
+    translated = _qualify_agg_columns(translated)
 
     # 6. Remove backtick duplos que podem surgir de substituições
     translated = re.sub(r"``", "`", translated)
