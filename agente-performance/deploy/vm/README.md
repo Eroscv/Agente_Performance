@@ -1,5 +1,10 @@
 # Carga do BigQuery na VM Oracle
 
+> **17/11/2026:** a VM já existe e já roda uma carga (o ciclo de 3h do Agente de Performance,
+> branch `migracao-vps-feq`). Este passo a passo não deve criar uma segunda carga: antes de
+> instalar, siga [UNIFICACAO.md](UNIFICACAO.md) (passo 0 e unificação das duas cargas). O
+> timer daqui substitui o carregamento do ciclo de 3h, não roda ao lado dele.
+
 Tira a carga (`scripts/cron_master_sync.sh`) do notebook e põe numa VM sempre
 ligada, como timer do systemd. Motivo: a carga parou em 07/11, 14/11 e 16/11
 porque o notebook suspendeu, sem nenhum erro no BigQuery.
