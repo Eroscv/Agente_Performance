@@ -186,6 +186,9 @@ def fixture_db(tmp_path, monkeypatch):
     # Aponta pra um diretório sem parquet — views dw_* ficam ausentes
     # (silencioso, ver db/duck.py::_criar_views_dw), não interfere no teste.
     monkeypatch.setattr(duck, "WH_DIR", tmp_path / "warehouse_vazio")
+    # Os dados do fixture estão só no banco local: com a credencial do BigQuery no ambiente,
+    # query_fed iria ao BigQuery de produção.
+    monkeypatch.setenv("QUERY_FED_BACKEND", "duck")
     duck.reset_duck_conn()
 
     yield {
