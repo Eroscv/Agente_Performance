@@ -5,9 +5,14 @@
 # pedidos com UTM, Google Ads, Meta Ads, e reconstrução das camadas
 # ingestao/correlacao no BigQuery.
 #
-# Pensado para rodar via cron a cada poucas horas. Cada etapa é tolerante a
-# falha isolada (continua as próximas mesmo se uma etapa falhar) e tudo fica
-# registrado no log.
+# Pensado para rodar a cada 3h (timer systemd na VM, ver deploy/vm/). Cada etapa
+# é tolerante a falha isolada (continua as próximas mesmo se uma etapa falhar) e
+# tudo fica registrado no log.
+#
+# Fallback: etapa que falha é tentada de novo (SYNC_TENTATIVAS, padrão 3, com
+# SYNC_ESPERA_S segundos entre tentativas, padrão 120). Se alguma etapa terminar
+# falhando, o script sai com código 1 e, se SLACK_WEBHOOK_URL estiver no ambiente
+# ou no .env, avisa no Slack quais etapas falharam.
 #
 # Uso:
 #   bash scripts/cron_master_sync.sh
@@ -21,18 +26,52 @@ LOG_DIR="$BASE_DIR/logs"
 mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/cron_master_sync.log"
 
+SYNC_TENTATIVAS="${SYNC_TENTATIVAS:-3}"
+SYNC_ESPERA_S="${SYNC_ESPERA_S:-120}"
+FALHAS=()
+
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
 }
 
+# Uma execução por vez: se a anterior ainda roda, esta sai sem fazer nada.
+exec 9>"$LOG_DIR/.cron_master_sync.lock"
+if ! flock -n 9; then
+    log "⏭ execução anterior ainda em andamento — pulando esta"
+    exit 0
+fi
+
 run_step() {
     local desc="$1"; shift
-    log "▶ $desc"
-    if "$@" >> "$LOG_FILE" 2>&1; then
-        log "✅ $desc OK"
-    else
-        log "❌ $desc FALHOU (exit $?) — seguindo para próxima etapa"
+    local tentativa rc
+    for ((tentativa = 1; tentativa <= SYNC_TENTATIVAS; tentativa++)); do
+        log "▶ $desc (tentativa $tentativa/$SYNC_TENTATIVAS)"
+        "$@" >> "$LOG_FILE" 2>&1
+        rc=$?
+        if [ "$rc" -eq 0 ]; then
+            log "✅ $desc OK"
+            return 0
+        fi
+        log "❌ $desc FALHOU (exit $rc)"
+        if [ "$tentativa" -lt "$SYNC_TENTATIVAS" ]; then
+            sleep "$SYNC_ESPERA_S"
+        fi
+    done
+    log "❌ $desc falhou após $SYNC_TENTATIVAS tentativas — seguindo para próxima etapa"
+    FALHAS+=("$desc")
+}
+
+avisar_falhas() {
+    local url="${SLACK_WEBHOOK_URL:-}"
+    if [ -z "$url" ] && [ -f "$BASE_DIR/.env" ]; then
+        url="$(grep -m1 '^SLACK_WEBHOOK_URL=' "$BASE_DIR/.env" | cut -d= -f2- | tr -d "\"'")"
     fi
+    [ -z "$url" ] && return 0
+    local lista texto
+    lista="$(printf '• %s\\n' "${FALHAS[@]}")"
+    texto=":x: *Carga do BigQuery ($(hostname)) terminou com falhas*\\n${lista}Log: logs/cron_master_sync.log"
+    curl -sS -m 15 -X POST -H 'Content-Type: application/json' \
+        --data "{\"text\":\"${texto}\"}" "$url" >> "$LOG_FILE" 2>&1 || true
 }
 
 log "===== cron_master_sync iniciado ====="
@@ -70,4 +109,9 @@ fi
 # 9. Reconstrói camadas ingestao/ e correlacao/ no BigQuery
 run_step "Reconstruir camadas BigQuery" python3 scripts/rebuild_bq_layers.py
 
+if [ "${#FALHAS[@]}" -gt 0 ]; then
+    log "===== cron_master_sync concluído com ${#FALHAS[@]} etapa(s) com falha ====="
+    avisar_falhas
+    exit 1
+fi
 log "===== cron_master_sync concluído ====="
