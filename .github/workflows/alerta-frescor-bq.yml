@@ -1,0 +1,42 @@
+name: Alerta de frescor do BigQuery
+
+# Roda na nuvem do GitHub, independente do notebook onde fica o cron de carga.
+on:
+  schedule:
+    - cron: "30 */2 * * *"   # a cada 2h: carga gold parada?
+    - cron: "0 12 * * *"     # 09h BRT: também confere o último dia por cliente
+  workflow_dispatch:
+    inputs:
+      incluir_clientes:
+        description: "Conferir também o último dia com investimento por cliente"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  frescor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install google-cloud-bigquery==3.25.0 requests==2.32.3
+      - name: Credencial do BigQuery
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          test -n "$GCP_SA_KEY" || { echo "::error::Secret GCP_SA_KEY não configurado"; exit 1; }
+          printf '%s' "$GCP_SA_KEY" > "$RUNNER_TEMP/sa.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/sa.json" >> "$GITHUB_ENV"
+      - name: Checar frescor
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          CLIENTES: ${{ github.event_name == 'schedule' && github.event.schedule == '0 12 * * *' || inputs.incluir_clientes }}
+        run: |
+          flags=""
+          [ "$CLIENTES" = "true" ] && flags="--incluir-clientes"
+          python agente-performance/scripts/check_frescor.py $flags
