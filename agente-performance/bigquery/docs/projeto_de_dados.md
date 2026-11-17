@@ -17,6 +17,8 @@ apagar. Levantamento feito no BigQuery e no código em 17/11/2026.
 | Botica | Meta Ads (sem Google) | `ads_diario` | em dia desde 17/11 (token permanente; recarregado desde 30/10) |
 | Interno | Pipeline de transcrição de reuniões, tickets e SLA | `analise_reunioes`, `tickets_alerta`, `metricas_sla`, `transcricao` | em dia |
 
+Duas cargas gravam o bronze hoje: a do notebook (conta `agente-guara-bq`, branch do PR 6) e o ciclo de 3h do Agente de Performance na VM (conta `guara-vps-feq`, branch `migracao-vps-feq`, desde 12/11). A da VM usa o loader antigo da Meta, que grava todos os cliques como cliques no link: os dias que ela grava por último ficam sem cliques no link na camada tratada. As duas precisam rodar o mesmo código, ou só uma delas gravar.
+
 Fora do escopo de performance, no mesmo projeto: `eco1100.leads_eco_1100` (leads de uma LP),
 `plataforma_aprendizado_videos.videos` e o dataset `transcricao`.
 
@@ -39,7 +41,7 @@ Regras:
 
 | Tabela | Quem grava | Proposta |
 |---|---|---|
-| `raw_meta_insights`, `raw_google_ads`, `raw_shopify_pedidos`, `raw_yampi_pedidos` | os loaders, com a resposta da API inteira | manter como auditoria (permite refazer o bronze sem chamar a API), com expiração de 90 dias |
+| `raw_meta_insights`, `raw_google_ads`, `raw_shopify_pedidos`, `raw_yampi_pedidos` | os loaders, com a resposta da API inteira | manter como auditoria (permite refazer o bronze sem chamar a API). Sem expiração por enquanto: as tabelas não têm partição e somam 213 MB em 17/11 (custo de armazenamento abaixo de US$ 0,01 por mês). Rever quando passarem de 10 GB |
 | `dooki_pedidos_diario` | ninguém desde 05/11 (substituída por `dooki_pedidos`) | nenhuma view lê mais (a `v_todos_dados` já sai de `ing_yampi_pedidos`), mas ainda é consultada à mão e mostra dado parado em 05/11. Trocar por uma view de mesmo nome sobre `ing_yampi_pedidos`, ou apagar depois de avisar quem consulta |
 | Dataset `teste`: 11 tabelas e 25 views paradas desde 22/10 | ninguém | apagar depois de confirmar que nada lê (item 9 do card) |
 | Cópias `_bkp_*` e `_pre_*` (20 tabelas, de 04 a 09/11) | snapshots das migrações de novembro | apagar a partir de 09/12, 30 dias depois da última |
@@ -72,7 +74,7 @@ A regra de canal fica em uma função por cliente no gold, nunca repetida em con
 
 | App | Hoje | O que vai ler | Dataset |
 |---|---|---|---|
-| Agente de Performance | lê um banco local (SQLite/DuckDB) que a carga do notebook alimenta, não o BigQuery | `fato_performance_diaria`, `fato_cac`, `fato_cac_campanha_adset`, `fato_pedidos_pod` e uma view de campanhas e anúncios | `correlacao` |
+| Agente de Performance | tenta o BigQuery primeiro, mas na camada bruta (`ads_diario`) com tradução de SQL por regex que perdia colunas e escondia erros; parte das consultas lia direto o banco local (SQLite/DuckDB). Em migração (PR 13): views de consumo `correlacao.v_agente_performance`, `v_agente_campanhas`, `v_agente_anuncios` e `v_agente_shopify_diario`, com as mesmas colunas das views locais | as views de consumo acima; depois `fato_performance_diaria` e `fato_cac` para os números de negócio | `correlacao` |
 | Artefatos recorrentes (painéis) | painel ao vivo (PR 5) e API do painel da Source Of leem `fato_performance_diaria` e as tabelas `ing_ads_diario` e `ing_shopify_resumo_diario` da silver | as mesmas informações, por views de consumo no gold (`v_painel_campanhas`, `v_painel_loja`), para nenhum app ler a silver | `correlacao` |
 | Referenciador de ads | ainda não grava no banco (código pronto) | cópia semanal das referências | `referencias` (novo) |
 | AprovaPost | ainda não grava no banco | criativos, versões, status, datas, cliente e responsável, em lote diário. Os arquivos ficam no R2 e o banco guarda só o caminho | `aprovapost` (novo) |
