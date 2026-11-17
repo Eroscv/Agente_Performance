@@ -646,3 +646,39 @@ def write_novos_clientes_semanal(rows: list[dict], cliente: str) -> None:
         logger.info("[BQ] ✅ novos_clientes_semanal/%s — %d semana(s) gravada(s)", cliente, len(bq_rows))
     except Exception as exc:
         logger.warning("[BQ] novos_clientes_semanal/%s — falha silenciosa: %s", cliente, exc)
+
+
+_SEGREDO_RE = None
+
+
+def _sem_segredos(texto: str) -> str:
+    """Tira tokens e segredos de uma mensagem de erro antes de gravar no banco."""
+    global _SEGREDO_RE
+    import re
+    if _SEGREDO_RE is None:
+        _SEGREDO_RE = re.compile(
+            r"(access_token=|token=|key=|secret=)[^&\s'\"]+"
+            r"|\b(EAA[A-Za-z0-9]{20,}|shp(at|ca|ss|pa)_[A-Za-z0-9]{10,}|ya29\.[A-Za-z0-9._-]{20,})",
+            re.IGNORECASE,
+        )
+    return _SEGREDO_RE.sub(lambda m: (m.group(1) or "") + "***", texto)
+
+
+def write_log_carga(cliente: str, fonte: str, sucesso: bool, erro: str | None = None) -> None:
+    """Grava uma linha em ingestao.log_cargas_fontes (uma por sincronização de cliente e fonte)."""
+    if not enabled():
+        return
+    import socket
+    bq = _client()
+    project = os.environ.get("BQ_PROJECT", bq.project)
+    linha = {
+        "executado_em": datetime.now(timezone.utc).isoformat(),
+        "cliente": cliente,
+        "fonte": fonte,
+        "sucesso": bool(sucesso),
+        "erro": _sem_segredos(erro)[:500] if erro else None,
+        "origem": socket.gethostname(),
+    }
+    erros = bq.insert_rows_json(f"{project}.ingestao.log_cargas_fontes", [linha])
+    if erros:
+        raise RuntimeError(f"log_cargas_fontes: {erros[:1]}")

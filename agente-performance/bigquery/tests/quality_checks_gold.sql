@@ -90,3 +90,26 @@ SELECT n.cliente_id, n.data, n.investimento AS investimento_campanha_adset, b.in
 FROM nova n
 LEFT JOIN base b USING (cliente_id, data)
 WHERE ABS(n.investimento - IFNULL(b.investimento, 0)) > 0.01;
+
+-- 13. Carga por cliente e fonte: a última sincronização falhou, ou não há sincronização com
+--     sucesso há mais de 7h (a carga roda a cada 3h). Vale para os pares que sincronizaram nos
+--     últimos 7 dias. É o que distingue "zero vendas" (sincronização ok) de "carga falhou":
+--     pegaria o Meta da Botica, que falhou de 30/10 a 17/11 sem aviso.
+WITH registros AS (
+  SELECT cliente, fonte, executado_em, sucesso, erro
+  FROM `guara-db.ingestao.log_cargas_fontes`
+  WHERE executado_em >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 DAY)
+),
+resumo AS (
+  SELECT cliente, fonte,
+         ARRAY_AGG(STRUCT(sucesso, erro, executado_em) ORDER BY executado_em DESC LIMIT 1)[OFFSET(0)] AS ultima,
+         MAX(IF(sucesso, executado_em, NULL)) AS ultimo_sucesso
+  FROM registros
+  GROUP BY cliente, fonte
+)
+SELECT cliente, fonte, ultima.executado_em AS ultima_execucao, ultima.sucesso AS ultima_ok,
+       ultimo_sucesso, ultima.erro
+FROM resumo
+WHERE NOT ultima.sucesso
+   OR ultimo_sucesso IS NULL
+   OR ultimo_sucesso < TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 7 HOUR);
