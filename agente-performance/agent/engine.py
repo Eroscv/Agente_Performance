@@ -30,7 +30,7 @@ from agent.comparatives import (
     comparar_antes_depois,
     ranking_comparativo,
 )
-from db.connections import query_fed as raw_query, get_federated_conn as get_conn
+from db.connections import query_fed as raw_query
 
 logger = logging.getLogger(__name__)
 
@@ -242,36 +242,16 @@ def _aviso_delay_dados(
     if not data_ref or data_ref < hoje:
         return None  # não pediu hoje — sem aviso
 
-    # Descobre o max disponível nos DBs relevantes
+    # Última data com dados do cliente/plataforma pedidos (mesma view do resto do agente)
     try:
-        from db.connections import get_performance_conn as _gpc
-        from agent.registry import carregar_segmentos_ativos as _get_segs
-
-        segmentos = _get_segs()
-        maximos: list[str] = []
-
-        for seg in segmentos:
-            ck = seg.get("cliente_key")
-            plat = seg.get("plataforma")
-            # Filtra pelo cliente/plataforma pedido, se especificado
-            if cliente_key and ck != cliente_key:
-                continue
-            if plataforma and plat != plataforma:
-                continue
-            try:
-                conn = _gpc(ck, plat)
-                tables = [r[0] for r in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()]
-                for t in tables:
-                    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({t})").fetchall()]
-                    date_cols = [c for c in cols if c in ("data", "date", "data_ref")]
-                    if date_cols:
-                        row = conn.execute(f"SELECT MAX({date_cols[0]}) FROM {t}").fetchone()
-                        if row and row[0]:
-                            maximos.append(row[0])
-            except Exception:
-                pass
+        _filtro, _params = [], []
+        if cliente_key:
+            _filtro.append("cliente_key = ?"); _params.append(cliente_key)
+        if plataforma:
+            _filtro.append("plataforma = ?"); _params.append(plataforma)
+        _where = ("WHERE " + " AND ".join(_filtro)) if _filtro else ""
+        _rows = raw_query(f"SELECT MAX(data_inicio) AS max_data FROM campanhas_unificada {_where}", tuple(_params))
+        maximos = [str(_rows[0]["max_data"])[:10]] if _rows and _rows[0].get("max_data") else []
 
         if not maximos:
             return None
@@ -746,12 +726,8 @@ def consultar(
     # Item 1: Breakdown diário Source OF via ads_diario
     if pedir_breakdown_sof and isinstance(dados, (list, dict)):
         try:
-            import sqlite3 as _sql3
-            from db.connections import LEGACY_DB_PATH as _DB_PATH
-            _conn = get_conn()
-            _conn.row_factory = _sql3.Row
             _DIAS_PT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-            _dias = _conn.execute("""
+            _dias = raw_query("""
                 SELECT
                     data_inicio                                     AS dia,
                     SUM(investimento)                               AS invest,
@@ -763,10 +739,10 @@ def consultar(
                          THEN CAST(SUM(cliques_link) AS REAL)
                               / SUM(impressoes) * 100 END AS ctr
                 FROM campanhas_unificada
-                WHERE data_inicio BETWEEN ? AND ?
+                WHERE cliente_key = 'source_of' AND data_inicio BETWEEN ? AND ?
                 GROUP BY data_inicio
                 ORDER BY data_inicio ASC
-            """, (data_inicio, data_fim)).fetchall()
+            """, (data_inicio, data_fim))
             if _dias:
                 bd_sof = []
                 for _d in _dias:
@@ -914,18 +890,21 @@ def consultar(
                 _span = (_d1 - _d0).days + 1
                 _ant0 = _d0 - _dtd(days=_span)
                 _ant1 = _d1 - _dtd(days=_span)
-                import sqlite3 as _sql3
-                _c = get_conn()
-                _c.row_factory = _sql3.Row
-                _row_ant = _c.execute("""
+                _filtro_ant, _params_ant = "", [str(_ant0), str(_ant1)]
+                if cliente_key:
+                    _filtro_ant += " AND cliente_key = ?"; _params_ant.append(cliente_key)
+                if plataforma:
+                    _filtro_ant += " AND plataforma = ?"; _params_ant.append(plataforma)
+                _rows_ant = raw_query(f"""
                     SELECT
                         SUM(investimento) AS invest,
                         CASE WHEN SUM(investimento)>0
                              THEN SUM(valor_compras)/SUM(investimento) END AS roas,
                         SUM(compras) AS conversoes
                     FROM campanhas_unificada
-                    WHERE data_inicio BETWEEN ? AND ?
-                """, (str(_ant0), str(_ant1))).fetchone()
+                    WHERE data_inicio BETWEEN ? AND ?{_filtro_ant}
+                """, tuple(_params_ant))
+                _row_ant = _rows_ant[0] if _rows_ant else None
                 # Extrai atuais
                 _invest_a = None; _roas_a = None; _conv_a = None
                 if isinstance(dados, dict):

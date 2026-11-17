@@ -171,6 +171,7 @@ def _replace_cast_types(sql: str) -> str:
     _type_map = {
         "FLOAT":   "FLOAT64",
         "REAL":    "FLOAT64",
+        "DOUBLE":  "FLOAT64",
         "FLOAT64": "FLOAT64",  # já correto
         "INTEGER": "INT64",
         "INT":     "INT64",

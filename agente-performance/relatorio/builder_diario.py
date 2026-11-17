@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 from db.connections import query_fed as query, query_fed_one as query_one
-from db.duck import query_duck
+
 from notion.historico import criar_relatorio_no_historico
 from utils.formatters import fmt_brl, fmt_x, fmt_pct, fmt_n, roas_emoji
 from notion.blocks import h2, h3, paragrafo, divider, callout, bullet, tabela, toggle
@@ -96,24 +96,17 @@ def _buscar_shopify_dia(data: str) -> dict | None:
     pedidos = dict(_raw) if _raw else None
     # Sessões via ShopifyQL (sync_shopify_sessions.py)
     try:
-        from pathlib import Path
-        import sqlite3 as _sqlite3
-        _p = Path(__file__).parent.parent / "data/performance/source_of/shopify.db"
-        if _p.exists():
-            _conn = _sqlite3.connect(str(_p))
-            _conn.row_factory = _sqlite3.Row
-            _s = _conn.execute("""
-                SELECT sessoes, sessoes_com_carrinho, sessoes_checkout,
-                       sessoes_compra, taxa_conversao, is_bot_suspect
-                FROM source_of_shopify_sessoes WHERE data = ?
-            """, (data,)).fetchone()
-            _conn.close()
-            if _s:
-                sess = dict(_s)
-                if pedidos:
-                    pedidos.update(sess)
-                else:
-                    pedidos = sess
+        _s = query("""
+            SELECT sessoes, sessoes_com_carrinho, sessoes_checkout,
+                   sessoes_compra, taxa_conversao, is_bot_suspect
+            FROM shopify_receita_diaria WHERE data = ? AND sessoes IS NOT NULL
+        """, (data,))
+        if _s:
+            sess = dict(_s[0])
+            if pedidos:
+                pedidos.update(sess)
+            else:
+                pedidos = sess
     except Exception as _e:
         logger.warning("[Shopify] Sessões indisponíveis para %s: %s", data, _e)
     return pedidos
@@ -133,7 +126,7 @@ def _buscar_tendencia_7d(data: str, cliente_key: str, plataforma: str) -> dict:
     d_fim = (date.fromisoformat(data) - timedelta(days=1)).isoformat()
     d_ini = (date.fromisoformat(data) - timedelta(days=7)).isoformat()
 
-    rows = query_duck("""
+    rows = query("""
         SELECT
             ROUND(AVG(invest_dia), 2)        AS invest_medio_7d,
             ROUND(AVG(receita_dia), 2)       AS receita_media_7d,
@@ -163,7 +156,7 @@ def _buscar_top_campanhas_ranking(data: str, cliente_key: str, plataforma: str) 
     Top 5 campanhas do dia com ranking relativo por ROAS.
     Usa RANK() OVER para indicar posição entre todas as campanhas do dia.
     """
-    rows = query_duck("""
+    rows = query("""
         SELECT
             campanha,
             ROUND(investimento, 2)                          AS investimento,
