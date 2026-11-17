@@ -12,7 +12,8 @@
 # Fallback: etapa que falha é tentada de novo (SYNC_TENTATIVAS, padrão 3, com
 # SYNC_ESPERA_S segundos entre tentativas, padrão 120). Se alguma etapa terminar
 # falhando, o script sai com código 1 e, se SLACK_WEBHOOK_URL estiver no ambiente
-# ou no .env, avisa no Slack quais etapas falharam.
+# ou no .env, avisa no Slack quais etapas falharam. Carga sem falha também avisa
+# (hora, duração e etapas), a menos que SLACK_AVISAR_SUCESSO=0.
 #
 # Uso:
 #   bash scripts/cron_master_sync.sh
@@ -28,7 +29,10 @@ LOG_FILE="$LOG_DIR/cron_master_sync.log"
 
 SYNC_TENTATIVAS="${SYNC_TENTATIVAS:-3}"
 SYNC_ESPERA_S="${SYNC_ESPERA_S:-120}"
+SLACK_AVISAR_SUCESSO="${SLACK_AVISAR_SUCESSO:-1}"
 FALHAS=()
+ETAPAS_OK=0
+RECUPERADAS=()   # etapas que só passaram numa nova tentativa
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG_FILE"
@@ -50,6 +54,8 @@ run_step() {
         rc=$?
         if [ "$rc" -eq 0 ]; then
             log "✅ $desc OK"
+            ETAPAS_OK=$((ETAPAS_OK + 1))
+            if [ "$tentativa" -gt 1 ]; then RECUPERADAS+=("$desc (tentativa $tentativa)"); fi
             return 0
         fi
         log "❌ $desc FALHOU (exit $rc)"
@@ -61,17 +67,35 @@ run_step() {
     FALHAS+=("$desc")
 }
 
-avisar_falhas() {
+# Posta no Slack (SLACK_WEBHOOK_URL do ambiente ou do .env). Quebra de linha no texto: \\n.
+avisar_slack() {
     local url="${SLACK_WEBHOOK_URL:-}"
     if [ -z "$url" ] && [ -f "$BASE_DIR/.env" ]; then
         url="$(grep -m1 '^SLACK_WEBHOOK_URL=' "$BASE_DIR/.env" | cut -d= -f2- | tr -d "\"'")"
     fi
     [ -z "$url" ] && return 0
-    local lista texto
-    lista="$(printf '• %s\\n' "${FALHAS[@]}")"
-    texto=":x: *Carga do BigQuery ($(hostname)) terminou com falhas*\\n${lista}Log: logs/cron_master_sync.log"
     curl -sS -m 15 -X POST -H 'Content-Type: application/json' \
-        --data "{\"text\":\"${texto}\"}" "$url" >> "$LOG_FILE" 2>&1 || true
+        --data "{\"text\":\"$1\"}" "$url" >> "$LOG_FILE" 2>&1 || true
+    echo >> "$LOG_FILE"
+}
+
+duracao() {
+    printf '%dmin' $(( (SECONDS + 30) / 60 ))
+}
+
+avisar_falhas() {
+    local lista
+    lista="$(printf '• %s\\n' "${FALHAS[@]}")"
+    avisar_slack ":x: *Carga do BigQuery ($(hostname)) terminou com falhas* em $(duracao)\\n${lista}Etapas OK: ${ETAPAS_OK}. Log: logs/cron_master_sync.log"
+}
+
+avisar_sucesso() {
+    [ "$SLACK_AVISAR_SUCESSO" = "1" ] || return 0
+    local extra=""
+    if [ "${#RECUPERADAS[@]}" -gt 0 ]; then
+        extra="\\nPassaram numa nova tentativa: $(printf '%s; ' "${RECUPERADAS[@]}")"
+    fi
+    avisar_slack ":white_check_mark: Carga do BigQuery ($(hostname)) concluída às $(date '+%H:%M') em $(duracao): ${ETAPAS_OK} etapas OK.${extra}"
 }
 
 log "===== cron_master_sync iniciado ====="
@@ -115,3 +139,4 @@ if [ "${#FALHAS[@]}" -gt 0 ]; then
     exit 1
 fi
 log "===== cron_master_sync concluído ====="
+avisar_sucesso
