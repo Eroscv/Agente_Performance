@@ -144,7 +144,7 @@ def _buscar_campanhas(
     # ── DuckDB (campanhas_unificada) ─────────────────────────────────────────
     if cliente_key:
         try:
-            from db.duck import query_duck as _qd
+            from db.connections import query_fed as _qd
             filtro_cliente = "AND cliente_key = ?" if cliente_key else ""
             params = (
                 (data_inicio.isoformat(), data_fim.isoformat(), cliente_key)

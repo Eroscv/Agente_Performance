@@ -473,51 +473,24 @@ def _verificar_cobertura_dados(
         if (hoje - df).days > 7:
             return None
 
-        # Determina tabela conforme plataforma/cliente
-        tabela = None
-        if plataforma == "google_ads" or cliente_key == "pod_kombucha":
-            tabela = "pod_kombucha_gads_diario"
-        else:
-            tabela = "campanhas_unificada"
-
-        from db.connections import get_federated_conn as get_conn
-        try:
-            conn = get_conn()
-        except Exception:
-            return None
-
-        # Detecta coluna de data
-        col_data = "data_inicio" if tabela == "pod_kombucha_gads_diario" else "data_inicio"
-        # Tenta detectar a coluna real
-        try:
-            info = conn.execute(f"PRAGMA table_info({tabela})").fetchall()
-            cols = [r[1] if isinstance(r, (list, tuple)) else r['name'] for r in info]
-            if "data" in cols:
-                col_data = "data"
-            elif "data_inicio" in cols:
-                col_data = "data_inicio"
-            elif "data_fim" in cols:
-                col_data = "data_fim"
-        except Exception:
-            pass
-
-        where_parts = []
-        params      = []
+        # Última data com dados para o cliente/plataforma pedidos (mesma view do resto do agente)
+        from db.connections import query_fed
+        where_parts, params = ["data_inicio <= ?"], [data_fim]
         if data_inicio:
-            where_parts.append(f"{col_data} >= ?")
-            params.append(data_inicio)
-        if data_fim:
-            where_parts.append(f"{col_data} <= ?")
-            params.append(data_fim)
-
-        where_clause = ("WHERE " + " AND ".join(where_parts)) if where_parts else ""
-        sql = f"SELECT MAX({col_data}) AS max_data FROM {tabela} {where_clause}"
-
-        row = conn.execute(sql, params).fetchone()
+            where_parts.append("data_inicio >= ?"); params.append(data_inicio)
+        if cliente_key:
+            where_parts.append("cliente_key = ?"); params.append(cliente_key)
+        if plataforma:
+            where_parts.append("plataforma = ?"); params.append(plataforma)
+        rows = query_fed(
+            "SELECT MAX(data_inicio) AS max_data FROM campanhas_unificada WHERE " + " AND ".join(where_parts),
+            tuple(params),
+        )
+        row = rows[0] if rows else None
         if not row:
             return None
 
-        max_data_raw = row["max_data"] if hasattr(row, "keys") else row[0]
+        max_data_raw = row["max_data"]
         if not max_data_raw:
             return None
 

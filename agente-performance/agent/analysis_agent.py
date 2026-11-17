@@ -25,7 +25,7 @@ from agent.comparatives import (
     comparar_antes_depois,
     ranking_comparativo,
 )
-from db.connections import get_federated_conn as get_conn
+from db.connections import query_fed
 
 logger = logging.getLogger(__name__)
 
@@ -282,22 +282,25 @@ class AnalysisAgent(BaseAnalysisAgent):
         else:
             # Legado: outros intents via ads_diario
             try:
-                import sqlite3 as _sql3
                 from datetime import date as _ddate, timedelta as _dtd
                 _d0 = _ddate.fromisoformat(data_inicio)
                 _d1 = _ddate.fromisoformat(data_fim)
                 _span = (_d1 - _d0).days + 1
                 _ant0 = _d0 - _dtd(days=_span)
                 _ant1 = _d1 - _dtd(days=_span)
-                _c = get_conn()
-                _c.row_factory = _sql3.Row
-                _row = _c.execute(
+                _filtro, _params = "", [str(_ant0), str(_ant1)]
+                if cliente_key:
+                    _filtro += " AND cliente_key = ?"; _params.append(cliente_key)
+                if plataforma:
+                    _filtro += " AND plataforma = ?"; _params.append(plataforma)
+                _rows = query_fed(
                     "SELECT SUM(investimento) AS invest, "
                     "CASE WHEN SUM(investimento)>0 THEN SUM(valor_compras)/SUM(investimento) END AS roas, "
                     "SUM(compras) AS conversoes "
-                    "FROM campanhas_unificada WHERE data_inicio BETWEEN ? AND ?",
-                    (str(_ant0), str(_ant1)),
-                ).fetchone()
+                    "FROM campanhas_unificada WHERE data_inicio BETWEEN ? AND ?" + _filtro,
+                    tuple(_params),
+                )
+                _row = _rows[0] if _rows else None
                 _invest_a = (
                     dados.get("invest") or dados.get("total_invest")
                     if isinstance(dados, dict)

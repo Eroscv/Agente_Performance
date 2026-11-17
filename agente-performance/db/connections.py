@@ -30,6 +30,7 @@ API pública (inalterada — drop-in):
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -250,21 +251,31 @@ def reset_federated_conn() -> None:
 
 def query_fed(sql: str, params: tuple = ()) -> list[dict]:
     """
-    Query analítica — FONTE PRIMÁRIA: BigQuery.
-    Fallback para DuckDB/SQLite se BQ indisponível.
+    Query analítica — FONTE PRIMÁRIA: BigQuery (views de consumo do gold,
+    correlacao.v_agente_*). Fallback para DuckDB/SQLite se a consulta falhar no BigQuery.
 
     Aceita SQL escrito para campanhas_unificada/v_performance/shopify_receita_diaria
-    (DuckDB/SQLite) — traduz automaticamente para BigQuery via bq_translator.
+    (DuckDB/SQLite) — bq_translator troca o nome da view e os parâmetros.
     Mesma assinatura de antes — drop-in para todo agent/queries/, relatorio/, scripts/.
+
+    Erro no BigQuery nunca vira lista vazia: é registrado e a consulta vai para o banco
+    local; se o local também falhar, a exceção sobe.
+
+    QUERY_FED_BACKEND (env): "auto" (padrão), "bq" (só BigQuery, sem fallback) ou
+    "duck" (só o banco local). Serve para teste e para comparar os dois caminhos.
     """
-    try:
+    backend = os.environ.get("QUERY_FED_BACKEND", "auto").lower()
+    if backend != "duck":
         from db.bq_reader import enabled as _bq_enabled, query_bq as _query_bq
         from db.bq_translator import translate as _translate
-        if _bq_enabled():
-            bq_sql, bq_params = _translate(sql, params)
-            return _query_bq(bq_sql, bq_params if bq_params else None)
-    except Exception as _bq_exc:
-        logger.warning("[query_fed] BQ falhou (%s) — fallback DuckDB", _bq_exc)
+        if _bq_enabled() or backend == "bq":
+            try:
+                bq_sql, bq_params = _translate(sql, params)
+                return _query_bq(bq_sql, bq_params if bq_params else None, raise_on_error=True)
+            except Exception as _bq_exc:
+                if backend == "bq":
+                    raise
+                logger.error("[query_fed] consulta falhou no BigQuery (%s) — usando o banco local", _bq_exc)
     # Fallback: DuckDB local
     from db.duck import query_duck
     return query_duck(sql, params)
