@@ -125,16 +125,16 @@ SELECT
     SUM(valor_compras)       AS valor_compras,
     SUM(video_3s)            AS video_3s,
     SUM(thruplays)           AS thruplays,
-    -- ROAS recalculado (usando regra de negócio: investimento * 1.1215)
+    -- ROAS recalculado (usando regra de negócio: investimento * 1.1383)
     CASE
-        WHEN SUM(investimento) * 1.1215 > 0
-        THEN SUM(valor_compras) / (SUM(investimento) * 1.1215)
+        WHEN SUM(investimento) * 1.1383 > 0
+        THEN SUM(valor_compras) / (SUM(investimento) * 1.1383)
         ELSE NULL
     END AS roas_calculado,
     -- CPA recalculado
     CASE
         WHEN SUM(compras) > 0
-        THEN SUM(investimento) * 1.1215 / SUM(compras)
+        THEN SUM(investimento) * 1.1383 / SUM(compras)
         ELSE NULL
     END AS cpa_calculado,
     -- CTR

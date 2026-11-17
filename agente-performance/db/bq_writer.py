@@ -326,11 +326,11 @@ def write_campaign_totals(
                         cliente,
                         DATE_TRUNC(data, MONTH)                                           AS mes,
                         ROUND(SUM(CASE WHEN plataforma = 'meta'
-                                       THEN investimento * 1.1215 ELSE 0 END), 2)        AS investimento_meta,
+                                       THEN investimento * 1.1383 ELSE 0 END), 2)        AS investimento_meta,
                         ROUND(SUM(CASE WHEN plataforma = 'google'
                                        THEN investimento ELSE 0 END), 2)                  AS investimento_google,
                         ROUND(SUM(CASE WHEN plataforma = 'meta'
-                                       THEN investimento * 1.1215
+                                       THEN investimento * 1.1383
                                        ELSE investimento END), 2)                         AS investimento_total,
                         ROUND(SUM(CASE WHEN plataforma = 'meta'
                                       THEN compras ELSE 0 END), 4)                        AS compras_meta,

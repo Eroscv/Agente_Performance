@@ -7,7 +7,7 @@ fazem sentido antes de serem enviados ao Claude.
 Não faz queries. Não chama LLM. Apenas aplica regras puras.
 
 Regras de negócio:
-  - FATOR_IMPOSTO = 1.1215 (Bianca confirmou)
+  - FATOR_IMPOSTO = 1.1383 (Bianca confirmou)
   - ROAS Meta bruto nunca deve ser usado — só ROAS Shopify ajustado
   - Frequência > 4 = fadiga (Meta Ads)
   - CTR > 15% em Meta = dado suspeito
@@ -36,7 +36,7 @@ from typing import Any, Optional
 logger = logging.getLogger(__name__)
 
 # ── Regras de negócio (fonte: relatorio/regras.py + reunião Bianca/Eros) ──────
-FATOR_IMPOSTO: float = 1.1215   # investimento Meta ajustado
+FATOR_IMPOSTO: float = 1.1383   # investimento Meta ajustado
 
 # Benchmarks Meta Ads (Source OF)
 _META_CTR_MAX        = 15.0    # CTR acima disso é suspeito

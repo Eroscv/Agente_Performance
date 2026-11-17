@@ -33,7 +33,7 @@ def test_v_performance_uma_linha_por_campanha():
     assert [r[0] for r in rows] == ["Camp A", "Camp G"]
     camp_a = rows[0]
     assert camp_a[1:3] == (200.0, 1000.0)
-    assert camp_a[3] == round(1000 / (200 * 1.1215), 4)  # Meta da Source OF: ROAS sobre investimento com imposto
+    assert camp_a[3] == round(1000 / (200 * 1.1383), 4)  # Meta da Source OF: ROAS sobre investimento com imposto
     assert camp_a[4] == 4.0                               # CPC = 200 / 50 cliques
     assert rows[1][3] == 4.0                               # Google sem imposto
 

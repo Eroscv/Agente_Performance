@@ -84,10 +84,10 @@ SELECT
     data, campanha, campaign_id, objetivo, status_criativo,
     COALESCE(impressoes, 0), COALESCE(cliques_link, 0), COALESCE(alcance, 0),
     COALESCE(investimento, 0), COALESCE(compras, 0), COALESCE(valor_compras, 0),
-    CASE WHEN investimento * 1.1215 > 0
-         THEN ROUND(valor_compras / (investimento * 1.1215), 4) END,
+    CASE WHEN investimento * 1.1383 > 0
+         THEN ROUND(valor_compras / (investimento * 1.1383), 4) END,
     CASE WHEN compras > 0
-         THEN ROUND(investimento * 1.1215 / compras, 2) END,
+         THEN ROUND(investimento * 1.1383 / compras, 2) END,
     CASE WHEN impressoes > 0
          THEN ROUND(cliques_link / impressoes * 100.0, 4) END,
     NULL,
@@ -115,10 +115,10 @@ SELECT
     data, campanha, campaign_id, objetivo, status_criativo,
     COALESCE(impressoes, 0), COALESCE(cliques_link, 0), COALESCE(alcance, 0),
     COALESCE(investimento, 0), COALESCE(compras, 0), COALESCE(valor_compras, 0),
-    CASE WHEN investimento * 1.1215 > 0
-         THEN ROUND(valor_compras / (investimento * 1.1215), 4) END,
+    CASE WHEN investimento * 1.1383 > 0
+         THEN ROUND(valor_compras / (investimento * 1.1383), 4) END,
     CASE WHEN compras > 0
-         THEN ROUND(investimento * 1.1215 / compras, 2) END,
+         THEN ROUND(investimento * 1.1383 / compras, 2) END,
     CASE WHEN impressoes > 0
          THEN ROUND(cliques_link / impressoes * 100.0, 4) END,
     NULL,
@@ -148,7 +148,7 @@ FROM botica_meta.botica_meta_ads_diario
 # Meta grava uma linha por anúncio; quem lê v_performance espera uma linha por campanha/dia
 # (somar ROAS/CTR de anúncios, contar campanhas e listar "por campanha" saía duplicado).
 # Taxas recalculadas sobre as somas; Meta de Source OF e POD mantém o investimento com imposto
-# (1,1215) no ROAS/CPA, como na view por linha.
+# (1,1383) no ROAS/CPA, como na view por linha.
 _V_PERFORMANCE_AGG_DDL = """
 CREATE OR REPLACE VIEW v_performance AS
 SELECT
@@ -163,7 +163,7 @@ SELECT
     ROUND(SUM(investimento) / NULLIF(SUM(cliques), 0), 2)           AS cpc_medio,
     SUM(video_3s) AS video_3s, SUM(thruplays) AS thruplays
 FROM (SELECT *, CASE WHEN plataforma = 'meta_ads' AND cliente_key IN ('source_of', 'pod_kombucha')
-                     THEN 1.1215 ELSE 1 END AS imp
+                     THEN 1.1383 ELSE 1 END AS imp
       FROM v_performance_linhas)
 GROUP BY cliente_key, plataforma, data, campanha, imp
 """
