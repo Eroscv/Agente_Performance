@@ -60,7 +60,8 @@ de relatórios, mas a camada de dados dela está atrasada.
 - `bq_writer`: juntar linhas repetidas pela chave antes do MERGE (na `main`, uma chave repetida
   faz o MERGE inteiro falhar em silêncio);
 - verificações do ciclo de 3h (qualidade contra a API, metas das planilhas) e o post de saúde;
-- relatórios (um por loja, Slack sem repetição, conferência com a API), `utils/llm`,
+- relatórios (um por loja, Slack sem repetição, conferência com a API), lendo o gold do
+  BigQuery por `query_fed` (sem o gate `BQ_LEITURA` da VM; decisão de 17/11), `utils/llm`,
   base de conhecimento, guarda do Text-to-SQL, testes novos;
 - transcrição: MongoDB opcional via `MONGODB_URI` (a `main` ainda tem a URI com senha no
   código; trocar a senha).
@@ -74,10 +75,13 @@ extras do ciclo de 3h (verificações e renovação de token). Os outros timers 
 (relatórios, sessões, saúde, transcrição) continuam, e as unidades deles passam a ser
 versionadas em `deploy/vm/`. O `crontab` do notebook sai depois de 24h sem falha na VM.
 
+## Decisões tomadas
+
+- 17/11: o Agente de Performance e os relatórios leem o **gold do BigQuery** (PR 13), não o
+  SQLite da VM. Nada novo lê `data/performance/*.db` direto.
+
 ## Decisões em aberto
 
-- Fonte dos relatórios e do bot: SQLite na VM (hoje, com `BQ_LEITURA` desligado) ou o gold do
-  BigQuery (PR 13).
 - Botica: Meta ativo (`main`) ou pausado (`clientes.json` da VM).
 - Janela: dia parcial de hoje a cada 3h (as duas já fazem) e quantos dias para trás (8 na `main`,
   2 no ciclo da VM).
