@@ -73,6 +73,8 @@ BEGIN
       utm_content,
       source_name,
       CASE
+        -- POD: mesma regra de fato_pedidos_pod (Colab), para as duas tabelas não divergirem.
+        WHEN cliente = 'pod_kombucha' THEN `guara-db.correlacao.fn_canal_pod`(utm_source)
         WHEN utm_source IS NULL THEN 'direto'
         WHEN LOWER(utm_source) IN ('facebook', 'instagram', 'ig', 'igshopping', 'facebook ads', 'meta') THEN 'meta'
         WHEN LOWER(utm_source) = 'google' THEN 'google'
