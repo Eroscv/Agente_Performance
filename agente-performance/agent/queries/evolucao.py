@@ -125,7 +125,7 @@ def comparar_campanhas(
             {_ROAS_EXPR}                          AS roas,
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc_medio,
             ROUND(AVG(ctr_link), 4)               AS ctr_medio,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
+            ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
             ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia_media,
             ROUND(SUM(impressoes), 0)             AS impressoes,
             ROUND(SUM(alcance), 0)                AS alcance,

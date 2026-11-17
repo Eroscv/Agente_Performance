@@ -718,11 +718,11 @@ def _blocos_rentabilidade_aquisicao(
     cur.execute("""
         SELECT
             data_inicio,
-            SUM(investimento)*1.1215                                              AS gasto_imp,
+            SUM(investimento)*1.1383                                              AS gasto_imp,
             SUM(COALESCE(valor_compras, 0))                                       AS receita,
-            SUM(investimento)*1.1215 / NULLIF(SUM(COALESCE(compras,0)),0)         AS cpa,
+            SUM(investimento)*1.1383 / NULLIF(SUM(COALESCE(compras,0)),0)         AS cpa,
             SUM(COALESCE(compras, 0))                                              AS compras,
-            SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento)*1.1215,0)  AS roas_imp
+            SUM(COALESCE(valor_compras, 0)) / NULLIF(SUM(investimento)*1.1383,0)  AS roas_imp
         FROM campanhas
         WHERE data_inicio >= ? AND data_fim <= ?
         GROUP BY data_inicio

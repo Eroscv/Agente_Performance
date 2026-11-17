@@ -103,7 +103,7 @@ def top_campanhas_compras(
             ROUND(SUM(COALESCE(valor_compras, 0)), 2)             AS receita,
             ROUND(SUM(investimento), 2)                          AS investimento,
             {_ROAS_EXPR}                                         AS roas,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado
+            ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado
         FROM campanhas_unificada
         {where}
         GROUP BY campanha
@@ -267,7 +267,7 @@ def top_campanhas_receita(
             ROUND(SUM(COALESCE(compras, 0)), 0)        AS compras,
             ROUND(SUM(investimento), 2)                AS investimento,
             {_ROAS_EXPR}                               AS roas,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado
+            ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado
         FROM campanhas_unificada
         {where}
         GROUP BY campanha

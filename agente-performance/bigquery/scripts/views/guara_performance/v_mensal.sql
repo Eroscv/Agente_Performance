@@ -7,14 +7,14 @@ SELECT
     DATE_TRUNC(data, MONTH)                                       AS mes,
     ROUND(SUM(investimento), 2)                                   AS investimento,
     ROUND(SUM(CASE WHEN plataforma='meta'
-                   THEN investimento * 1.1215
+                   THEN investimento * 1.1383
                    ELSE investimento END), 2)                     AS investimento_ajustado,
     ROUND(SUM(receita), 2)                                        AS receita,
     ROUND(SUM(compras), 4)                                        AS compras,
     ROUND(SUM(receita) / NULLIF(SUM(investimento), 0), 2)         AS roas,
     ROUND(SUM(receita) / NULLIF(
         SUM(CASE WHEN plataforma='meta'
-                 THEN investimento * 1.1215
+                 THEN investimento * 1.1383
                  ELSE investimento END), 0), 2)                   AS roas_real,
     ROUND(SUM(investimento) / NULLIF(SUM(compras), 0), 2)         AS cpa,
     ROUND(SUM(impressoes), 0)                                     AS impressoes,

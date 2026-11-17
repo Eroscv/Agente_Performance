@@ -12,7 +12,7 @@ SELECT
     plataforma,
     data,
     ROUND(SUM(investimento), 2)                                         AS investimento,
-    ROUND(SUM(CASE WHEN plataforma = 'meta' THEN investimento * 1.1215 ELSE investimento END), 2) AS investimento_ajustado,
+    ROUND(SUM(CASE WHEN plataforma = 'meta' THEN investimento * 1.1383 ELSE investimento END), 2) AS investimento_ajustado,
     ROUND(SUM(compras), 0)                                              AS compras,
     ROUND(SUM(receita), 2)                                              AS receita_plataforma,
     ROUND(SUM(impressoes), 0)                                           AS impressoes,

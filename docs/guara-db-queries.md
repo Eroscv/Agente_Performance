@@ -13,7 +13,7 @@ guara-db
 │   ├── ads_diario             ← dados brutos Meta + Google Ads (665 k linhas, jan/2024–hoje)
 │   ├── shopify_diario         ← receita e pedidos Shopify por dia
 │   ├── analise_reunioes       ← análise de sentimento de reuniões (via Claude)
-│   ├── v_ads_roas_real        ← view: ROAS com investimento ajustado Meta (×1,1215)
+│   ├── v_ads_roas_real        ← view: ROAS com investimento ajustado Meta (×1,1383)
 │   ├── v_diario_90d           ← view: últimos 90 dias consolidados
 │   ├── v_mensal               ← view: agregado mensal por cliente/plataforma
 │   ├── v_benchmark_mensal     ← view: comparativo MoM com variações %
@@ -169,7 +169,7 @@ ORDER BY cliente, mes DESC;
 
 ## 3. `v_ads_roas_real` — ROAS com ajuste de taxa Meta
 
-> Meta cobra em USD. O investimento real em BRL usa multiplicador `×1,1215`.  
+> Meta cobra em USD. O investimento real em BRL usa multiplicador `×1,1383`.  
 > Use esta view para análises de rentabilidade real.
 
 ### ROAS real do mês por cliente

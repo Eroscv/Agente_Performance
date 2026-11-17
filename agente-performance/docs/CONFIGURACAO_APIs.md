@@ -81,10 +81,10 @@ O Meta reporta o ROAS baseado na **receita atribuída internamente** — mas ess
 A Guará usa o **ROAS real**, calculado assim:
 
 ```
-ROAS real = Receita Shopify ÷ (Investimento Meta × 1,1215)
+ROAS real = Receita Shopify ÷ (Investimento Meta × 1,1383)
 ```
 
-O fator **1,1215** corrige o imposto sobre o investimento. Esse número vem de uma tabela de comparação histórica com os dados reais de faturamento da Shopify.
+O fator **1,1383** corrige o imposto sobre o investimento. Esse número vem de uma tabela de comparação histórica com os dados reais de faturamento da Shopify.
 
 ---
 

@@ -36,7 +36,7 @@
 --   investimento  REAL
 --   conversoes    REAL   — compras (Meta) ou conversoes (Google)
 --   receita       REAL   — valor_compras (Meta) ou valor_conversao (Google)
---   roas          REAL   — receita / investimento (Meta: ajustado ×1.1215)
+--   roas          REAL   — receita / investimento (Meta: ajustado ×1.1383)
 --   cpa           REAL   — investimento / conversoes
 --   ctr           REAL   — percentual (0–100)
 --   cpc_medio     REAL   — NULL em Meta (calculado na view campanhas_unificada)
@@ -71,7 +71,7 @@ FROM sof_gads.source_of_gads_diario
 UNION ALL
 
 -- Source OF — Meta Ads
--- ROAS ajustado: divide por investimento × 1.1215 (markup operacional)
+-- ROAS ajustado: divide por investimento × 1.1383 (markup operacional)
 SELECT
     'source_of', 'Source OF', 'meta_ads',
     data, campanha, campaign_id, objetivo, status_criativo,
@@ -81,10 +81,10 @@ SELECT
     COALESCE(investimento,  0),
     COALESCE(compras,       0),
     COALESCE(valor_compras, 0),
-    CASE WHEN investimento * 1.1215 > 0
-         THEN ROUND(valor_compras / (investimento * 1.1215), 4) END,
+    CASE WHEN investimento * 1.1383 > 0
+         THEN ROUND(valor_compras / (investimento * 1.1383), 4) END,
     CASE WHEN compras > 0
-         THEN ROUND(investimento * 1.1215 / compras, 2)        END,
+         THEN ROUND(investimento * 1.1383 / compras, 2)        END,
     CASE WHEN impressoes > 0
          THEN ROUND(cliques_link / impressoes * 100.0, 4)      END,
     NULL,
@@ -123,10 +123,10 @@ SELECT
     COALESCE(investimento,  0),
     COALESCE(compras,       0),
     COALESCE(valor_compras, 0),
-    CASE WHEN investimento * 1.1215 > 0
-         THEN ROUND(valor_compras / (investimento * 1.1215), 4) END,
+    CASE WHEN investimento * 1.1383 > 0
+         THEN ROUND(valor_compras / (investimento * 1.1383), 4) END,
     CASE WHEN compras > 0
-         THEN ROUND(investimento * 1.1215 / compras, 2)        END,
+         THEN ROUND(investimento * 1.1383 / compras, 2)        END,
     CASE WHEN impressoes > 0
          THEN ROUND(cliques_link / impressoes * 100.0, 4)      END,
     NULL,

@@ -145,17 +145,17 @@ Toda query deve ter `LIMIT`. O validador injeta `LIMIT 50` automaticamente se au
 
 ## 4. Fator de Ajuste Meta Ads
 
-O Meta Ads **não inclui impostos** no valor reportado. Para calcular CPA real e ROAS real, aplicar fator `1.1215`:
+O Meta Ads **não inclui impostos** no valor reportado. Para calcular CPA real e ROAS real, aplicar fator `1.1383`:
 
 ```sql
 -- CPA ajustado (com impostos)
-ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS cpa_ajustado
+ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(compras), 0), 2) AS cpa_ajustado
 
 -- ROAS real (receita Shopify ÷ investimento com impostos)
-ROUND(SUM(valor_shopify) / NULLIF(SUM(investimento) * 1.1215, 0), 2) AS roas_real
+ROUND(SUM(valor_shopify) / NULLIF(SUM(investimento) * 1.1383, 0), 2) AS roas_real
 ```
 
-> **Importante:** o `roas_compras` da view usa o investimento bruto (sem fator). Para ROAS real use a view `v_performance_mensal` no BigQuery ou calcule manualmente com `× 1.1215`.
+> **Importante:** o `roas_compras` da view usa o investimento bruto (sem fator). Para ROAS real use a view `v_performance_mensal` no BigQuery ou calcule manualmente com `× 1.1383`.
 
 ---
 
@@ -170,7 +170,7 @@ SELECT
     ROUND(SUM(COALESCE(valor_compras, 0)), 2)                             AS receita_total,
     ROUND(SUM(COALESCE(compras, 0)), 0)                                   AS compras_total,
     ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 2)           AS roas,
-    ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2)       AS cpa_ajustado,
+    ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(compras), 0), 2)       AS cpa_ajustado,
     ROUND(SUM(impressoes), 0)                                             AS impressoes,
     ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 2) AS ctr_pct
 FROM campanhas_unificada
@@ -189,7 +189,7 @@ SELECT
     ROUND(SUM(COALESCE(valor_compras, 0)), 2)                      AS receita,
     ROUND(SUM(COALESCE(compras, 0)), 0)                            AS compras,
     ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 2)    AS roas,
-    ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS cpa_ajustado
+    ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(compras), 0), 2) AS cpa_ajustado
 FROM campanhas_unificada
 WHERE cliente_key = 'source_of'
   AND data_inicio >= '2026-09-01'
@@ -333,7 +333,7 @@ SELECT
     ROUND(SUM(COALESCE(valor_compras, 0)), 2)                       AS receita,
     ROUND(SUM(COALESCE(compras, 0)), 0)                             AS compras,
     ROUND(SUM(valor_compras) / NULLIF(SUM(investimento), 0), 2)     AS roas,
-    ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2) AS cpa_ajustado,
+    ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(compras), 0), 2) AS cpa_ajustado,
     COUNT(DISTINCT campanha)                                        AS campanhas
 FROM campanhas_unificada
 WHERE cliente_key = 'source_of'
@@ -396,7 +396,7 @@ SELECT
     investimento_google,
     investimento_total,
     receita_shopify,
-    roas_real,           -- receita_shopify / investimento_total (com ajuste 1.1215 no meta)
+    roas_real,           -- receita_shopify / investimento_total (com ajuste 1.1383 no meta)
     cpa,
     pct_retencao,
     pct_novos,
@@ -500,7 +500,7 @@ Antes de rodar qualquer SELECT, confirme:
 | `source_of` | `google_ads` | Customer ID `4311260590` |
 | `pod_kombucha` | `meta_ads` | `act_324906945710366` |
 
-**Fator de imposto Meta:** `1.1215` (aplicado sobre `investimento` para obter custo real)
+**Fator de imposto Meta:** `1.1383` (aplicado sobre `investimento` para obter custo real)
 
 **Thresholds padrão de alerta:**
 - ROAS mínimo preocupante: `< 1.0`
