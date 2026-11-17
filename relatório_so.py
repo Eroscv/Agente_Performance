@@ -37,7 +37,7 @@ GID_GADS     = "1451607284"
 # =========================================================
 # CONSTANTES
 # =========================================================
-IMPOSTO_META = 1.1215   # markup IOF+ISS sobre Meta
+IMPOSTO_META = 1.1383   # markup IOF+ISS sobre Meta
 IMPOSTO_GADS = 1.0      # ajustar se Google cobra imposto separado
 
 # =========================================================

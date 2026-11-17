@@ -25,7 +25,7 @@ Campos calculados no Data Studio:
 
 Regras:
   - Todas as views usam SOMENTE ads_diario como fonte de métricas de anúncio.
-  - Meta recebe fator fiscal ×1.1215 em investimento_ajustado / amount_spent.
+  - Meta recebe fator fiscal ×1.1383 em investimento_ajustado / amount_spent.
   - CPM, CPA, CPC, ROAS são campos calculados (divisão) — nunca somá-los.
   - v_todos_dados existe apenas para auditoria, nunca para somar métricas.
 
@@ -54,8 +54,8 @@ _DEDUP = f"""
     WHERE rn = 1
 """
 
-# Expressão de investimento ajustado (Meta ×1.1215, Google inalterado)
-_INV_AJ = "CASE WHEN plataforma = 'meta' THEN investimento * 1.1215 ELSE investimento END"
+# Expressão de investimento ajustado (Meta ×1.1383, Google inalterado)
+_INV_AJ = "CASE WHEN plataforma = 'meta' THEN investimento * 1.1383 ELSE investimento END"
 
 # Mapa de nome canônico de cliente
 _CLIENTE_NOME = """

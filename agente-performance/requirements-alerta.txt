@@ -1,0 +1,28 @@
+# Versões travadas do alerta de frescor (.github/workflows/alerta-frescor-bq.yml).
+# Diretas: google-cloud-bigquery e requests. O resto são dependências delas.
+# Para atualizar: pip install nas duas diretas num venv limpo e pip freeze.
+certifi==2026.10.23
+cffi==2.1.1
+charset-normalizer==3.5.2
+cryptography==50.0.2
+google-api-core==2.30.3
+google-auth==2.62.2
+google-cloud-bigquery==3.25.0
+google-cloud-core==2.8.0
+google-crc32c==1.9.0
+google-resumable-media==2.11.0
+googleapis-common-protos==1.76.0
+grpcio==1.85.1
+grpcio-status==1.85.1
+idna==3.20
+packaging==26.3
+proto-plus==1.29.0
+protobuf==7.36.2
+pyasn1==0.6.5
+pyasn1_modules==0.4.2
+pycparser==3.12
+python-dateutil==2.9.0.post0
+requests==2.32.3
+six==1.17.0
+typing_extensions==4.16.0
+urllib3==2.8.0

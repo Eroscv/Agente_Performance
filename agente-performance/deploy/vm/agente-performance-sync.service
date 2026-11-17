@@ -1,0 +1,15 @@
+[Unit]
+Description=Carga do BigQuery (cron_master_sync: Shopify, Meta, Google, Yampi e camadas)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USUARIO__
+WorkingDirectory=__DIR_APP__
+Environment=PATH=__DIR_APP__/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=America/Sao_Paulo
+ExecStart=/usr/bin/env bash __DIR_APP__/scripts/cron_master_sync.sh
+# Uma carga normal leva ~20 min; acima de 90 min está travada.
+TimeoutStartSec=90min
+Nice=5

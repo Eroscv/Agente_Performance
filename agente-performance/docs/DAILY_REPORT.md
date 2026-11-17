@@ -206,7 +206,7 @@ Aviso é informativo (não bloqueia), mas aparece no relatório Slack.
 | Tabela | `shopify_receita_diaria` |
 | Cron automático | `shopify-sync-diario` às 06:00 UTC (últimos 8 dias) |
 | Histórico | 387 dias · 31.285 pedidos · R$ 9,58M |
-| ROAS real | Receita Shopify ÷ Investimento Meta ajustado (×1,1215) |
+| ROAS real | Receita Shopify ÷ Investimento Meta ajustado (×1,1383) |
 
 ---
 

@@ -93,7 +93,7 @@ Depois commitar e pushar o arquivo de alteração junto ou em seguida.
 - **Stack:** FastAPI + Slack Bolt + SQLite + Claude Haiku 4.5 + Notion API
 - **Clientes:** Source OF (Meta Ads) + POD Kombucha (Google Ads) + 4 outros
 - **Shopify Sync:** `db/shopify_sync.py` — tabela `shopify_receita_diaria` — 387 dias, 31.285 pedidos, R$ 9,58M sincronizados
-  - ROAS real calculado: Receita Shopify ÷ Investimento Meta ajustado (×1,1215)
+  - ROAS real calculado: Receita Shopify ÷ Investimento Meta ajustado (×1,1383)
   - Cron automático: `shopify-sync-diario` às 6h UTC (últimos 8 dias)
   - Endpoints: GET /shopify/status · POST /shopify/sync · GET /shopify/receita · GET /shopify/diario
 

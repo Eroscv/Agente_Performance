@@ -78,7 +78,7 @@ def _resumo_para_texto(resumo: dict, plataforma: str) -> str:
     campanhas_n = resumo.get("campanhas")
     frequencia = resumo.get("frequencia")
 
-    invest_imp = round(float(invest) * 1.1215, 2) if plataforma == "meta_ads" and invest else None
+    invest_imp = round(float(invest) * 1.1383, 2) if plataforma == "meta_ads" and invest else None
 
     linhas = [
         f"- Investimento: R$ {float(invest):,.2f}" + (f" (com imposto: R$ {float(invest_imp):,.2f})" if invest_imp else ""),
@@ -245,7 +245,7 @@ def gerar_insights(
                 if ticket: partes.append(f"- Ticket médio: R$ {float(ticket):,.2f}")
                 invest = resumo.get("investimento") or resumo.get("total_invest") or 0
                 if invest:
-                    roas_real = float(receita_s) / (float(invest) * 1.1215)
+                    roas_real = float(receita_s) / (float(invest) * 1.1383)
                     partes.append(f"- ROAS real (Shopify/invest+imposto): {roas_real:.2f}x")
         comparativo = dados_extras.get("comparativo")
         if comparativo:

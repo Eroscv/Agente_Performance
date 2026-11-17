@@ -164,7 +164,7 @@ agente-performance/
 ├── relatorio/
 │   ├── builder_diario.py          ← builder relatório diário
 │   ├── builder_mensal.py          ← builder relatório mensal
-│   └── regras.py                  ← FATOR_IMPOSTO (1.1215), thresholds
+│   └── regras.py                  ← FATOR_IMPOSTO (1.1383), thresholds
 ├── data/performance/
 │   ├── source_of/
 │   │   ├── meta_ads.db

@@ -12,7 +12,7 @@ WITH base AS (
         impressoes,
         cliques_todos AS cliques_link,
         CASE WHEN plataforma = 'meta'
-             THEN investimento * 1.1215
+             THEN investimento * 1.1383
              ELSE investimento END AS investimento_ajustado
     FROM `guara-db.ingestao.ing_ads_diario`
     WHERE data >= DATE_SUB(CURRENT_DATE(), INTERVAL 31 DAY)

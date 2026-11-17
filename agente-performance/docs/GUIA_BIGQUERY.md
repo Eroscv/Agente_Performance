@@ -135,25 +135,25 @@ ROUND(
 AVG(roas)
 ```
 
-### Regra 4 — Fator de imposto Meta (× 1.1215)
+### Regra 4 — Fator de imposto Meta (× 1.1383)
 
-O Meta Ads não inclui impostos no gasto reportado. Para ROAS real e CPA real, multiplique o investimento por **1.1215**:
+O Meta Ads não inclui impostos no gasto reportado. Para ROAS real e CPA real, multiplique o investimento por **1.1383**:
 
 ```sql
 -- ROAS real (Meta)
 ROUND(
   SUM(CAST(receita AS FLOAT64)) /
-  NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+  NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
 , 2) AS roas_real
 
 -- CPA real (Meta)
 ROUND(
-  SUM(CAST(investimento AS FLOAT64)) * 1.1215 /
+  SUM(CAST(investimento AS FLOAT64)) * 1.1383 /
   NULLIF(SUM(compras), 0)
 , 2) AS cpa_real
 ```
 
-> **Atenção:** Google Ads **não tem** esse ajuste. Só aplique `× 1.1215` quando `plataforma = 'meta'` ou em análises que incluam Meta.
+> **Atenção:** Google Ads **não tem** esse ajuste. Só aplique `× 1.1383` quando `plataforma = 'meta'` ou em análises que incluam Meta.
 
 ### Regra 5 — Use SAFE_DIVIDE para divisões que podem ser zero
 
@@ -268,10 +268,10 @@ SELECT
   , 2)                                                                      AS roas_bruto,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real,
   ROUND(
-    SUM(CAST(investimento AS FLOAT64)) * 1.1215 /
+    SUM(CAST(investimento AS FLOAT64)) * 1.1383 /
     NULLIF(SUM(compras), 0)
   , 2)                                                                      AS cpa_real,
   ROUND(SUM(impressoes), 0)                                                 AS impressoes,
@@ -306,10 +306,10 @@ SELECT
   SUM(compras)                                                              AS compras,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real,
   ROUND(
-    SUM(CAST(investimento AS FLOAT64)) * 1.1215 /
+    SUM(CAST(investimento AS FLOAT64)) * 1.1383 /
     NULLIF(SUM(compras), 0)
   , 2)                                                                      AS cpa_real,
   ROUND(SUM(impressoes), 0)                                                 AS impressoes,
@@ -346,10 +346,10 @@ SELECT
   ROUND(SUM(CAST(investimento AS FLOAT64)), 2)                              AS investimento,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real,
   ROUND(
-    SUM(CAST(investimento AS FLOAT64)) * 1.1215 /
+    SUM(CAST(investimento AS FLOAT64)) * 1.1383 /
     NULLIF(SUM(compras), 0)
   , 2)                                                                      AS cpa_real,
   ROUND(
@@ -406,11 +406,11 @@ semana_anterior AS (
 )
 SELECT
   a.campanha,
-  ROUND(a.rec_a / NULLIF(a.inv_a * 1.1215, 0), 2)              AS roas_atual,
-  ROUND(b.rec_b / NULLIF(b.inv_b * 1.1215, 0), 2)              AS roas_anterior,
+  ROUND(a.rec_a / NULLIF(a.inv_a * 1.1383, 0), 2)              AS roas_atual,
+  ROUND(b.rec_b / NULLIF(b.inv_b * 1.1383, 0), 2)              AS roas_anterior,
   ROUND(
-    (a.rec_a / NULLIF(a.inv_a * 1.1215, 0)) -
-    (b.rec_b / NULLIF(b.inv_b * 1.1215, 0))
+    (a.rec_a / NULLIF(a.inv_a * 1.1383, 0)) -
+    (b.rec_b / NULLIF(b.inv_b * 1.1383, 0))
   , 2)                                                          AS delta_roas,
   ROUND(SAFE_DIVIDE(a.rec_a - b.rec_b, b.rec_b) * 100, 1)      AS var_receita_pct,
   ROUND(a.inv_a, 2)                                             AS invest_atual,
@@ -461,11 +461,11 @@ SELECT
   ROUND(a.inv, 2)                                               AS invest_atual,
   ROUND(b.inv, 2)                                               AS invest_anterior,
   ROUND(SAFE_DIVIDE(a.inv - b.inv, b.inv) * 100, 1)            AS var_invest_pct,
-  ROUND(a.rec / NULLIF(a.inv * 1.1215, 0), 2)                  AS roas_atual,
-  ROUND(b.rec / NULLIF(b.inv * 1.1215, 0), 2)                  AS roas_anterior,
+  ROUND(a.rec / NULLIF(a.inv * 1.1383, 0), 2)                  AS roas_atual,
+  ROUND(b.rec / NULLIF(b.inv * 1.1383, 0), 2)                  AS roas_anterior,
   ROUND(
-    (a.rec / NULLIF(a.inv * 1.1215, 0)) -
-    (b.rec / NULLIF(b.inv * 1.1215, 0))
+    (a.rec / NULLIF(a.inv * 1.1383, 0)) -
+    (b.rec / NULLIF(b.inv * 1.1383, 0))
   , 2)                                                          AS delta_roas,
   a.comp                                                        AS compras_atual,
   b.comp                                                        AS compras_anterior,
@@ -506,13 +506,13 @@ periodo_anterior AS (
     AND data BETWEEN '2025-09-01' AND '2025-09-28'  -- ← mesmo período, ano anterior
 )
 SELECT
-  ROUND(a.rec / NULLIF(a.inv * 1.1215, 0), 2)               AS roas_2026,
-  ROUND(b.rec / NULLIF(b.inv * 1.1215, 0), 2)               AS roas_2025,
+  ROUND(a.rec / NULLIF(a.inv * 1.1383, 0), 2)               AS roas_2026,
+  ROUND(b.rec / NULLIF(b.inv * 1.1383, 0), 2)               AS roas_2025,
   ROUND(SAFE_DIVIDE(a.rec - b.rec, b.rec) * 100, 1)         AS var_receita_yoy_pct,
   ROUND(SAFE_DIVIDE(
-    (a.rec / NULLIF(a.inv * 1.1215, 0)) -
-    (b.rec / NULLIF(b.inv * 1.1215, 0)),
-    b.rec / NULLIF(b.inv * 1.1215, 0)
+    (a.rec / NULLIF(a.inv * 1.1383, 0)) -
+    (b.rec / NULLIF(b.inv * 1.1383, 0)),
+    b.rec / NULLIF(b.inv * 1.1383, 0)
   ) * 100, 1)                                               AS var_roas_yoy_pct,
   ROUND(a.inv, 2)                                           AS invest_2026,
   ROUND(b.inv, 2)                                           AS invest_2025,
@@ -539,7 +539,7 @@ SELECT
   investimento_google,
   investimento_total,
   receita_shopify,
-  roas_real,             -- receita_shopify / invest_total (meta já com ×1.1215)
+  roas_real,             -- receita_shopify / invest_total (meta já com ×1.1383)
   cpa,
   compras_total,
   pct_retencao,          -- % pedidos de recompradores
@@ -591,7 +591,7 @@ SELECT
   SUM(compras)                                                              AS compras,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real,
   ROUND(SAFE_DIVIDE(SUM(cliques_link), SUM(impressoes)) * 100, 2)           AS ctr_pct,
   ROUND(SUM(impressoes), 0)                                                 AS impressoes
@@ -630,15 +630,15 @@ SELECT
   ROUND(inv, 2)                                                             AS investimento,
   ROUND(rec, 2)                                                             AS receita,
   comp                                                                      AS compras,
-  ROUND(rec / NULLIF(inv * 1.1215, 0), 2)                                  AS roas_dia,
+  ROUND(rec / NULLIF(inv * 1.1383, 0), 2)                                  AS roas_dia,
   ROUND(
-    LAG(rec / NULLIF(inv * 1.1215, 0)) OVER (ORDER BY data)
+    LAG(rec / NULLIF(inv * 1.1383, 0)) OVER (ORDER BY data)
   , 2)                                                                      AS roas_dia_anterior,
   ROUND(
     SAFE_DIVIDE(
-      (rec / NULLIF(inv * 1.1215, 0)) -
-      LAG(rec / NULLIF(inv * 1.1215, 0)) OVER (ORDER BY data),
-      LAG(rec / NULLIF(inv * 1.1215, 0)) OVER (ORDER BY data)
+      (rec / NULLIF(inv * 1.1383, 0)) -
+      LAG(rec / NULLIF(inv * 1.1383, 0)) OVER (ORDER BY data),
+      LAG(rec / NULLIF(inv * 1.1383, 0)) OVER (ORDER BY data)
     ) * 100
   , 1)                                                                      AS var_roas_pct
 FROM diario
@@ -676,7 +676,7 @@ SELECT
   ROUND(SAFE_DIVIDE(SUM(CAST(investimento AS FLOAT64)), SUM(adicoes_carrinho)), 2)      AS custo_por_carrinho,
   ROUND(SAFE_DIVIDE(SUM(CAST(investimento AS FLOAT64)), SUM(checkout_iniciado)), 2)     AS custo_por_checkout,
   ROUND(
-    SUM(CAST(investimento AS FLOAT64)) * 1.1215 / NULLIF(SUM(compras), 0)
+    SUM(CAST(investimento AS FLOAT64)) * 1.1383 / NULLIF(SUM(compras), 0)
   , 2)                                                                                  AS cpa_real
 FROM `guara-db.guara_performance.ads_diario`
 WHERE cliente    = 'source_of'
@@ -707,7 +707,7 @@ SELECT
   , 1)                                                                      AS share_invest_pct,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real,
   SUM(compras)                                                              AS compras,
   ROUND(SUM(CAST(receita AS FLOAT64)), 2)                                   AS receita,
@@ -765,7 +765,7 @@ WITH ads AS (
   SELECT
     DATE_TRUNC(data, MONTH)            AS mes,
     ROUND(SUM(CAST(investimento AS FLOAT64)), 2) AS invest_meta,
-    ROUND(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 2) AS invest_com_imposto,
+    ROUND(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 2) AS invest_com_imposto,
     ROUND(SUM(CAST(receita AS FLOAT64)), 2) AS receita_meta_reportada,
     SUM(compras)                       AS compras_meta
   FROM `guara-db.guara_performance.ads_diario`
@@ -818,10 +818,10 @@ SELECT
   ROUND(SUM(CAST(receita AS FLOAT64)), 2)                                   AS receita,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real,
   ROUND(
-    SUM(CAST(investimento AS FLOAT64)) * 1.1215 /
+    SUM(CAST(investimento AS FLOAT64)) * 1.1383 /
     NULLIF(SUM(compras), 0)
   , 2)                                                                      AS cpa_real,
   ROUND(SUM(impressoes), 0)                                                 AS impressoes,
@@ -860,7 +860,7 @@ WITH base AS (
     ROUND(SAFE_DIVIDE(SUM(impressoes), SUM(alcance)), 2)                   AS frequencia,
     ROUND(SAFE_DIVIDE(SUM(cliques_link), SUM(impressoes)) * 100, 2)        AS ctr,
     SUM(compras)                                                           AS compras,
-    ROUND(SUM(CAST(receita AS FLOAT64)) / NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0), 2) AS roas_real,
+    ROUND(SUM(CAST(receita AS FLOAT64)) / NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0), 2) AS roas_real,
     MAX(data)                                                              AS ultima_atividade
   FROM `guara-db.guara_performance.ads_diario`
   WHERE cliente    = 'source_of'
@@ -951,10 +951,10 @@ SELECT
   ROUND(SUM(CAST(receita AS FLOAT64)), 2)                                   AS receita,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real,
   ROUND(
-    SUM(CAST(investimento AS FLOAT64)) * 1.1215 /
+    SUM(CAST(investimento AS FLOAT64)) * 1.1383 /
     NULLIF(SUM(compras), 0)
   , 2)                                                                      AS cpa_real,
   MAX(data)                                                                 AS ultimo_dado
@@ -966,7 +966,7 @@ WHERE cliente = 'source_of'
 GROUP BY campanha, plataforma
 HAVING SUM(CAST(investimento AS FLOAT64)) >= 200   -- mínimo de investimento para alertar
    AND SUM(CAST(receita AS FLOAT64)) /
-       NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0) < 1.5  -- ← threshold de ROAS
+       NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0) < 1.5  -- ← threshold de ROAS
 ORDER BY investimento DESC;
 ```
 
@@ -1025,7 +1025,7 @@ SELECT
   ROUND(invest_real, 2)                                                     AS invest_ate_agora,
   ROUND(receita_real, 2)                                                    AS receita_ate_agora,
   compras_real                                                              AS compras_ate_agora,
-  ROUND(receita_real / NULLIF(invest_real * 1.1215, 0), 2)                 AS roas_ate_agora,
+  ROUND(receita_real / NULLIF(invest_real * 1.1383, 0), 2)                 AS roas_ate_agora,
   dias_com_dados                                                            AS dias_com_dados,
   dias_no_mes                                                               AS dias_no_mes,
   ROUND(dias_com_dados * 100.0 / dias_no_mes, 1)                           AS pct_mes_decorrido,
@@ -1034,7 +1034,7 @@ SELECT
   ROUND(receita_real / NULLIF(dias_com_dados, 0) * dias_no_mes, 2)         AS proj_receita_mes,
   ROUND(
     (receita_real / NULLIF(dias_com_dados, 0) * dias_no_mes) /
-    NULLIF((invest_real / NULLIF(dias_com_dados, 0) * dias_no_mes) * 1.1215, 0)
+    NULLIF((invest_real / NULLIF(dias_com_dados, 0) * dias_no_mes) * 1.1383, 0)
   , 2)                                                                      AS proj_roas,
   CAST(ROUND(compras_real / NULLIF(dias_com_dados, 0) * dias_no_mes) AS INT64) AS proj_compras
 FROM dados_mes;
@@ -1058,10 +1058,10 @@ SELECT
   SUM(compras)                                                              AS compras,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real,
   ROUND(
-    SUM(CAST(investimento AS FLOAT64)) * 1.1215 /
+    SUM(CAST(investimento AS FLOAT64)) * 1.1383 /
     NULLIF(SUM(compras), 0)
   , 2)                                                                      AS cpa_real,
   ROUND(SUM(impressoes), 0)                                                 AS impressoes,
@@ -1080,7 +1080,7 @@ ORDER BY cliente, plataforma;
 
 **Quando usar:** Para decisões de alocação de budget entre plataformas — responde "onde devo colocar mais verba?".
 
-**Observação:** O fator 1.1215 (imposto) só se aplica ao Meta. O campo `investimento_ajustado` na query já resolve isso.
+**Observação:** O fator 1.1383 (imposto) só se aplica ao Meta. O campo `investimento_ajustado` na query já resolve isso.
 
 ```sql
 SELECT
@@ -1088,17 +1088,17 @@ SELECT
   COUNT(DISTINCT campanha)                                                  AS campanhas,
   ROUND(SUM(CAST(investimento AS FLOAT64)), 2)                              AS investimento_bruto,
   ROUND(SUM(CAST(investimento AS FLOAT64)) *
-    CASE WHEN plataforma = 'meta' THEN 1.1215 ELSE 1.0 END, 2)             AS investimento_ajustado,
+    CASE WHEN plataforma = 'meta' THEN 1.1383 ELSE 1.0 END, 2)             AS investimento_ajustado,
   SUM(compras)                                                              AS compras,
   ROUND(SUM(CAST(receita AS FLOAT64)), 2)                                   AS receita,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
     NULLIF(SUM(CAST(investimento AS FLOAT64)) *
-      CASE WHEN plataforma = 'meta' THEN 1.1215 ELSE 1.0 END, 0)
+      CASE WHEN plataforma = 'meta' THEN 1.1383 ELSE 1.0 END, 0)
   , 2)                                                                      AS roas_real,
   ROUND(
     SUM(CAST(investimento AS FLOAT64)) *
-      CASE WHEN plataforma = 'meta' THEN 1.1215 ELSE 1.0 END /
+      CASE WHEN plataforma = 'meta' THEN 1.1383 ELSE 1.0 END /
     NULLIF(SUM(compras), 0)
   , 2)                                                                      AS cpa_real,
   ROUND(SUM(impressoes), 0)                                                 AS impressoes,
@@ -1133,7 +1133,7 @@ SELECT
   SUM(compras)                                                              AS compras_total,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_vida_toda,
   ROUND(
     SUM(CAST(investimento AS FLOAT64)) /
@@ -1205,7 +1205,7 @@ SELECT
   SUM(compras)                                                              AS compras,
   ROUND(
     SUM(CAST(receita AS FLOAT64)) /
-    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1215, 0)
+    NULLIF(SUM(CAST(investimento AS FLOAT64)) * 1.1383, 0)
   , 2)                                                                      AS roas_real
 FROM `guara-db.guara_performance.ads_diario`
 WHERE cliente = 'source_of'
@@ -1243,7 +1243,7 @@ LIMIT 20;
 
 | Variável | Valor | Onde usar |
 |---|---|---|
-| Fator imposto Meta | `× 1.1215` | investimento Meta × 1.1215 para custo real |
+| Fator imposto Meta | `× 1.1383` | investimento Meta × 1.1383 para custo real |
 | ROAS alerta crítico | `< 1.0` | Campanha perdendo dinheiro |
 | ROAS alerta atenção | `< 1.5` | Campanha abaixo do mínimo aceitável |
 | ROAS saudável | `>= 2.0` | Meta Source OF |
