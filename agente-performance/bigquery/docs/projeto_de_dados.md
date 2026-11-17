@@ -40,7 +40,7 @@ Regras:
 | Tabela | Quem grava | Proposta |
 |---|---|---|
 | `raw_meta_insights`, `raw_google_ads`, `raw_shopify_pedidos`, `raw_yampi_pedidos` | os loaders, com a resposta da API inteira | manter como auditoria (permite refazer o bronze sem chamar a API), com expiração de 90 dias |
-| `dooki_pedidos_diario` | ninguém desde 05/11 (substituída por `dooki_pedidos`) | apagar depois de repontar `v_todos_dados`, a única que ainda a lê |
+| `dooki_pedidos_diario` | ninguém desde 05/11 (substituída por `dooki_pedidos`) | nenhuma view lê mais (a `v_todos_dados` já sai de `ing_yampi_pedidos`), mas ainda é consultada à mão e mostra dado parado em 05/11. Trocar por uma view de mesmo nome sobre `ing_yampi_pedidos`, ou apagar depois de avisar quem consulta |
 | Dataset `teste`: 11 tabelas e 25 views paradas desde 22/10 | ninguém | apagar depois de confirmar que nada lê (item 9 do card) |
 | Cópias `_bkp_*` e `_pre_*` (20 tabelas, de 04 a 09/11) | snapshots das migrações de novembro | apagar a partir de 09/12, 30 dias depois da última |
 
