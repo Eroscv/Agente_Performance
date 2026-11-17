@@ -8,6 +8,7 @@ Mapeamento de tabelas (views de consumo no gold, mesmas colunas das views locais
   campanhas_unificada      → `guara-db.correlacao.v_agente_campanhas`
   v_performance            → `guara-db.correlacao.v_agente_performance`
   shopify_receita_diaria   → `guara-db.correlacao.v_agente_shopify_diario`
+  meta_anuncios            → `guara-db.correlacao.v_agente_anuncios`
 
 Colunas não são renomeadas: as views já têm os nomes que o agente usa.
 
@@ -41,6 +42,7 @@ _TABLE_MAP = {
     "campanhas_unificada":    f"`{PROJECT}.{CONSUMO}.v_agente_campanhas`",
     "v_performance":          f"`{PROJECT}.{CONSUMO}.v_agente_performance`",
     "shopify_receita_diaria": f"`{PROJECT}.{CONSUMO}.v_agente_shopify_diario`",
+    "meta_anuncios":          f"`{PROJECT}.{CONSUMO}.v_agente_anuncios`",
 }
 
 # ── Mapeamento de colunas ─────────────────────────────────────────────────────
@@ -222,7 +224,7 @@ def _replace_cast_types(sql: str) -> str:
 # Colunas das views de consumo (correlacao.v_agente_*). Usadas só para qualificar colunas
 # dentro de agregações em HAVING/ORDER BY; manter em dia com bigquery/scripts/views/correlacao/.
 _VIEW_COLUMNS = frozenset("""
-    cliente_key cliente_nome plataforma data data_inicio data_fim campanha campaign_id objetivo status
+    cliente_key cliente_nome plataforma data adset_name adset_id ad_name ad_id data_inicio data_fim campanha campaign_id objetivo status
     impressoes cliques cliques_link alcance investimento conversoes compras receita valor_compras
     roas roas_compras cpa custo_por_compra ctr ctr_link cpc_medio video_3s thruplays
     frequencia cpm compras_app compras_site cliques_todos cpc_link visualizacoes_landing
