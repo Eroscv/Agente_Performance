@@ -19,16 +19,26 @@ import requests
 from pathlib import Path
 from urllib.parse import urlencode
 
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 # ── Config ────────────────────────────────────────────────────────────────────
 STORE         = "00mngb-he.myshopify.com"
 CLIENT_ID     = "57f90faf153f67626703ae5a7422233e"
-CLIENT_SECRET = "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"
+# Segredo do app no .env, nunca no código (o repositório é público).
+CLIENT_SECRET = os.environ.get("SHOPIFY_BOTICA_CLIENT_SECRET", "").strip()
 REDIRECT_URI  = "https://guara.com.br/callback"
 SCOPES        = "read_orders,read_products,read_analytics"
 ENV_FILE      = Path(__file__).parent.parent / ".env"
 ENV_KEY       = "SHOPIFY_BOTICA_TOKEN"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _segredo() -> str:
+    if not CLIENT_SECRET:
+        raise RuntimeError("SHOPIFY_BOTICA_CLIENT_SECRET não configurado no .env")
+    return CLIENT_SECRET
+
 
 def get_current_token() -> str:
     for line in ENV_FILE.read_text().splitlines():
@@ -78,7 +88,7 @@ def trocar_code_por_token(code: str) -> str:
         f"https://{STORE}/admin/oauth/access_token",
         json={
             "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
+            "client_secret": _segredo(),
             "code": code,
         },
         timeout=15,
@@ -98,7 +108,7 @@ def renovar_token() -> str:
         f"https://{STORE}/admin/oauth/access_token",
         json={
             "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
+            "client_secret": _segredo(),
             "grant_type": "client_credentials",
         },
         timeout=15,
