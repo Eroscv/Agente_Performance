@@ -169,7 +169,7 @@ def _blocos_resumo(resumo: dict, periodo_str: str) -> list[dict]:
         "object": "block", "type": "paragraph",
         "paragraph": {"rich_text": [{"type": "text", "text": {"content":
             "📌 Legenda: ROAS = Receita ÷ Investimento Meta · "
-            "CPA Ajustado = (Investimento × 1,1215) ÷ Compras · "
+            "CPA Ajustado = (Investimento × 1,1383) ÷ Compras · "
             "CPA Meta = valor reportado pela plataforma · "
             "CTR = Cliques ÷ Impressões · "
             "CPM = custo por mil impressões · "
@@ -272,7 +272,7 @@ def _blocos_tabela_campanhas(rows: list[dict]) -> list[dict]:
         "object": "block", "type": "paragraph",
         "paragraph": {"rich_text": [{"type": "text", "text": {"content":
             "📌 Legenda: Invest. = gasto bruto Meta Ads · ROAS = Receita ÷ Investimento · "
-            "CPA Ajust. = (Investimento × 1,1215) ÷ Compras · CTR = Cliques ÷ Impressões · "
+            "CPA Ajust. = (Investimento × 1,1383) ÷ Compras · CTR = Cliques ÷ Impressões · "
             "CPM = custo por mil impressões (plataforma)"
         }, "annotations": {"italic": True, "color": "gray"}}]}
     }

@@ -2,7 +2,7 @@
 Cria/recria as views analíticas para dashboards de performance no BigQuery.
 
 Views criadas:
-  v_dashboard_diario              → granularidade por campanha/adset/ad (dedupado, Meta ×1.1215)
+  v_dashboard_diario              → granularidade por campanha/adset/ad (dedupado, Meta ×1.1383)
   v_dashboard_diario_consolidado  → série temporal diária por cliente+plataforma
   v_dashboard_mensal_consolidado  → KPIs mensais com ROAS real (Shopify) + variação MoM
 
@@ -22,13 +22,13 @@ bq = bigquery.Client(project=P)
 views = {}
 
 # ── v_dashboard_diario ───────────────────────────────────────────────────────
-# Fonte base: ads_diario dedupado + ajuste fiscal Meta (×1.1215).
+# Fonte base: ads_diario dedupado + ajuste fiscal Meta (×1.1383).
 # Granularidade: cliente / plataforma / data / campanha / adset / ad.
 views["v_dashboard_diario"] = f"""
 CREATE OR REPLACE VIEW `{P}.{D}.v_dashboard_diario` AS
 -- ⚠️  FONTE ÚNICA para dashboards de performance de anúncios.
 -- Deduplica ads_diario (1 linha por cliente/plataforma/data/campanha/adset/ad)
--- e aplica fator fiscal Meta (×1.1215).
+-- e aplica fator fiscal Meta (×1.1383).
 -- NÃO somar com meta_campaign_totals, shopify_diario ou pedidos_diario.
 WITH dedup AS (
     SELECT * EXCEPT(rn)
@@ -59,7 +59,7 @@ SELECT
     ROUND(investimento, 2)                                              AS investimento,
     ROUND(
         CASE WHEN plataforma = 'meta'
-             THEN investimento * 1.1215
+             THEN investimento * 1.1383
              ELSE investimento
         END, 2
     )                                                                   AS investimento_ajustado,
@@ -70,14 +70,14 @@ SELECT
     ROUND(
         receita / NULLIF(
             CASE WHEN plataforma = 'meta'
-                 THEN investimento * 1.1215
+                 THEN investimento * 1.1383
                  ELSE investimento
             END, 0), 4
     )                                                                   AS roas_real,
 
     ROUND(
         CASE WHEN plataforma = 'meta'
-             THEN investimento * 1.1215
+             THEN investimento * 1.1383
              ELSE investimento
         END / NULLIF(compras, 0), 2
     )                                                                   AS cpa_real,
@@ -144,11 +144,11 @@ ORDER BY cliente, plataforma, data
 
 # ── v_dashboard_mensal_consolidado ──────────────────────────────────────────
 # KPIs mensais por cliente/plataforma com ROAS real (Shopify) e variação MoM.
-# Investimento Meta já com fator fiscal ×1.1215.
+# Investimento Meta já com fator fiscal ×1.1383.
 views["v_dashboard_mensal_consolidado"] = f"""
 CREATE OR REPLACE VIEW `{P}.{D}.v_dashboard_mensal_consolidado` AS
 -- KPIs mensais por cliente+plataforma com ROAS real (Shopify) e variação MoM.
--- Investimento Meta com fator fiscal ×1.1215.
+-- Investimento Meta com fator fiscal ×1.1383.
 WITH ads AS (
     SELECT
         cliente,

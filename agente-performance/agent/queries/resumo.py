@@ -42,7 +42,7 @@ def resumo_por_campanha(
             ROUND(SUM(COALESCE(cliques_link, 0)), 0)                          AS cliques,
             ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_medio,
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc_medio,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
+            ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
             {_FREQ_EXPR},
             COUNT(*)                                                          AS dias
         FROM campanhas_unificada
@@ -124,7 +124,7 @@ def performance_campanha(
             ROUND(SUM(cliques_link), 0)           AS cliques_link,
             ROUND(CAST(SUM(cliques_link) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
+            ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
             ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia_media,
             ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0) AS adicoes_carrinho,
             ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0) AS checkout_iniciado
@@ -172,7 +172,7 @@ def resumo_periodo(
             ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr_medio,
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc_medio,
             ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm_medio,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_medio_por_compra,
+            ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_medio_por_compra,
             ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia_media,
             MIN(data_inicio)                                 AS data_inicio_real,
             MAX(data_fim)                                    AS data_fim_real
@@ -382,7 +382,7 @@ def custo_funil_detalhado(
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(checkout_iniciado, 0)), 0), 2) AS custo_por_checkout,
             -- Compra
             ROUND(SUM(COALESCE(compras, 0)), 0)            AS compras,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
+            ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS cpa_ajustado,
             -- Taxas de conversão no funil
             ROUND(CAST(SUM(COALESCE(adicoes_carrinho, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0) * 100, 2) AS taxa_click_carrinho_pct,
             ROUND(CAST(SUM(COALESCE(checkout_iniciado, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(adicoes_carrinho, 0)), 0) * 100, 2) AS taxa_carrinho_checkout_pct,
