@@ -16,7 +16,13 @@ porque o notebook suspendeu, sem nenhum erro no BigQuery.
 | Carga travada | roda para sempre | interrompida em 90 min |
 | Carga parada | sem aviso | alerta de frescor no GitHub Actions (PR 3), fora da VM |
 
-## Antes de começar (Vitor)
+## Antes de começar
+
+- [ ] PRs 2 (tipo de cliente da Source Of) e 4 (fator de imposto 1,1383) com merge na `main`.
+      A VM roda a `main`: sem o PR 2, a carga apaga o tipo de cliente da Source Of no
+      BigQuery (aconteceu em 14/11 quando o notebook rodou código sem ele).
+
+### Vitor
 
 - [ ] VM Oracle definida, com Ubuntu 22.04+ e acesso SSH para o Eros.
 - [ ] Usuário da carga criado na VM (ex.: `guara`), com sudo para instalar o systemd.
