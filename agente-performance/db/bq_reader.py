@@ -69,15 +69,20 @@ def _normalize_row(row: dict) -> dict:
     return result
 
 
-def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
+def query_bq(sql: str, params: Optional[list] = None, raise_on_error: bool = False) -> list[dict]:
     """
     Executa query no BigQuery e retorna lista de dicts.
 
     Suporta parâmetros posicionais via @p0, @p1, ... no SQL.
     Exemplo:
         query_bq("SELECT * FROM t WHERE cliente = @p0", ["source_of"])
+
+    raise_on_error=True propaga o erro em vez de devolver [] (uma consulta que falha
+    não pode parecer "sem dados").
     """
     if not enabled():
+        if raise_on_error:
+            raise RuntimeError("BigQuery não configurado (GOOGLE_APPLICATION_CREDENTIALS)")
         logger.warning("[BQReader] BigQuery não configurado — retornando []")
         return []
     try:
@@ -95,6 +100,8 @@ def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
         return [_normalize_row(dict(r)) for r in rows]
     except Exception as exc:
         logger.error("[BQReader] Erro na query: %s\nSQL: %.300s", exc, sql)
+        if raise_on_error:
+            raise
         return []
 
 

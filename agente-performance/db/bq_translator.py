@@ -4,21 +4,12 @@ db/bq_translator.py
 Traduz SQL escrito para DuckDB/SQLite (campanhas_unificada, v_performance,
 shopify_receita_diaria) para SQL BigQuery válido.
 
-Mapeamento de tabelas:
-  campanhas_unificada      → `guara-db.guara_performance.ads_diario`
-  v_performance            → `guara-db.guara_performance.ads_diario`
-  shopify_receita_diaria   → `guara-db.guara_performance.shopify_diario`
+Mapeamento de tabelas (views de consumo no gold, mesmas colunas das views locais):
+  campanhas_unificada      → `guara-db.correlacao.v_agente_campanhas`
+  v_performance            → `guara-db.correlacao.v_agente_performance`
+  shopify_receita_diaria   → `guara-db.correlacao.v_agente_shopify_diario`
 
-Mapeamento de colunas (campanhas_unificada → ads_diario):
-  cliente_key    → cliente
-  data_inicio    → data
-  data_fim       → data
-  valor_compras  → receita
-  compras        → compras      (igual)
-  cliques_link   → cliques_link (igual)
-  custo_por_compra → cpa
-  roas_compras   → roas
-  ctr_link       → ctr  (não existe no BQ — substituído por NULL)
+Colunas não são renomeadas: as views já têm os nomes que o agente usa.
 
 Mapeamento de parâmetros:
   SQLite usa ? posicionais → BQ usa @p0, @p1, ...
@@ -42,33 +33,22 @@ logger = logging.getLogger(__name__)
 
 PROJECT = os.environ.get("BQ_PROJECT", "guara-db")
 DATASET = os.environ.get("BQ_DATASET", "guara_performance")
+CONSUMO = "correlacao"   # dataset gold, onde ficam as views de consumo do agente
 
 # ── Mapeamento de tabelas ──────────────────────────────────────────────────────
 
 _TABLE_MAP = {
-    "campanhas_unificada":    f"`{PROJECT}.{DATASET}.ads_diario`",
-    "v_performance":          f"`{PROJECT}.{DATASET}.ads_diario`",
-    "shopify_receita_diaria": f"`{PROJECT}.{DATASET}.shopify_diario`",
+    "campanhas_unificada":    f"`{PROJECT}.{CONSUMO}.v_agente_campanhas`",
+    "v_performance":          f"`{PROJECT}.{CONSUMO}.v_agente_performance`",
+    "shopify_receita_diaria": f"`{PROJECT}.{CONSUMO}.v_agente_shopify_diario`",
 }
 
-# ── Mapeamento de colunas (SQLite/DuckDB → BQ) ────────────────────────────────
-# Aplicado apenas em contexto de ads_diario (campanhas_unificada / v_performance)
+# ── Mapeamento de colunas ─────────────────────────────────────────────────────
+# Vazio de propósito: as views de consumo do gold (bigquery/scripts/views/correlacao/
+# v_agente_*.sql) têm as mesmas colunas das views locais. Renomear coluna por regex trocava
+# também os apelidos de saída (AS conversoes, AS data_inicio...) e quebrava quem lia o resultado.
 
-_COLUMN_MAP = {
-    r"\bclient_key\b":        "cliente",
-    r"\bcliente_key\b":       "cliente",
-    r"\bdata_inicio\b":       "data",
-    r"\bdata_fim\b":          "data",
-    r"\bvalor_compras\b":     "receita",
-    r"\bcusto_por_compra\b":  "cpa",
-    r"\broas_compras\b":      "roas",
-    r"\bctr_link\b":          "ctr",        # aproximação — BQ calcula como cliques/impressoes
-    r"\bcliente_nome\b":      "cliente",    # BQ não tem nome separado, usa cliente
-    r"\bstatus_criativo\b":   "status",
-    r"\bvalor_conversao\b":   "receita",
-    r"\bconversoes\b":        "compras",    # Google Ads: conversoes → compras no BQ
-    r"\bpedidos_acima_300\b": "pedidos_gt300",  # shopify: campo renomeado no BQ
-}
+_COLUMN_MAP: dict[str, str] = {}
 
 # ── Mapeamento de funções SQL ──────────────────────────────────────────────────
 
