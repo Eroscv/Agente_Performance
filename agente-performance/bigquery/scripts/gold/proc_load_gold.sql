@@ -22,6 +22,8 @@
 --                   financial_status = paid da Shopify. poddi.com.br = Yampi
 --                   poddi, receita própria. Receita sem frete, canal por
 --                   utm_source (fn_canal_pod), cliente novo por regra do Colab.
+--   fato_cac_campanha_adset — full rebuild, CAC e recorrência por campanha/adset da Meta
+--                   (Source Of), com o tipo_cliente (novo/recorrente) da Shopify por pedido.
 --   fato_performance_diaria — full rebuild joining ing_ads_diario (anuncio
 --                   level only) with fato_pedidos (Shopify clients, exceto POD)
 --                   and fato_pedidos_pod (POD).
@@ -351,5 +353,93 @@ BEGIN
   FROM mes m
   LEFT JOIN pago p USING (cliente_id, periodo_inicio);
 
+
+  -- fato_cac_campanha_adset (full rebuild): CAC e recorrência por campanha e adset da Meta.
+  -- Cliente novo/recorrente vem do tipo_cliente gravado pela ingestão (customer.orders_count
+  -- da Shopify = 1 → novo), o mesmo critério do resumo oficial (ing_shopify_resumo_diario);
+  -- só existe para clientes cujo sync grava tipo_cliente (hoje a Source Of), a partir do
+  -- primeiro dia com tipo gravado. Pedido -> anúncio por utm_content = ad_id (-> adset e campanha)
+  -- ou, sem anúncio, utm_campaign = campaign_id. Pedido de origem Meta (utm_source/utm_medium, regra do
+  -- resumo oficial, menos o referring_site, que o bronze não guarda) sem campanha identificável cai em campaign_id NULL, para os totais fecharem.
+  -- Investimento: ing_ads_diario (entra_no_total) da Meta; investimento_ajustado = x1,1215.
+  CREATE OR REPLACE TABLE `guara-db.correlacao.fato_cac_campanha_adset`
+  PARTITION BY data
+  CLUSTER BY cliente_id
+  AS
+  WITH inicio AS (
+    SELECT cliente AS cliente_id, MIN(data_brt) AS primeiro_dia
+    FROM `guara-db.ingestao.ing_shopify_pedidos`
+    WHERE tipo_cliente IS NOT NULL
+    GROUP BY cliente
+  ),
+  ad_dim AS (
+    SELECT cliente AS cliente_id, ad_id, campaign_id, adset_id
+    FROM `guara-db.ingestao.ing_ads_diario`
+    WHERE plataforma = 'meta' AND ad_id IS NOT NULL
+    QUALIFY ROW_NUMBER() OVER (PARTITION BY cliente, ad_id ORDER BY data DESC) = 1
+  ),
+  campanhas AS (
+    SELECT cliente AS cliente_id, campaign_id, MAX_BY(campanha, data) AS campanha
+    FROM `guara-db.ingestao.ing_ads_diario`
+    WHERE plataforma = 'meta'
+    GROUP BY cliente, campaign_id
+  ),
+  adsets AS (
+    SELECT cliente AS cliente_id, adset_id, MAX_BY(adset_name, data) AS adset_name
+    FROM `guara-db.ingestao.ing_ads_diario`
+    WHERE plataforma = 'meta' AND adset_id IS NOT NULL
+    GROUP BY cliente, adset_id
+  ),
+  ped AS (
+    SELECT p.cliente AS cliente_id, p.data_brt AS data,
+      COALESCE(d.campaign_id, c.campaign_id) AS campaign_id,
+      d.adset_id,
+      COUNT(*) AS pedidos,
+      SUM(p.valor_pago - p.frete) AS receita,
+      COUNTIF(p.tipo_cliente = 'novo') AS novos_clientes,
+      COUNTIF(p.tipo_cliente = 'recorrente') AS clientes_recorrentes
+    FROM `guara-db.ingestao.ing_shopify_pedidos` p
+    JOIN inicio i ON i.cliente_id = p.cliente AND p.data_brt >= i.primeiro_dia
+    LEFT JOIN ad_dim d ON d.cliente_id = p.cliente AND d.ad_id = p.utm_content
+    LEFT JOIN campanhas c ON c.cliente_id = p.cliente AND c.campaign_id = p.utm_campaign
+    WHERE p.status = 'paid'
+      AND (COALESCE(d.campaign_id, c.campaign_id) IS NOT NULL
+           OR (NOT REGEXP_CONTAINS(LOWER(IFNULL(p.utm_source, '')), r'^(manychat|klaviyo|email|revi)$')
+               AND (REGEXP_CONTAINS(LOWER(IFNULL(p.utm_source, '')), r'facebook|instagram|fb|meta|ig')
+                    OR (NOT REGEXP_CONTAINS(LOWER(IFNULL(p.utm_source, '')), r'google|gclid|cpc|pmax')
+                        AND REGEXP_CONTAINS(LOWER(IFNULL(p.utm_medium, '')), r'facebook|instagram|fb|meta|ig')))))
+    GROUP BY cliente_id, data, campaign_id, adset_id
+  ),
+  inv AS (
+    SELECT a.cliente AS cliente_id, a.data, a.campaign_id, a.adset_id,
+      SUM(a.investimento) AS investimento
+    FROM `guara-db.ingestao.ing_ads_diario` a
+    JOIN inicio i ON i.cliente_id = a.cliente AND a.data >= i.primeiro_dia
+    WHERE a.plataforma = 'meta' AND a.entra_no_total
+    GROUP BY cliente_id, data, campaign_id, adset_id
+  ),
+  junto AS (
+    SELECT COALESCE(i.cliente_id, p.cliente_id) AS cliente_id, COALESCE(i.data, p.data) AS data,
+      COALESCE(i.campaign_id, p.campaign_id) AS campaign_id,
+      COALESCE(i.adset_id, p.adset_id) AS adset_id,
+      COALESCE(i.investimento, 0) AS investimento,
+      COALESCE(p.pedidos, 0) AS pedidos, COALESCE(p.receita, 0) AS receita,
+      COALESCE(p.novos_clientes, 0) AS novos_clientes,
+      COALESCE(p.clientes_recorrentes, 0) AS clientes_recorrentes
+    FROM inv i
+    FULL OUTER JOIN ped p
+      ON i.cliente_id = p.cliente_id AND i.data = p.data
+     AND IFNULL(i.campaign_id, '') = IFNULL(p.campaign_id, '')
+     AND IFNULL(i.adset_id, '') = IFNULL(p.adset_id, '')
+  )
+  SELECT j.cliente_id, j.data, j.campaign_id, c.campanha, j.adset_id, a.adset_name,
+    j.investimento, j.investimento * 1.1215 AS investimento_ajustado,
+    j.pedidos, j.receita, j.novos_clientes, j.clientes_recorrentes,
+    SAFE_DIVIDE(j.clientes_recorrentes, j.novos_clientes + j.clientes_recorrentes) AS taxa_recorrencia,
+    SAFE_DIVIDE(j.investimento * 1.1215, j.novos_clientes) AS cac,
+    SAFE_DIVIDE(j.receita, j.investimento) AS roas_real
+  FROM junto j
+  LEFT JOIN campanhas c ON c.cliente_id = j.cliente_id AND c.campaign_id = j.campaign_id
+  LEFT JOIN adsets a ON a.cliente_id = j.cliente_id AND a.adset_id = j.adset_id;
 
 END;

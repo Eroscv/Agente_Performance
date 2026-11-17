@@ -190,3 +190,38 @@ quem comprou pela primeira vez entre 01 e 05/09 e recomprou depois aparece como 
 | `cac_primeira_compra_paga` | NUMERIC | Só POD. |
 | `fonte_logica_novos_clientes` | STRING | Descrição do cálculo. |
 | `calculado_em` | TIMESTAMP | Quando foi calculada. |
+
+## 7. `correlacao.fato_cac_campanha_adset`
+
+- **Propósito:** CAC, ROAS e taxa de recorrência por campanha e adset da Meta, por dia, com o cliente
+  novo/recorrente da Shopify. Hoje só a Source Of (único cliente cujo sync grava `tipo_cliente`).
+- **Atualização:** `correlacao.load_gold()` — reconstrução completa. Começa no primeiro dia com
+  `tipo_cliente` gravado (backfill de 01/08/2026 em diante).
+- **Fonte:** `ingestao.ing_shopify_pedidos` (pedidos pagos) e `ingestao.ing_ads_diario` (Meta, `entra_no_total`).
+- **Critério de cliente novo:** `tipo_cliente = 'novo'` quando `customer.orders_count` da Shopify é 1,
+  o mesmo critério de `ing_shopify_resumo_diario.novos_clientes`. É o `orders_count` do momento do sync:
+  quem compra de novo depois pode virar `recorrente` num pedido reprocessado (vale também para o oficial). Por isso
+  os dias anteriores a 12/11 (backfill) têm até ~5% menos novos que o oficial de época; dos dias gravados pelo sync em diante
+  o critério é idêntico.
+- **Pedido → campanha/adset:** `utm_content` = `ad_id` (dá adset e campanha); sem anúncio, `utm_campaign` =
+  `campaign_id` (sem adset). Pedido de origem Meta (`utm_source`/`utm_medium`, regra do resumo oficial) que não
+  identifica campanha entra com `campaign_id` nulo, para os totais fecharem. Diferença para o oficial: o
+  `referring_site` não é guardado no bronze, então ~1% dos pedidos Meta do oficial (14 de 1.127 em 01–11/11) ficam fora.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `cliente_id` | STRING | Cliente. |
+| `data` | DATE | Dia (BRT). |
+| `campaign_id` / `campanha` | STRING | Campanha Meta; nulo = pedido Meta sem campanha identificável. |
+| `adset_id` / `adset_name` | STRING | Adset; nulo quando só a campanha foi identificada. |
+| `investimento` | FLOAT64 | Gasto Meta do dia. |
+| `investimento_ajustado` | FLOAT64 | `investimento` x 1,1215 (imposto Meta). |
+| `pedidos` | INT64 | Pedidos pagos atribuídos. |
+| `receita` | FLOAT64 | Receita sem frete (`valor_pago - frete`). |
+| `novos_clientes` / `clientes_recorrentes` | INT64 | Pedidos por `tipo_cliente`. |
+| `taxa_recorrencia` | FLOAT64 | recorrentes / (novos + recorrentes). |
+| `cac` | FLOAT64 | `investimento_ajustado` / `novos_clientes`. |
+| `roas_real` | FLOAT64 | `receita` / `investimento`. |
+
+Para somar um período, some `investimento_ajustado` e `novos_clientes` e divida (não faça média do `cac` diário).
+

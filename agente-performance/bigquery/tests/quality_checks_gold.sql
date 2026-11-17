@@ -72,3 +72,21 @@ WHERE canal = 'yampi_checkout';
 SELECT *
 FROM `guara-db.correlacao.fato_pedidos_pod`
 WHERE pago AND receita_sem_frete IS NULL;
+
+-- 12. fato_cac_campanha_adset: investimento por dia diferente do Meta de fato_performance_diaria
+--     (mesma fonte, mesma regra entra_no_total: qualquer diferença é campanha/adset perdido no join)
+WITH nova AS (
+  SELECT cliente_id, data, SUM(investimento) AS investimento
+  FROM `guara-db.correlacao.fato_cac_campanha_adset`
+  GROUP BY cliente_id, data
+),
+base AS (
+  SELECT cliente_id, data, SUM(investimento) AS investimento
+  FROM `guara-db.correlacao.fato_performance_diaria`
+  WHERE canal = 'meta'
+  GROUP BY cliente_id, data
+)
+SELECT n.cliente_id, n.data, n.investimento AS investimento_campanha_adset, b.investimento AS investimento_diario
+FROM nova n
+LEFT JOIN base b USING (cliente_id, data)
+WHERE ABS(n.investimento - IFNULL(b.investimento, 0)) > 0.01;
