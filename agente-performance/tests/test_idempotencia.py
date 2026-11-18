@@ -120,8 +120,11 @@ def test_mongo_fora_pula_em_vez_de_reprocessar(transcricao, monkeypatch):
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE reunioes (id INTEGER PRIMARY KEY, fonte_id TEXT)")
     monkeypatch.delenv("TRANSCRICAO_SEM_MONGO", raising=False)
+    monkeypatch.setattr(sync_reunioes, "MONGO_URI", "")        # Mongo opcional desde 914bd36: sem URI, só SQLite
+    assert sync_reunioes.ja_processado(conn, "arquivo-novo") is False
+    monkeypatch.setattr(sync_reunioes, "MONGO_URI", "mongodb://configurado")
     monkeypatch.setattr(sync_reunioes, "get_mongo_col", lambda: None)
-    assert sync_reunioes.ja_processado(conn, "arquivo-novo") is True
+    assert sync_reunioes.ja_processado(conn, "arquivo-novo") is True   # configurado e fora do ar: falha fechada
 
     class Col:
         def find_one(self, q, p): return {"_id": 1} if q["fonte_id"] == "antigo" else None

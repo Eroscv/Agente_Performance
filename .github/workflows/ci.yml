@@ -1,0 +1,19 @@
+# AUD-14: testes em todo PR e push. O CI reutilizável do Padrão Guará (vitoraugolis/guara-engenharia)
+# não entra ainda: é privado e de outro dono, então o "uses" daqui não o alcança. Ver PROGRESSO do padrão.
+name: ci
+on: [pull_request, push]
+permissions:
+  contents: read
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agente-performance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"   # a do VPS 1
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q -p no:cacheprovider

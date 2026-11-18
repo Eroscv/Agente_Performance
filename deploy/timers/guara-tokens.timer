@@ -1,0 +1,11 @@
+[Unit]
+Description=Agenda de guara-job@tokens (vencimento de credenciais, AUD-09)
+
+[Timer]
+OnCalendar=*-*-* 11:00 UTC
+Persistent=true
+RandomizedDelaySec=300
+Unit=guara-job@tokens.service
+
+[Install]
+WantedBy=timers.target

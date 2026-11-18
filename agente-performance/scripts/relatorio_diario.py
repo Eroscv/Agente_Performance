@@ -8,7 +8,7 @@ Formato Slack:
   - Thread: relatório completo com tabelas Block Kit
 
 Uso:
-    python scripts/relatorio_diario.py                  # ontem
+    python scripts/relatorio_diario.py                  # ontem, e reenvia o que ficou retido nos 2 dias antes
     python scripts/relatorio_diario.py --data 2026-08-14
     python scripts/relatorio_diario.py --cliente source_of
 """
@@ -332,21 +332,44 @@ def _enviar_blocos(channel: str, thread_ts: str, blocos: list[dict], fallback_tx
     return True
 
 
+def _reter(data: str, cliente_key: str, plataforma: str, motivo: str) -> None:
+    from scripts.qualidade_dados import _alertar
+    logger.error("[%s·%s] %s: %s — relatório retido", cliente_key, plataforma, data, motivo)
+    _alertar(f":no_entry: *Relatório diário retido* — {cliente_key}/{plataforma} {data}: {motivo}. "
+             f"Nada foi postado no canal de relatórios; o relatório é tentado de novo nas próximas "
+             f"{len(DIAS_REENVIO)} execuções diárias.",
+             f"relatorio_retido:{cliente_key}:{plataforma}:{data}")
+
+
+# AUD-18: relatório retido é reenviado quando o dado se corrige. Cada execução tenta ontem e os 2 dias
+# antes; o que já foi enviado é pulado pelo livro de idempotência.
+DIAS_REENVIO = (3, 2)
+
+
 def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bool:
     """Publica no Notion + envia âncora + thread Block Kit no Slack."""
 
     d = _resumo_dia(data, cliente_key, plataforma)
     if not d or not d.get("investimento"):
-        logger.info("[%s·%s] Sem dados para %s — pulando", cliente_key, plataforma, data)
+        # AUD-08: sem linha do dia e com a fonte parada antes dele é atraso do sync, não dia sem gasto.
+        ultimo = (query_one("SELECT CAST(MAX(data) AS VARCHAR) AS u FROM v_performance "
+                            "WHERE cliente_key = ? AND plataforma = ?", (cliente_key, plataforma)) or {}).get("u")
+        if ultimo and ultimo < data:
+            _reter(data, cliente_key, plataforma, f"dados atrasados: o último dia sincronizado é {ultimo}")
+        else:
+            logger.info("[%s·%s] Sem dados para %s — pulando", cliente_key, plataforma, data)
         return False
 
     status, detalhe = conferir_fonte(data, cliente_key, plataforma, float(d["investimento"]))
     if status == "divergente":
-        from scripts.qualidade_dados import _alertar
-        logger.error("[%s·%s] %s: %s — relatório retido", cliente_key, plataforma, data, detalhe)
-        _alertar(f":no_entry: *Relatório diário retido* — {cliente_key}/{plataforma} {data}: {detalhe}. "
-                 f"Nada foi postado no canal de relatórios; o próximo sync corrige e o relatório sai na execução seguinte.",
-                 f"relatorio_retido:{cliente_key}:{plataforma}:{data}")
+        _reter(data, cliente_key, plataforma, detalhe)
+        return False
+    # API fora do ar: não dá para conferir, então retém (reenvio automático nos 2 dias seguintes).
+    # "conta não configurada" segue com o selo, senão o cliente nunca mais receberia o relatório.
+    # RELATORIO_SEM_CONFERENCIA=enviar volta ao comportamento antigo (decisão escrita do dono do negócio).
+    if (status == "sem_conferencia" and detalhe.startswith("API indisponível")
+            and os.getenv("RELATORIO_SEM_CONFERENCIA") != "enviar"):
+        _reter(data, cliente_key, plataforma, f"investimento não conferido: {detalhe}")
         return False
     selo = f"✅ {detalhe}" if status == "ok" else f"⚠️ não conferido: {detalhe}"
 
@@ -425,8 +448,9 @@ def main():
     args = parser.parse_args()
 
     from agent.tz import hoje_brt
-    data = args.data or (hoje_brt() - timedelta(days=1)).isoformat()
-    logger.info("Gerando relatório diário para %s", data)
+    hoje = hoje_brt()
+    datas = [args.data] if args.data else [(hoje - timedelta(days=n)).isoformat() for n in (*DIAS_REENVIO, 1)]
+    logger.info("Gerando relatório diário para %s", ", ".join(datas))
 
     clientes_json = json.loads((BASE_DIR / "clientes.json").read_text())
     segmentos = []
@@ -443,7 +467,7 @@ def main():
         pass
 
     enviados = 0
-    for cliente_key, plataforma in segmentos:
+    for data, (cliente_key, plataforma) in ((d, s) for d in datas for s in segmentos):
         # Idempotente: rerun, catch-up do timer ou carga manual não postam o mesmo relatório duas vezes.
         try:
             with uma_vez(f"relatorio_diario:{cliente_key}:{plataforma}:{data}") as pode:
@@ -458,7 +482,7 @@ def main():
                            cliente_key, plataforma, data)
         time.sleep(1)
 
-    logger.info("Relatórios enviados: %d/%d", enviados, len(segmentos))
+    logger.info("Relatórios enviados: %d (de %d dia(s) × %d segmento(s))", enviados, len(datas), len(segmentos))
 
 
 if __name__ == "__main__":

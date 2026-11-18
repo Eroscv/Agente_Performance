@@ -1,0 +1,10 @@
+[Unit]
+Description=Agenda da transcrição de reuniões (a cada 30 min)
+
+[Timer]
+OnCalendar=*:00/30
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

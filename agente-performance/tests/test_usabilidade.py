@@ -52,9 +52,11 @@ class TestUserPrefs:
     def test_atualizar_e_recuperar(self):
         from agent.user_prefs import atualizar_prefs, get_prefs
         from datetime import date, timedelta
-        hoje = date.today()
-        seg = hoje - timedelta(days=hoje.weekday() + 7)
-        fim_sem = seg + timedelta(days=6)
+        from agent.tz import hoje_brt
+        # O período só é inferido quando a consulta termina hoje ou ontem (o teste antigo usava a semana
+        # passada fechada e só passava às segundas-feiras).
+        fim_sem = hoje_brt() - timedelta(days=1)
+        seg = fim_sem - timedelta(days=6)
         atualizar_prefs("user_test_abc", "resumo_geral", str(seg), str(fim_sem), "source_of")
         prefs = get_prefs("user_test_abc")
         assert prefs.get("periodo_default") == "semana"
@@ -64,9 +66,9 @@ class TestUserPrefs:
     def test_aplicar_prefs_sem_periodo(self):
         from agent.user_prefs import atualizar_prefs, aplicar_prefs
         from datetime import date, timedelta
-        hoje = date.today()
-        seg = hoje - timedelta(days=hoje.weekday() + 7)
-        fim = seg + timedelta(days=6)
+        from agent.tz import hoje_brt
+        fim = hoje_brt() - timedelta(days=1)
+        seg = fim - timedelta(days=6)
         atualizar_prefs("user_test_def", "resumo_geral", str(seg), str(fim), "source_of")
         ini_out, fim_out = aplicar_prefs("user_test_def", None, None)
         assert ini_out is not None

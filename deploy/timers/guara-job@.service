@@ -1,0 +1,23 @@
+[Unit]
+Description=Job da Guará: scripts/%I.py
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=guara
+WorkingDirectory=/home/guara/guara-performance/agente-performance
+EnvironmentFile=/home/guara/guara-performance/agente-performance/.env
+Environment=PYTHONPATH=/home/guara/guara-performance/transcricao:/home/guara/guara-performance
+ExecStartPre=/bin/mkdir -p /home/guara/guara-performance/agente-performance/data/locks
+# flock: o mesmo job nunca roda duas vezes ao mesmo tempo (timer + carga manual); quem chega depois sai sem erro.
+ExecStart=/usr/bin/flock -n -E 0 /home/guara/guara-performance/agente-performance/data/locks/%i.lock /home/guara/guara-performance/.venv/bin/python scripts/%I.py
+TimeoutStartSec=40min
+SyslogIdentifier=guara-job-%i
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/guara/guara-performance
+MemoryHigh=250M
+MemoryMax=300M
+CPUQuota=60%
+Nice=10

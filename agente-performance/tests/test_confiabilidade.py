@@ -78,17 +78,46 @@ def test_insights_sem_roas_da_loja_inteira():
     assert "ROAS real (Shopify" not in src and "loja inteira" in src
 
 
-@pytest.mark.parametrize("view_dia12,esperado", [(1000.0, []), (2000.0, ["pod_kombucha/meta_ads 2026-11-12: relatório mostra R$ 2.000,00 × API R$ 1.000,00"])])
+@pytest.mark.parametrize("view_dia12,esperado", [
+    ({"investimento": 1000.0, "compras": 20, "receita": 5000.0}, []),
+    ({"investimento": 2000.0, "compras": 20, "receita": 5000.0},
+     ["pod_kombucha/meta_ads 2026-11-12: investimento no relatório R$ 2.000,00 × API R$ 1.000,00"]),
+    ({"investimento": 1000.0, "compras": 21, "receita": 5040.0}, []),  # dentro da tolerância (2 pedidos; R$ 50)
+    ({"investimento": 1000.0, "compras": 25, "receita": 5300.0},       # AUD-04: o ROAS enviado ao cliente
+     ["pod_kombucha/meta_ads 2026-11-12: compras no relatório 25 × API 20",
+      "pod_kombucha/meta_ads 2026-11-12: receita no relatório R$ 5.300,00 × API R$ 5.000,00"]),
+])
 def test_teste_ouro_confere_a_view_dos_relatorios(monkeypatch, view_dia12, esperado):
-    """SQLite certo e view errada (campanha duplicada) passava pela conferência; agora não passa."""
+    """SQLite certo e view errada (campanha duplicada) passava pela conferência; agora não passa.
+    Compras e receita também são conferidas (eram o numerador do ROAS e ficavam de fora)."""
     from scripts import qualidade_dados as q
     monkeypatch.setattr(q, "contas", lambda: [
         {"cliente": "pod_kombucha", "plat": "meta_ads", "conta": c, "token": "T", "db": "/x.db", "tabela": "t"} for c in ("1", "2")])
-    monkeypatch.setattr(q, "_api_meta", lambda conta, *a: {"2026-11-12": 600.0 if conta == "1" else 400.0})
-    monkeypatch.setattr(q, "_local", lambda db, tab, ini, fim, conta: {"2026-11-12": 600.0 if conta == "1" else 400.0})
+    metade = lambda conta: 0.6 if conta == "1" else 0.4
+    monkeypatch.setattr(q, "_api_meta_dias", lambda conta, *a: {"2026-11-12": {
+        "investimento": 1000.0 * metade(conta), "compras": 20 * metade(conta), "receita": 5000.0 * metade(conta)}})
+    monkeypatch.setattr(q, "_local", lambda db, tab, ini, fim, conta: {"2026-11-12": 1000.0 * metade(conta)})
     monkeypatch.setattr(q, "_duplicatas", lambda *a: 0)
-    monkeypatch.setattr(q, "_view", lambda *a: {"2026-11-12": view_dia12})
+    monkeypatch.setattr(q, "_view", lambda *a: {m: {"2026-11-12": v} for m, v in view_dia12.items()})
     assert q.verificar(date(2026, 11, 12), date(2026, 11, 12)) == esperado
+
+
+def test_api_meta_usa_a_janela_e_o_parser_do_sync(monkeypatch):
+    """A conta inteira na API, lida com a mesma regra de compra do sync (7d_click + 1d_view do pixel)."""
+    from scripts import qualidade_dados as q
+    pedido = {}
+
+    class R:
+        def raise_for_status(self): pass
+        def json(self): return {"data": [{"date_start": "2026-11-12", "spend": "100.5",
+            "actions": [{"action_type": "offsite_conversion.fb_pixel_purchase", "7d_click": "3", "1d_view": "1"}],
+            "action_values": [{"action_type": "offsite_conversion.fb_pixel_purchase", "7d_click": "300", "1d_view": "50"}]}]}
+    monkeypatch.setenv("T", "x")
+    monkeypatch.setattr(q.requests, "get", lambda url, timeout, params: (pedido.update(params), R())[1])
+    assert q._api_meta_dias("1", "T", "2026-11-12", "2026-11-12") == {
+        "2026-11-12": {"investimento": 100.5, "compras": 4.0, "receita": 350.0}}
+    assert "7d_click" in pedido["action_attribution_windows"] and "action_values" in pedido["fields"]
+    assert q._api_meta("1", "T", "2026-11-12", "2026-11-12") == {"2026-11-12": 100.5}
 
 
 def test_saude_verde_e_vermelho():
@@ -104,3 +133,28 @@ def test_saude_verde_e_vermelho():
     texto, prob = montar("13/11", rot, ["pod_kombucha: Meta parado em 2026-11-10 (esperado ≥ 2026-11-12)"], 120, 38.0)
     assert len(prob) == 3 and texto.startswith(":red_circle:") and "*divergência*" in texto
     assert "rotina *qualidade_dados* falhou (código 1) em 13/11 13:00 UTC" in texto
+
+
+def test_saude_swap_e_rptn(tmp_path):
+    """AUD-05 (swap) e AUD-13 (RPTN parado ou com cliente preso em erro) no post diário."""
+    import os, sqlite3, time
+    from scripts.saude import montar, rptn
+    texto, prob = montar("17/11", [], [], 551, 38.0, swap_mb=409)
+    assert prob == ["VM usando swap: 409 MB (máximo 300); falta memória para algum serviço"] and "swap 409 MB" in texto
+
+    (tmp_path / "reports").mkdir()
+    log = tmp_path / "reports" / "sync_loop.log"
+    log.write_text("x")
+    with sqlite3.connect(tmp_path / "leads_reportana.db") as c:
+        c.execute("CREATE TABLE seg_rptn_new (shopify_customer_id TEXT, status TEXT, erro TEXT)")
+        c.execute("CREATE TABLE seg_last_edit (segment_id TEXT)")
+        c.executemany("INSERT INTO seg_rptn_new VALUES (?, ?, ?)", [("1", "enviado", None), ("2", "erro", "HTTP 422")])
+    agora = time.time()
+    assert rptn(tmp_path, "active", agora) == ["RPTN: 1 cliente(s) presos em erro em seg_rptn_new (ex.: HTTP 422)"]
+    with sqlite3.connect(tmp_path / "leads_reportana.db") as c:
+        c.execute("UPDATE seg_rptn_new SET status='enviado'")
+    assert rptn(tmp_path, "active", agora) == []
+    os.utime(log, (agora - 9 * 3600, agora - 9 * 3600))
+    assert rptn(tmp_path, "active", agora) == ["RPTN: nenhum ciclo registrado há 9 h"]
+    assert rptn(tmp_path, "failed", agora) == ["RPTN: serviço guara-rptn failed"]
+    assert rptn(tmp_path / "nao-existe") == []   # VM sem RPTN
