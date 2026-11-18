@@ -72,7 +72,9 @@ def rptn(raiz: Path = RPTN, ativo: str | None = None, agora: float | None = None
     if horas is None or horas > RPTN_CICLO_MAX_H:
         out.append("RPTN: nenhum ciclo registrado " + (f"há {horas:.0f} h" if horas else "(sem log)"))
     try:
-        with sqlite3.connect(f"file:{raiz / 'leads_reportana.db'}?mode=ro", uri=True) as c:
+        # immutable=1: entre ciclos o RPTN fecha o banco e o -shm some; sob ProtectSystem=strict o modo ro
+        # sozinho falharia ("readonly database"). Para uma contagem, ler sem o WAL basta.
+        with sqlite3.connect(f"file:{raiz / 'leads_reportana.db'}?mode=ro&immutable=1", uri=True) as c:
             tabelas = [t for (t,) in c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'seg!_%' ESCAPE '!'")]
             for t in tabelas:
                 if not {"status", "erro"} <= {col[1] for col in c.execute(f"PRAGMA table_info({t})")}:

@@ -5,8 +5,8 @@ Uma linha por credencial; nunca imprime o valor:
   • Meta (cada *_ACCESS_TOKEN do clientes.json): debug_token → is_valid, expires_at, data_access_expires_at
   • Google Ads: uma chamada mínima (listAccessibleCustomers) com o refresh token
   • Slack: auth.test
-Credencial inválida = falha já; vencendo em ≤ 7 dias = aviso. Alerta em SLACK_ALERT_CHANNEL (1x/dia por
-conjunto de problemas) e exit 1, para a rotina aparecer vermelha no post de saúde.
+Credencial inválida = falha já (exit 1: a rotina aparece vermelha no post de saúde); vencendo em ≤ 7 dias =
+aviso (alerta, exit 0). Alerta em SLACK_ALERT_CHANNEL, 1x/dia por conjunto de problemas.
 A Shopify fica de fora: renovar_tokens_shopify.py já renova e falha alto.
 ponytail: idade da chave da conta de serviço do BigQuery não é checada (exige IAM); entra quando houver rotação.
 """
@@ -92,7 +92,7 @@ def main() -> int:
     from datetime import date
     texto = ":key: *Credenciais*: " + "; ".join(f"{n} {d}" for n, _, d in ruins)
     _alertar(texto, f"tokens:{date.today()}:{hashlib.sha1(texto.encode()).hexdigest()[:12]}")
-    return 1
+    return 1 if any(st == "falha" for _, st, _ in ruins) else 0
 
 
 if __name__ == "__main__":

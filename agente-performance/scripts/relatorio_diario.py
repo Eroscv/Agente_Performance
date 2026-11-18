@@ -172,7 +172,10 @@ def conferir_fonte(data: str, cliente_key: str, plataforma: str, invest_local: f
         api = sum(sum((q._api_meta(c["conta"], c["token"], data, data) if plataforma == "meta_ads"
                        else q._api_gads(c["conta"], data, data)).values()) for c in contas)
     except Exception as e:
-        return "sem_conferencia", f"API indisponível ({str(e)[:80]})"
+        resp = getattr(e, "response", None)
+        if isinstance(e, KeyError) or (resp is not None and resp.status_code < 500):
+            return "sem_conferencia", f"credencial ou conta recusada ({q.sem_token(e)[:80]})"
+        return "sem_conferencia", f"API indisponível (rede ou 5xx: {q.sem_token(e)[:80]})"
     d = date.fromisoformat(data)
     if q.comparar({data: invest_local}, {data: api}, d, d):
         return "divergente", f"banco {fmt_brl(invest_local)} × API {fmt_brl(api)}"
@@ -335,10 +338,14 @@ def _enviar_blocos(channel: str, thread_ts: str, blocos: list[dict], fallback_tx
 def _reter(data: str, cliente_key: str, plataforma: str, motivo: str) -> None:
     from scripts.qualidade_dados import _alertar
     logger.error("[%s·%s] %s: %s — relatório retido", cliente_key, plataforma, data, motivo)
-    _alertar(f":no_entry: *Relatório diário retido* — {cliente_key}/{plataforma} {data}: {motivo}. "
-             f"Nada foi postado no canal de relatórios; o relatório é tentado de novo nas próximas "
-             f"{len(DIAS_REENVIO)} execuções diárias.",
-             f"relatorio_retido:{cliente_key}:{plataforma}:{data}")
+    ultimo_dia = date.fromisoformat(data) + timedelta(days=max(DIAS_REENVIO))
+    try:
+        _alertar(f":no_entry: *Relatório diário retido* — {cliente_key}/{plataforma} {data}: {motivo}. "
+                 f"Nada foi postado no canal de relatórios. Nova tentativa automática a cada execução diária até "
+                 f"{ultimo_dia:%d/%m}; depois disso, só à mão (`relatorio_diario.py --data {data}`).",
+                 f"relatorio_retido:{cliente_key}:{plataforma}:{data}")
+    except Exception as e:  # alerta que falha não pode derrubar os relatórios dos outros clientes
+        logger.error("[%s·%s] alerta de retenção não enviado: %s", cliente_key, plataforma, e)
 
 
 # AUD-18: relatório retido é reenviado quando o dado se corrige. Cada execução tenta ontem e os 2 dias
@@ -352,8 +359,9 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
     d = _resumo_dia(data, cliente_key, plataforma)
     if not d or not d.get("investimento"):
         # AUD-08: sem linha do dia e com a fonte parada antes dele é atraso do sync, não dia sem gasto.
+        # Pela plataforma inteira: conta pausada não grava linha e não é atraso do sync.
         ultimo = (query_one("SELECT CAST(MAX(data) AS VARCHAR) AS u FROM v_performance "
-                            "WHERE cliente_key = ? AND plataforma = ?", (cliente_key, plataforma)) or {}).get("u")
+                            "WHERE plataforma = ?", (plataforma,)) or {}).get("u")
         if ultimo and ultimo < data:
             _reter(data, cliente_key, plataforma, f"dados atrasados: o último dia sincronizado é {ultimo}")
         else:
@@ -367,7 +375,7 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
     # API fora do ar: não dá para conferir, então retém (reenvio automático nos 2 dias seguintes).
     # "conta não configurada" segue com o selo, senão o cliente nunca mais receberia o relatório.
     # RELATORIO_SEM_CONFERENCIA=enviar volta ao comportamento antigo (decisão escrita do dono do negócio).
-    if (status == "sem_conferencia" and detalhe.startswith("API indisponível")
+    if (status == "sem_conferencia" and detalhe.startswith("API indisponível (rede")
             and os.getenv("RELATORIO_SEM_CONFERENCIA") != "enviar"):
         _reter(data, cliente_key, plataforma, f"investimento não conferido: {detalhe}")
         return False
@@ -406,6 +414,27 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
 
     thread_ts = titulo_resp.get("ts")
     logger.info("[%s·%s] Título postado ts=%s", cliente_key, plataforma, thread_ts)
+    # Daqui em diante algo já está no canal do cliente: falha vira alerta interno, nunca nova tentativa
+    # (que repostaria título e resumo). ponytail: completar a mesma thread na nova tentativa (plano de QA 1.4).
+    try:
+        ok = _thread_do_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url, selo,
+                                  thread_ts, titulo, nome_c, nome_p, data_fmt)
+    except Exception as e:
+        logger.error("[%s·%s] thread do relatório falhou: %s", cliente_key, plataforma, e)
+        ok = False
+    if not ok:
+        try:
+            from scripts.qualidade_dados import _alertar
+            _alertar(f":warning: *Relatório diário incompleto* — {cliente_key}/{plataforma} {data}: o título saiu "
+                     f"(ts {thread_ts}) mas a thread falhou. Completar à mão; não é reenviado sozinho.",
+                     f"relatorio_parcial:{cliente_key}:{plataforma}:{data}")
+        except Exception as e:
+            logger.error("[%s·%s] alerta de relatório parcial não enviado: %s", cliente_key, plataforma, e)
+    return True
+
+
+def _thread_do_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url, selo,
+                         thread_ts, titulo, nome_c, nome_p, data_fmt) -> bool:
 
     # ── Msg 2 (thread): resumo em tabela ────────────────────────────────────
     roas_e = roas_emoji(d.get("roas"))
@@ -449,7 +478,7 @@ def main():
 
     from agent.tz import hoje_brt
     hoje = hoje_brt()
-    datas = [args.data] if args.data else [(hoje - timedelta(days=n)).isoformat() for n in (*DIAS_REENVIO, 1)]
+    datas = [args.data] if args.data else [(hoje - timedelta(days=n)).isoformat() for n in (1, *sorted(DIAS_REENVIO))]
     logger.info("Gerando relatório diário para %s", ", ".join(datas))
 
     clientes_json = json.loads((BASE_DIR / "clientes.json").read_text())
@@ -466,7 +495,7 @@ def main():
     class _NaoEnviado(Exception):
         pass
 
-    enviados = 0
+    enviados = falhas = 0
     for data, (cliente_key, plataforma) in ((d, s) for d in datas for s in segmentos):
         # Idempotente: rerun, catch-up do timer ou carga manual não postam o mesmo relatório duas vezes.
         try:
@@ -480,9 +509,15 @@ def main():
         except _NaoEnviado:
             logger.warning("[%s/%s] relatório de %s não enviado; tenta de novo na próxima execução",
                            cliente_key, plataforma, data)
+        except Exception as e:  # um segmento com erro não impede os outros (a chave já foi liberada)
+            logger.exception("[%s/%s] relatório de %s falhou: %s", cliente_key, plataforma, data, e)
+            falhas += 1
         time.sleep(1)
 
-    logger.info("Relatórios enviados: %d (de %d dia(s) × %d segmento(s))", enviados, len(datas), len(segmentos))
+    logger.info("Relatórios enviados: %d (de %d dia(s) × %d segmento(s)); com erro: %d",
+                enviados, len(datas), len(segmentos), falhas)
+    if falhas:
+        sys.exit(1)  # a unit aparece vermelha no post de saúde
 
 
 if __name__ == "__main__":

@@ -83,9 +83,6 @@ def test_insights_sem_roas_da_loja_inteira():
     ({"investimento": 2000.0, "compras": 20, "receita": 5000.0},
      ["pod_kombucha/meta_ads 2026-11-12: investimento no relatório R$ 2.000,00 × API R$ 1.000,00"]),
     ({"investimento": 1000.0, "compras": 21, "receita": 5040.0}, []),  # dentro da tolerância (2 pedidos; R$ 50)
-    ({"investimento": 1000.0, "compras": 25, "receita": 5300.0},       # AUD-04: o ROAS enviado ao cliente
-     ["pod_kombucha/meta_ads 2026-11-12: compras no relatório 25 × API 20",
-      "pod_kombucha/meta_ads 2026-11-12: receita no relatório R$ 5.300,00 × API R$ 5.000,00"]),
 ])
 def test_teste_ouro_confere_a_view_dos_relatorios(monkeypatch, view_dia12, esperado):
     """SQLite certo e view errada (campanha duplicada) passava pela conferência; agora não passa.
@@ -100,6 +97,23 @@ def test_teste_ouro_confere_a_view_dos_relatorios(monkeypatch, view_dia12, esper
     monkeypatch.setattr(q, "_duplicatas", lambda *a: 0)
     monkeypatch.setattr(q, "_view", lambda *a: {m: {"2026-11-12": v} for m, v in view_dia12.items()})
     assert q.verificar(date(2026, 11, 12), date(2026, 11, 12)) == esperado
+
+
+def test_compras_e_receita_ignoram_o_ultimo_dia_ainda_em_atribuicao(monkeypatch):
+    """AUD-04: o ROAS enviado ao cliente. O último dia fica de fora de compras/receita (atribuição em curso)."""
+    from scripts import qualidade_dados as q
+    monkeypatch.setattr(q, "contas", lambda: [
+        {"cliente": "pod_kombucha", "plat": "meta_ads", "conta": "1", "token": "T", "db": "/x.db", "tabela": "t"}])
+    api = {d: {"investimento": 1000.0, "compras": 20, "receita": 5000.0} for d in ("2026-11-11", "2026-11-12")}
+    monkeypatch.setattr(q, "_api_meta_dias", lambda *a: api)
+    monkeypatch.setattr(q, "_local", lambda *a: {d: 1000.0 for d in api})
+    monkeypatch.setattr(q, "_duplicatas", lambda *a: 0)
+    vis = {"investimento": {d: 1000.0 for d in api}, "compras": {"2026-11-11": 25, "2026-11-12": 25},
+           "receita": {"2026-11-11": 5300.0, "2026-11-12": 5300.0}}
+    monkeypatch.setattr(q, "_view", lambda *a: vis)
+    assert q.verificar(date(2026, 11, 11), date(2026, 11, 12)) == [
+        "pod_kombucha/meta_ads 2026-11-11: compras no relatório 25 × API 20",
+        "pod_kombucha/meta_ads 2026-11-11: receita no relatório R$ 5.300,00 × API R$ 5.000,00"]
 
 
 def test_api_meta_usa_a_janela_e_o_parser_do_sync(monkeypatch):

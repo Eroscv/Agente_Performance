@@ -14,9 +14,11 @@ APP=${4:-$(basename "$SRC")}; PATHS=("${@:5}"); HOST=ubuntu@144.33.22.236
 case $APP in
   guara-performance)
     : "${SERVICO:=guara-performance}" "${SAUDE:=curl -fsS -o /dev/null --max-time 10 127.0.0.1:8102/health}"
-    : "${PORTAO:=cd agente-performance && ${PY:-python3} -m pytest -q -p no:cacheprovider tests/test_eval_bot.py tests/test_confiabilidade.py tests/test_relatorio_retido.py tests/test_tokens.py}" ;;
+    : "${PORTAO:=cd agente-performance && ${PY:-python3} -m pytest -q -p no:cacheprovider}" ;;
   reportana_api_shopify)
-    : "${SERVICO:=guara-rptn}" "${SAUDE:=systemctl is-active --quiet guara-rptn}"
+    [ -n "${3:-}" ] || REQ=deploy/requirements.lock   # versões fixas (pip freeze da VM)
+    : "${ESPERA:=45}"   # RestartSec=30: um crash logo na partida já teria reiniciado
+    : "${SERVICO:=guara-rptn}" "${SAUDE:=systemctl is-active --quiet guara-rptn && [ \$(systemctl show guara-rptn -p NRestarts --value) = 0 ]}"
     : "${PORTAO:=for t in tests/test_*.py; do ${PY:-python3} \$t || exit 1; done}" ;;
 esac
 # Estado que sobrevive ao redeploy (fica na pasta do app). Acrescente o que cada sistema gravar.
@@ -30,20 +32,30 @@ if [ -n "${PORTAO:-}" ] && [ "${SEM_PORTAO:-}" != 1 ]; then
 fi
 TMP=/tmp/deploy-$APP-$REV.tar
 git -C "$SRC" archive --format=tar "$REV" ${PATHS[@]+-- "${PATHS[@]}"} | "${SSH[@]}" "cat > $TMP && chmod 644 $TMP"
+# 1) Prepara ao lado, com o serviço no ar: extrai e instala as dependências ANTES da troca. Falhou, nada mudou.
+#    ponytail: o .venv é um só (fica no KEEP); se a troca voltar atrás, a versão anterior roda com as
+#    dependências novas. Venv por versão quando um requirements quebrar compatibilidade.
 "${SSH[@]}" "sudo -u guara bash -s" <<REMOTE
 set -euo pipefail
 D=/home/guara/$APP; rm -rf \$D.new; mkdir -p \$D.new; tar -x -C \$D.new -f $TMP
-if [ -d \$D ]; then for f in $KEEP; do [ -e \$D/\$f ] || continue; rm -rf \$D.new/\$f; mkdir -p \$(dirname \$D.new/\$f); mv \$D/\$f \$D.new/\$f; done; fi
-rm -rf \$D.old; [ -d \$D ] && mv \$D \$D.old; mv \$D.new \$D
-cd \$D; [ -d .venv ] || python3 -m venv .venv
-.venv/bin/pip -q install --disable-pip-version-check -r $REQ
-echo $REV > REVISION
-echo "anterior: \$(cat \$D.old/REVISION 2>/dev/null || echo nenhum) | agora: \$(cat REVISION)"
+[ -d \$D/.venv ] || { mkdir -p \$D; python3 -m venv \$D/.venv; }
+\$D/.venv/bin/pip -q install --disable-pip-version-check -r \$D.new/$REQ
+echo $REV > \$D.new/REVISION
 REMOTE
 "${SSH[@]}" "rm -f $TMP"
+# 2) Troca com o serviço parado: banco e arquivos de estado não podem ser gravados no meio do mv.
+[ -z "${SERVICO:-}" ] || "${SSH[@]}" "sudo systemctl stop $SERVICO"
+"${SSH[@]}" "sudo -u guara bash -s" <<REMOTE
+set -euo pipefail
+D=/home/guara/$APP
+if [ -d \$D ]; then for f in $KEEP; do [ -e \$D/\$f ] || continue; rm -rf \$D.new/\$f; mkdir -p \$(dirname \$D.new/\$f); mv \$D/\$f \$D.new/\$f; done; fi
+rm -rf \$D.old; [ -d \$D ] && mv \$D \$D.old; mv \$D.new \$D
+echo "anterior: \$(cat \$D.old/REVISION 2>/dev/null || echo nenhum) | agora: \$(cat \$D/REVISION)"
+REMOTE
 [ -n "${SERVICO:-}" ] || exit 0
-"${SSH[@]}" "sudo systemctl restart $SERVICO; sleep ${ESPERA:-20}; $SAUDE" && { echo "saúde ok: $SERVICO"; exit 0; }
+"${SSH[@]}" "sudo systemctl start $SERVICO; sleep ${ESPERA:-20}; $SAUDE" && { echo "saúde ok: $SERVICO"; exit 0; }
 echo "SAÚDE FALHOU em $SERVICO: voltando à versão anterior"
+"${SSH[@]}" "sudo systemctl stop $SERVICO"
 "${SSH[@]}" "sudo -u guara bash -s" <<REMOTE
 set -euo pipefail
 D=/home/guara/$APP; [ -d \$D.old ] || { echo "sem \$D.old para voltar"; exit 1; }
@@ -51,5 +63,5 @@ for f in $KEEP; do [ -e \$D/\$f ] || continue; rm -rf \$D.old/\$f; mkdir -p \$(d
 rm -rf \$D.falhou; mv \$D \$D.falhou; mv \$D.old \$D
 echo "voltou para: \$(cat \$D/REVISION 2>/dev/null || echo desconhecida) | a que falhou ficou em \$D.falhou"
 REMOTE
-"${SSH[@]}" "sudo systemctl restart $SERVICO; sleep ${ESPERA:-20}; $SAUDE" && echo "versão anterior de pé" || echo "ATENÇÃO: a versão anterior também não ficou saudável"
+"${SSH[@]}" "sudo systemctl start $SERVICO; sleep ${ESPERA:-20}; $SAUDE" && echo "versão anterior de pé" || echo "ATENÇÃO: a versão anterior também não ficou saudável"
 exit 1

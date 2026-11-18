@@ -13,5 +13,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ReadWritePaths=/home/guara/backups
+# O RPTN fecha o banco entre ciclos e o -shm some; ler em modo ro exige poder recriá-lo (AUD-15).
+ReadWritePaths=/home/guara/reportana_api_shopify
 MemoryMax=200M
 Nice=15

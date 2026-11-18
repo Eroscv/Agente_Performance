@@ -27,6 +27,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import sys
 from collections import defaultdict
@@ -85,6 +86,11 @@ def _view(cliente: str, plat: str, ini: str, fim: str) -> dict[str, dict[str, fl
                      "WHERE cliente_key = ? AND plataforma = ? AND data BETWEEN ? AND ? GROUP BY 1",
                      [cliente, plat, ini, fim])
     return {m: {r["d"]: float(r[m] or 0) for r in rows} for m in METRICAS}
+
+
+def sem_token(e) -> str:
+    """Mensagem de erro sem o access_token (o HTTPError da Meta traz a URL inteira)."""
+    return re.sub(r"(access_token=)[^&\s]+", r"\1***", str(e))
 
 
 def _brl(v: float) -> str:
@@ -200,7 +206,7 @@ def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[st
             dias = (_api_meta_dias(c["conta"], c["token"], ini.isoformat(), fim.isoformat()) if c["plat"] == "meta_ads"
                     else _api_gads_dias(c["conta"], ini.isoformat(), fim.isoformat()))
         except Exception as e:
-            problemas.append(f"{rotulo}: API indisponível ({str(e)[:120]})")
+            problemas.append(f"{rotulo}: API indisponível ({sem_token(e)[:120]})")
             sem_api.add((c["cliente"], c["plat"]))
             continue
         for d, v in dias.items():
@@ -227,7 +233,10 @@ def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[st
             problemas.append(f"{cli}/{plat}: view dos relatórios ilegível ({str(e)[:120]})")
             continue
         for m in METRICAS:
-            ruins = comparar(vis[m], api[m], ini, fim, m)
+            # Compras e receita do último dia ainda crescem com a atribuição (7d_click; conversão tardia do
+            # Google): só entram a partir do dia anterior a ele.
+            fim_m = fim if m == "investimento" else fim - timedelta(days=1)
+            ruins = comparar(vis[m], api[m], ini, fim_m, m) if fim_m >= ini else []
             log.info("%-45s %-12s relatório %12.2f | API %12.2f | dias divergentes %d",
                      f"{cli}/{plat} (v_performance)", m, sum(vis[m].values()), sum(api[m].values()), len(ruins))
             fmt = (lambda v: f"{v:g}") if m == "compras" else _brl

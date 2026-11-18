@@ -25,6 +25,9 @@ def bancos():
                 yield raiz, p
 
 
+FALHAS: list[str] = []
+
+
 def gerar(hoje=None):
     DESTINO.mkdir(parents=True, exist_ok=True)
     arq = DESTINO / f"guara-{hoje or date.today().isoformat()}.tar.gz"
@@ -32,8 +35,13 @@ def gerar(hoje=None):
         for raiz, p in bancos():
             copia = Path(tmp) / raiz.name / p.relative_to(raiz)
             copia.parent.mkdir(parents=True, exist_ok=True)
-            with sqlite3.connect(f"file:{p}?mode=ro", uri=True) as o, sqlite3.connect(copia) as d:
-                o.backup(d)
+            try:  # um banco ilegível não pode derrubar o backup dos outros
+                with sqlite3.connect(f"file:{p}?mode=ro", uri=True) as o, sqlite3.connect(copia) as d:
+                    o.backup(d)
+            except sqlite3.Error as e:
+                FALHAS.append(f"{p}: {e}")
+                print(f"FALHOU: {p}: {e}", file=sys.stderr)
+                continue
             tar.add(copia, arcname=str(copia.relative_to(tmp)))
     for velho in sorted(DESTINO.glob("guara-*.tar.gz"))[:-MANTER]:
         velho.unlink()
@@ -57,6 +65,7 @@ def _teste():
         (t / "app/data").mkdir(parents=True)
         with sqlite3.connect(t / "app/data/x.db") as c:
             c.execute("create table a(v)"); c.execute("insert into a values (42)")
+        (t / "app/data/ruim.db").write_bytes(b"isto nao e sqlite" * 10)  # ilegível: entra em FALHAS, não derruba
         for i in range(9):
             arq = gerar(f"2026-01-0{i + 1}")
         assert len(list(DESTINO.glob("*.tar.gz"))) == MANTER
@@ -64,6 +73,7 @@ def _teste():
             tar.extractall(t / "rest")
         with sqlite3.connect(t / "rest/app/data/x.db") as c:
             assert c.execute("select v from a").fetchone() == (42,)
+        assert FALHAS and all("ruim.db" in f for f in FALHAS)
     print("teste ok")
 
 
@@ -72,3 +82,4 @@ if __name__ == "__main__":
         _teste()
     else:
         arq = gerar(); print(f"gerado: {arq} ({arq.stat().st_size // 1024} KB)"); subir(arq)
+        sys.exit(1 if FALHAS else 0)  # parcial: a unit fica vermelha no post de saúde
