@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Publica um repo da Guará no VPS da FEQ num commit fixo, como usuário guara (sem sudo).
 #   deploy.sh <pasta-do-clone> <commit> [requirements.txt] [nome-do-app pathspec...]
-#   Com pathspecs, publica só esses caminhos (ex.: guara-performance agente-performance transcricao ':!transcricao/credentials').
+#   Com pathspecs, publica só esses caminhos (guara-performance tem padrão abaixo).
 # Código vai por git archive (nunca o working tree, nunca token no servidor).
 #
 # Portão (AUD-10): antes de copiar, roda PORTAO no código do commit; falhou, nada é publicado.
@@ -13,6 +13,8 @@ SRC=$1; REV=$(git -C "$SRC" rev-parse --verify "$2^{commit}"); REQ=${3:-requirem
 APP=${4:-$(basename "$SRC")}; PATHS=("${@:5}"); HOST=ubuntu@144.33.22.236
 case $APP in
   guara-performance)
+    # o bot importa landing_page: sem ela o deploy de 18/11 caiu na volta automática (ModuleNotFoundError)
+    [ ${#PATHS[@]} -gt 0 ] || PATHS=(agente-performance transcricao landing_page ':!transcricao/credentials')
     : "${SERVICO:=guara-performance}" "${SAUDE:=curl -fsS -o /dev/null --max-time 10 127.0.0.1:8102/health}"
     : "${PORTAO:=cd agente-performance && ${PY:-python3} -m pytest -q -p no:cacheprovider}" ;;
   reportana_api_shopify)
