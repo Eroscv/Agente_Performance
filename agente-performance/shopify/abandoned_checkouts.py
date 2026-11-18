@@ -191,7 +191,7 @@ BASE_DIR = Path(__file__).parent.parent
 
 def _paginar_checkouts(store: str, token: str, data_inicio: date, data_fim: date) -> list[dict]:
     """Busca todos os checkouts (open + completed) no período."""
-    url = f"https://{store}.myshopify.com/admin/api/{API_VER}/checkouts.json"
+    url = f"https://{store.removesuffix('.myshopify.com')}.myshopify.com/admin/api/{API_VER}/checkouts.json"
     params = {
         "limit":          250,
         "created_at_min": f"{data_inicio}T00:00:00Z",

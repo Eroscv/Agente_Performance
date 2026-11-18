@@ -1,0 +1,11 @@
+[Unit]
+Description=Agenda do envio ao dashboard (a cada 15 min, como o cron dashboard-ingest-15min)
+
+[Timer]
+OnCalendar=*:00/15
+Persistent=true
+RandomizedDelaySec=30
+Unit=guara-job@dashboard_ingest.service
+
+[Install]
+WantedBy=timers.target

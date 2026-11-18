@@ -60,84 +60,10 @@ def _get_anthropic():
         return None
 
 
-def _call_gemini(system: str, user_message: str) -> str:
-    """Chama Gemini com system + user. Tenta chave principal e depois backup."""
-    from google import genai
-    from google.genai import types
-
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
-    keys = [
-        os.getenv("GEMINI_API_KEY", "").strip(),
-        os.getenv("GEMINI_API_KEY_BACKUP", "").strip(),
-    ]
-
-    last_err = None
-    for key in keys:
-        if not key:
-            continue
-        try:
-            client = genai.Client(api_key=key)
-            response = client.models.generate_content(
-                model=model,
-                contents=user_message,
-                config=types.GenerateContentConfig(
-                    system_instruction=system,
-                    max_output_tokens=2048,
-                    temperature=0.3,
-                ),
-            )
-            return response.text
-        except Exception as e:
-            last_err = e
-            logger.warning("[LLM] Gemini key falhou (%s...) — %s", key[:12], e)
-            continue
-
-    raise RuntimeError(f"Gemini indisponível: {last_err}")
-
-
-def _call_anthropic(system: str, user_message: str) -> str:
-    """Chama Claude como fallback."""
-    import anthropic as _ant
-    api_key = os.getenv("ANTHROPIC_API_KEY", "").strip()
-    if not api_key:
-        raise RuntimeError("ANTHROPIC_API_KEY não configurada")
-    client = _ant.Anthropic(api_key=api_key)
-    model = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
-    response = client.messages.create(
-        model=model,
-        max_tokens=2048,
-        system=system,
-        messages=[{"role": "user", "content": user_message}],
-    )
-    return response.content[0].text
-
-
 def _call_llm(system: str, user_message: str) -> str:
-    """
-    Chama o LLM com fallback automático: Gemini → Anthropic.
-    Lança exceção apenas se ambos falharem.
-    """
-    gemini_msg = None
-    try:
-        text = _call_gemini(system, user_message)
-        logger.debug("[LLM] Gemini OK")
-        return text
-    except Exception as gemini_err:
-        # Python apaga a variável de `except ... as gemini_err` ao sair do bloco —
-        # guardamos a mensagem aqui, senão o except abaixo levanta UnboundLocalError
-        # em vez do RuntimeError com o diagnóstico real (bug encontrado ao rodar
-        # scripts/avaliar_nlp.py sem API key configurada).
-        gemini_msg = str(gemini_err)
-        logger.warning("[LLM] Gemini falhou, tentando Anthropic: %s", gemini_msg)
-
-    try:
-        text = _call_anthropic(system, user_message)
-        logger.debug("[LLM] Anthropic OK (fallback)")
-        return text
-    except Exception as ant_err:
-        raise RuntimeError(
-            f"Todos os LLMs indisponíveis. Gemini: {gemini_msg} | Anthropic: {ant_err}"
-        )
+    """Gemini → Claude (fallback). Lógica única em utils/llm.py."""
+    from utils.llm import gerar
+    return gerar(system, user_message, max_tokens=2048)
 
 
 def get_client():

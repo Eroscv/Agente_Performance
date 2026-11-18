@@ -27,11 +27,12 @@ def test_buscar_insights_falha_quando_todos_os_dias_dao_erro(monkeypatch):
         raise RuntimeError("Meta API error: Bad signature")
 
     monkeypatch.setattr(loader, "buscar_insights_periodo", _erro)
-    with pytest.raises(RuntimeError, match="todos os"):
+    with pytest.raises(loader.SyncIncompleto) as exc:
         loader.buscar_insights("act_1", dias=2)
+    assert len(exc.value.dias) == 2 and exc.value.rows == []
 
 
-def test_buscar_insights_devolve_o_que_deu_certo_se_so_um_dia_falha(monkeypatch):
+def test_buscar_insights_guarda_o_que_deu_certo_se_so_um_dia_falha(monkeypatch):
     from meta_ads import loader
 
     monkeypatch.setenv("META_ACCESS_TOKEN", "x")
@@ -45,4 +46,8 @@ def test_buscar_insights_devolve_o_que_deu_certo_se_so_um_dia_falha(monkeypatch)
         return [{"ad_id": "1"}]
 
     monkeypatch.setattr(loader, "buscar_insights_periodo", _um_dia_falha)
-    assert loader.buscar_insights("act_1", dias=2) == [{"ad_id": "1"}]
+    # Os dias bons vêm junto na exceção (o chamador grava e depois falha o passo).
+    import pytest
+    with pytest.raises(loader.SyncIncompleto) as exc:
+        loader.buscar_insights("act_1", dias=2)
+    assert exc.value.rows == [{"ad_id": "1"}] and len(exc.value.dias) == 1

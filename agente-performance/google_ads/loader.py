@@ -14,6 +14,7 @@ Uso CLI:
 
 import argparse
 import logging
+import os
 import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
@@ -28,6 +29,17 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+
+def _fim_janela() -> date:
+    """
+    Fim da janela de sincronização: hoje em Brasília (dia parcial; a próxima carga sobrescreve).
+    SYNC_ATE_ONTEM=1 para parar em ontem. Usa hoje_brt(): a VM roda em UTC e, entre 21h e 24h de
+    Brasília, date.today() já é o dia seguinte.
+    """
+    from agent.tz import hoje_brt
+    hoje = hoje_brt()
+    return hoje - timedelta(days=1) if os.getenv("SYNC_ATE_ONTEM") == "1" else hoje
 
 BASE_DIR = Path(__file__).parent.parent
 DB_PATH  = BASE_DIR / "data" / "campanhas.db"
@@ -53,6 +65,8 @@ CREATE TABLE IF NOT EXISTS gads_campanhas_diario (
 """
 
 # GAQL — Google Ads Query Language
+# Sem filtro de status: campanha removida HOJE gastou ONTEM. Com "status != REMOVED", o replace da
+# janela apagava esse investimento do banco. O status continua na coluna para quem quiser filtrar na leitura.
 QUERY = """
     SELECT
         customer.id,
@@ -73,7 +87,6 @@ QUERY = """
         campaign_budget.amount_micros
     FROM campaign
     WHERE segments.date BETWEEN '{date_start}' AND '{date_end}'
-      AND campaign.status != 'REMOVED'
     ORDER BY segments.date DESC, metrics.cost_micros DESC
 """
 
@@ -88,7 +101,7 @@ def buscar_campanhas(customer_id: str, dias: int = 30) -> list[dict]:
     client   = get_client()
     service  = client.get_service("GoogleAdsService")
 
-    date_end   = date.today()  # inclui o dia corrente (parcial); a próxima carga sobrescreve
+    date_end   = _fim_janela()
     date_start = date_end - timedelta(days=dias - 1)
 
     query = QUERY.format(

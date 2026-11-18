@@ -8,7 +8,7 @@ Formato Slack:
   - Thread: relatório completo com tabelas Block Kit
 
 Uso:
-    python scripts/relatorio_diario.py                  # ontem
+    python scripts/relatorio_diario.py                  # ontem, e reenvia o que ficou retido nos 2 dias antes
     python scripts/relatorio_diario.py --data 2026-08-14
     python scripts/relatorio_diario.py --cliente source_of
 """
@@ -115,26 +115,27 @@ def _resumo_dia(data: str, cliente_key: str, plataforma: str) -> dict | None:
 def _campanhas_dia(data: str, cliente_key: str, plataforma: str) -> list[dict]:
     return query("""
         SELECT campanha,
-               ROUND(investimento, 2) AS invest,
-               ROUND(receita, 2)      AS receita,
-               ROUND(roas, 2)         AS roas,
-               ROUND(conversoes, 0)   AS conv,
-               ROUND(cliques, 0)      AS cliques,
-               ROUND(ctr, 2)          AS ctr,
-               ROUND(cpc_medio, 2)    AS cpc
+               ROUND(SUM(investimento), 2)                                AS invest,
+               ROUND(SUM(receita), 2)                                     AS receita,
+               ROUND(SUM(receita) / NULLIF(SUM(investimento), 0), 2)      AS roas,
+               ROUND(SUM(conversoes), 0)                                  AS conv,
+               ROUND(SUM(cliques), 0)                                     AS cliques,
+               ROUND(SUM(cliques) / NULLIF(SUM(impressoes), 0) * 100, 2)  AS ctr,
+               ROUND(SUM(investimento) / NULLIF(SUM(cliques), 0), 2)      AS cpc
         FROM v_performance
         WHERE data = ? AND cliente_key = ? AND plataforma = ?
-        ORDER BY investimento DESC
+        GROUP BY campanha  -- Meta grava uma linha por anúncio
+        ORDER BY invest DESC
         LIMIT 15
     """, (data, cliente_key, plataforma))
 
 
-def _shopify_dia(data: str) -> dict | None:
+def _shopify_dia(data: str, cliente_key: str) -> dict | None:
     return query_one("""
         SELECT receita, pedidos, novos_clientes, recompradores,
                ticket_medio, total_desconto, pedidos_acima_300
-        FROM shopify_receita_diaria WHERE data = ?
-    """, (data,))
+        FROM shopify_por_cliente WHERE data = ? AND cliente_key = ?
+    """, (data, cliente_key))
 
 
 def _dia_anterior(data: str, cliente_key: str, plataforma: str) -> dict | None:
@@ -145,15 +146,40 @@ def _dia_anterior(data: str, cliente_key: str, plataforma: str) -> dict | None:
 def _alertas(data: str, cliente_key: str, plataforma: str) -> list[dict]:
     return query("""
         SELECT campanha,
-               ROUND(investimento, 2) AS invest,
-               ROUND(roas, 2)         AS roas,
-               ROUND(conversoes, 0)   AS conv
+               ROUND(SUM(investimento), 2)                            AS invest,
+               ROUND(SUM(receita) / NULLIF(SUM(investimento), 0), 2)  AS roas,
+               ROUND(SUM(conversoes), 0)                              AS conv
         FROM v_performance
         WHERE data = ? AND cliente_key = ? AND plataforma = ?
-          AND investimento > 50
-          AND (roas IS NULL OR roas < 1.5 OR conversoes = 0)
-        ORDER BY investimento DESC LIMIT 5
+        GROUP BY campanha
+        HAVING SUM(investimento) > 50
+           AND (SUM(receita) / NULLIF(SUM(investimento), 0) < 1.5 OR SUM(conversoes) = 0)
+        ORDER BY invest DESC LIMIT 5
     """, (data, cliente_key, plataforma))
+
+
+def conferir_fonte(data: str, cliente_key: str, plataforma: str, invest_local: float) -> tuple[str, str]:
+    """Investimento do dia no banco × API da plataforma (todas as contas do cliente).
+
+    ("ok", selo) | ("divergente", detalhe) | ("sem_conferencia", motivo). Mesma tolerância da
+    conferência semanal (qualidade_dados): 1% ou R$ 1.
+    """
+    from scripts import qualidade_dados as q
+    contas = [c for c in q.contas() if c["cliente"] == cliente_key and c["plat"] == plataforma]
+    if not contas:
+        return "sem_conferencia", "conta não configurada"
+    try:
+        api = sum(sum((q._api_meta(c["conta"], c["token"], data, data) if plataforma == "meta_ads"
+                       else q._api_gads(c["conta"], data, data)).values()) for c in contas)
+    except Exception as e:
+        resp = getattr(e, "response", None)
+        if isinstance(e, KeyError) or (resp is not None and resp.status_code < 500):
+            return "sem_conferencia", f"credencial ou conta recusada ({q.sem_token(e)[:80]})"
+        return "sem_conferencia", f"API indisponível (rede ou 5xx: {q.sem_token(e)[:80]})"
+    d = date.fromisoformat(data)
+    if q.comparar({data: invest_local}, {data: api}, d, d):
+        return "divergente", f"banco {fmt_brl(invest_local)} × API {fmt_brl(api)}"
+    return "ok", f"investimento conferido com a API ({fmt_brl(api)})"
 
 
 # ── Builder de blocos Block Kit ───────────────────────────────────────────────
@@ -161,7 +187,7 @@ def _alertas(data: str, cliente_key: str, plataforma: str) -> list[dict]:
 def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
                        d: dict, camps: list, alts: list,
                        ant: dict | None, shopify: dict | None,
-                       notion_url: str | None) -> list[dict]:
+                       notion_url: str | None, selo: str = "") -> list[dict]:
     """Monta lista completa de blocos Block Kit — tudo em tabelas de código."""
 
     nome_c   = LABELS_CLIENTE.get(cliente_key, cliente_key)
@@ -182,7 +208,6 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
         [f"{roas_e} ROAS",        fmt_x(d.get("roas"))],
         ["🛒 Conversões",         fmt_n(d.get("conversoes"))],
         ["📊 Campanhas Ativas",   str(d.get("campanhas", "—"))],
-        ["👥 Alcance",            fmt_n(d.get("alcance"))],
     ]
     if invest_imp:
         vg_rows.insert(1, ["💸 c/ Imposto (1,1383x)",  fmt_brl(invest_imp)])
@@ -226,7 +251,7 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
             ["🎯 CTR",          fmt_pct(ant.get("ctr")),          fmt_pct(d.get("ctr")),
              delta_str(d.get("ctr"),          ant.get("ctr"))],
         ]
-        blocos.append(_bk_section(_tabela_codigo(["Métrica", "Ontem", "Hoje", "Var."], comp_rows)))
+        blocos.append(_bk_section(_tabela_codigo(["Métrica", "Dia anterior", data_fmt[:5], "Var."], comp_rows)))
         blocos.append(_bk_divider())
 
     # ── 5. Desempenho por Campanha ────────────────────────────────────────
@@ -266,8 +291,8 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
             )))
             blocos.append(_bk_divider())
 
-    # ── 7. Shopify (Source OF) ────────────────────────────────────────────
-    if shopify and cliente_key == "source_of":
+    # ── 7. Shopify (loja inteira, todos os canais) ────────────────────────
+    if shopify:
         blocos.append(_bk_section("*🛒 Shopify — Dados da Loja*"))
         shp_rows = [
             ["📦 Pedidos",           fmt_n(shopify.get("pedidos"))],
@@ -282,7 +307,7 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
         blocos.append(_bk_divider())
 
     # ── 8. Rodapé ─────────────────────────────────────────────────────────
-    rodape = f"_Gerado em {time.strftime('%d/%m/%Y %H:%M')} · Dados via API direta_"
+    rodape = f"_Gerado em {time.strftime('%d/%m/%Y %H:%M')} · {selo}_"
     if notion_url:
         rodape += f" · <{notion_url}|📎 Ver no Notion>"
     blocos.append(_bk_context(rodape))
@@ -310,18 +335,56 @@ def _enviar_blocos(channel: str, thread_ts: str, blocos: list[dict], fallback_tx
     return True
 
 
+def _reter(data: str, cliente_key: str, plataforma: str, motivo: str) -> None:
+    from scripts.qualidade_dados import _alertar
+    logger.error("[%s·%s] %s: %s — relatório retido", cliente_key, plataforma, data, motivo)
+    ultimo_dia = date.fromisoformat(data) + timedelta(days=max(DIAS_REENVIO))
+    try:
+        _alertar(f":no_entry: *Relatório diário retido* — {cliente_key}/{plataforma} {data}: {motivo}. "
+                 f"Nada foi postado no canal de relatórios. Nova tentativa automática a cada execução diária até "
+                 f"{ultimo_dia:%d/%m}; depois disso, só à mão (`relatorio_diario.py --data {data}`).",
+                 f"relatorio_retido:{cliente_key}:{plataforma}:{data}")
+    except Exception as e:  # alerta que falha não pode derrubar os relatórios dos outros clientes
+        logger.error("[%s·%s] alerta de retenção não enviado: %s", cliente_key, plataforma, e)
+
+
+# AUD-18: relatório retido é reenviado quando o dado se corrige. Cada execução tenta ontem e os 2 dias
+# antes; o que já foi enviado é pulado pelo livro de idempotência.
+DIAS_REENVIO = (3, 2)
+
+
 def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bool:
     """Publica no Notion + envia âncora + thread Block Kit no Slack."""
 
     d = _resumo_dia(data, cliente_key, plataforma)
     if not d or not d.get("investimento"):
-        logger.info("[%s·%s] Sem dados para %s — pulando", cliente_key, plataforma, data)
+        # AUD-08: sem linha do dia e com a fonte parada antes dele é atraso do sync, não dia sem gasto.
+        # Pela plataforma inteira: conta pausada não grava linha e não é atraso do sync.
+        ultimo = (query_one("SELECT CAST(MAX(data) AS VARCHAR) AS u FROM v_performance "
+                            "WHERE plataforma = ?", (plataforma,)) or {}).get("u")
+        if ultimo and ultimo < data:
+            _reter(data, cliente_key, plataforma, f"dados atrasados: o último dia sincronizado é {ultimo}")
+        else:
+            logger.info("[%s·%s] Sem dados para %s — pulando", cliente_key, plataforma, data)
         return False
+
+    status, detalhe = conferir_fonte(data, cliente_key, plataforma, float(d["investimento"]))
+    if status == "divergente":
+        _reter(data, cliente_key, plataforma, detalhe)
+        return False
+    # API fora do ar: não dá para conferir, então retém (reenvio automático nos 2 dias seguintes).
+    # "conta não configurada" segue com o selo, senão o cliente nunca mais receberia o relatório.
+    # RELATORIO_SEM_CONFERENCIA=enviar volta ao comportamento antigo (decisão escrita do dono do negócio).
+    if (status == "sem_conferencia" and detalhe.startswith("API indisponível (rede")
+            and os.getenv("RELATORIO_SEM_CONFERENCIA") != "enviar"):
+        _reter(data, cliente_key, plataforma, f"investimento não conferido: {detalhe}")
+        return False
+    selo = f"✅ {detalhe}" if status == "ok" else f"⚠️ não conferido: {detalhe}"
 
     camps   = _campanhas_dia(data, cliente_key, plataforma)
     alts    = _alertas(data, cliente_key, plataforma)
     ant     = _dia_anterior(data, cliente_key, plataforma)
-    shopify = _shopify_dia(data) if cliente_key == "source_of" else None
+    shopify = _shopify_dia(data, cliente_key)
 
     # ── Publica no Notion ─────────────────────────────────────────────────
     notion_url = None
@@ -351,6 +414,27 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
 
     thread_ts = titulo_resp.get("ts")
     logger.info("[%s·%s] Título postado ts=%s", cliente_key, plataforma, thread_ts)
+    # Daqui em diante algo já está no canal do cliente: falha vira alerta interno, nunca nova tentativa
+    # (que repostaria título e resumo). ponytail: completar a mesma thread na nova tentativa (plano de QA 1.4).
+    try:
+        ok = _thread_do_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url, selo,
+                                  thread_ts, titulo, nome_c, nome_p, data_fmt)
+    except Exception as e:
+        logger.error("[%s·%s] thread do relatório falhou: %s", cliente_key, plataforma, e)
+        ok = False
+    if not ok:
+        try:
+            from scripts.qualidade_dados import _alertar
+            _alertar(f":warning: *Relatório diário incompleto* — {cliente_key}/{plataforma} {data}: o título saiu "
+                     f"(ts {thread_ts}) mas a thread falhou. Completar à mão; não é reenviado sozinho.",
+                     f"relatorio_parcial:{cliente_key}:{plataforma}:{data}")
+        except Exception as e:
+            logger.error("[%s·%s] alerta de relatório parcial não enviado: %s", cliente_key, plataforma, e)
+    return True
+
+
+def _thread_do_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url, selo,
+                         thread_ts, titulo, nome_c, nome_p, data_fmt) -> bool:
 
     # ── Msg 2 (thread): resumo em tabela ────────────────────────────────────
     roas_e = roas_emoji(d.get("roas"))
@@ -366,7 +450,7 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
         resumo_rows.insert(2, ["💸 c/ Imposto",  fmt_brl(invest_imp)])
     ancora_blocos = [
         _bk_section(_tabela_codigo(["Métrica", "Valor"], resumo_rows)),
-        _bk_context(f"_{data_fmt} · {nome_c} · {nome_p} · {d.get('campanhas', 0)} campanhas ativas_"),
+        _bk_context(f"_{data_fmt} · {nome_c} · {nome_p} · {d.get('campanhas', 0)} campanhas ativas · {selo}_"),
     ]
     _post({
         "channel": SLACK_CHANNEL,
@@ -376,7 +460,7 @@ def enviar_relatorio_cliente(data: str, cliente_key: str, plataforma: str) -> bo
     })
 
     # ── Msg 3+ (thread): relatório completo ──────────────────────────────
-    blocos = _blocos_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url)
+    blocos = _blocos_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, shopify, notion_url, selo)
     ok = _enviar_blocos(SLACK_CHANNEL, thread_ts, blocos,
                         fallback_txt=f"Relatório diário {nome_c} · {nome_p} · {data_fmt}")
     if ok:
@@ -392,8 +476,10 @@ def main():
     parser.add_argument("--cliente", default=None, help="Filtrar por cliente_key")
     args = parser.parse_args()
 
-    data = args.data or (date.today() - timedelta(days=1)).isoformat()
-    logger.info("Gerando relatório diário para %s", data)
+    from agent.tz import hoje_brt
+    hoje = hoje_brt()
+    datas = [args.data] if args.data else [(hoje - timedelta(days=n)).isoformat() for n in (1, *sorted(DIAS_REENVIO))]
+    logger.info("Gerando relatório diário para %s", ", ".join(datas))
 
     clientes_json = json.loads((BASE_DIR / "clientes.json").read_text())
     segmentos = []
@@ -401,16 +487,37 @@ def main():
         if not cfg.get("ativo", False): continue
         if args.cliente and key != args.cliente: continue
         for plat, pcfg in cfg.get("plataformas", {}).items():
-            if pcfg.get("ativo", False):
+            if pcfg.get("ativo", False) and plat in LABELS_PLAT:  # Shopify entra como bloco do relatório
                 segmentos.append((key, plat))
 
-    enviados = 0
-    for cliente_key, plataforma in segmentos:
-        ok = enviar_relatorio_cliente(data, cliente_key, plataforma)
-        if ok: enviados += 1
+    from utils.idempotencia import uma_vez
+
+    class _NaoEnviado(Exception):
+        pass
+
+    enviados = falhas = 0
+    for data, (cliente_key, plataforma) in ((d, s) for d in datas for s in segmentos):
+        # Idempotente: rerun, catch-up do timer ou carga manual não postam o mesmo relatório duas vezes.
+        try:
+            with uma_vez(f"relatorio_diario:{cliente_key}:{plataforma}:{data}") as pode:
+                if not pode:
+                    logger.info("[%s/%s] relatório de %s já enviado — pulando", cliente_key, plataforma, data)
+                    continue
+                if not enviar_relatorio_cliente(data, cliente_key, plataforma):
+                    raise _NaoEnviado  # libera a chave para a próxima execução tentar de novo
+                enviados += 1
+        except _NaoEnviado:
+            logger.warning("[%s/%s] relatório de %s não enviado; tenta de novo na próxima execução",
+                           cliente_key, plataforma, data)
+        except Exception as e:  # um segmento com erro não impede os outros (a chave já foi liberada)
+            logger.exception("[%s/%s] relatório de %s falhou: %s", cliente_key, plataforma, data, e)
+            falhas += 1
         time.sleep(1)
 
-    logger.info("Relatórios enviados: %d/%d", enviados, len(segmentos))
+    logger.info("Relatórios enviados: %d (de %d dia(s) × %d segmento(s)); com erro: %d",
+                enviados, len(datas), len(segmentos), falhas)
+    if falhas:
+        sys.exit(1)  # a unit aparece vermelha no post de saúde
 
 
 if __name__ == "__main__":

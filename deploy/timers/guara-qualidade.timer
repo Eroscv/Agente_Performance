@@ -1,0 +1,10 @@
+[Unit]
+Description=Guará — conferência dos dados contra a fonte (diária, 07:30 UTC)
+
+[Timer]
+OnCalendar=*-*-* 07:30:00 UTC
+Persistent=true
+Unit=guara-job@qualidade_dados.service
+
+[Install]
+WantedBy=timers.target

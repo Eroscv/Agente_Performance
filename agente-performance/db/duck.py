@@ -50,12 +50,14 @@ _SQLITE_DBS = {
     "shopify_src":     DATA_DIR / "performance/source_of/shopify_receita.db",
     "shopify_sess_src": DATA_DIR / "performance/source_of/shopify.db",
     "botica_meta":     DATA_DIR / "performance/botica/meta_ads.db",
+    "pod_shopify":     DATA_DIR / "performance/pod_kombucha/shopify_receita.db",
+    "botica_shopify":  DATA_DIR / "performance/botica/shopify_receita.db",
 }
 
 # ── DDL das views (idêntico ao connections.py para garantir paridade) ─────────
 
 _V_PERFORMANCE_DDL = """
-CREATE OR REPLACE VIEW v_performance AS
+CREATE OR REPLACE VIEW v_performance_linhas AS
 
 SELECT
     'source_of'   AS cliente_key, 'Source OF'    AS cliente_nome, 'google_ads' AS plataforma,
@@ -143,6 +145,29 @@ SELECT
 FROM botica_meta.botica_meta_ads_diario
 """
 
+# Meta grava uma linha por anúncio; quem lê v_performance espera uma linha por campanha/dia
+# (somar ROAS/CTR de anúncios, contar campanhas e listar "por campanha" saía duplicado).
+# Taxas recalculadas sobre as somas; Meta de Source OF e POD mantém o investimento com imposto
+# (1,1383) no ROAS/CPA, como na view por linha.
+_V_PERFORMANCE_AGG_DDL = """
+CREATE OR REPLACE VIEW v_performance AS
+SELECT
+    cliente_key, ANY_VALUE(cliente_nome) AS cliente_nome, plataforma, data, campanha,
+    ANY_VALUE(campaign_id) AS campaign_id, ANY_VALUE(objetivo) AS objetivo, ANY_VALUE(status) AS status,
+    SUM(impressoes) AS impressoes, SUM(cliques) AS cliques,
+    CASE WHEN plataforma = 'meta_ads' THEN MAX(alcance) END AS alcance,  -- alcance não soma entre anúncios
+    SUM(investimento) AS investimento, SUM(conversoes) AS conversoes, SUM(receita) AS receita,
+    ROUND(SUM(receita) / NULLIF(SUM(investimento) * imp, 0), 4)     AS roas,
+    ROUND(SUM(investimento) * imp / NULLIF(SUM(conversoes), 0), 2)  AS cpa,
+    ROUND(SUM(cliques) * 100.0 / NULLIF(SUM(impressoes), 0), 4)     AS ctr,
+    ROUND(SUM(investimento) / NULLIF(SUM(cliques), 0), 2)           AS cpc_medio,
+    SUM(video_3s) AS video_3s, SUM(thruplays) AS thruplays
+FROM (SELECT *, CASE WHEN plataforma = 'meta_ads' AND cliente_key IN ('source_of', 'pod_kombucha')
+                     THEN 1.1383 ELSE 1 END AS imp
+      FROM v_performance_linhas)
+GROUP BY cliente_key, plataforma, data, campanha, imp
+"""
+
 _CAMPANHAS_UNIFICADA_DDL = """
 CREATE OR REPLACE VIEW campanhas_unificada AS
 SELECT
@@ -182,6 +207,20 @@ FROM v_performance
 WH_DIR = BASE_DIR / "data" / "warehouse"
 
 # ── DDL views DW ─────────────────────────────────────────────────────────────
+
+# Pedidos Shopify de todas as lojas, com cliente_key. shopify_receita_diaria (abaixo) continua só
+# Source OF porque ~40 consultas leem sem filtro de cliente.
+_SHOPIFY_POR_CLIENTE_DDL = """
+CREATE OR REPLACE VIEW shopify_por_cliente AS
+SELECT 'source_of' AS cliente_key, CAST(data AS VARCHAR) AS data, receita, pedidos, novos_clientes,
+       recompradores, ticket_medio, total_desconto, pedidos_acima_300 FROM shopify_src.shopify_receita_diaria
+UNION ALL
+SELECT 'pod_kombucha', CAST(data AS VARCHAR), receita, pedidos, novos_clientes,
+       recompradores, ticket_medio, total_desconto, pedidos_acima_300 FROM pod_shopify.shopify_receita_diaria
+UNION ALL
+SELECT 'botica', CAST(data AS VARCHAR), receita, pedidos, novos_clientes,
+       recompradores, ticket_medio, total_desconto, pedidos_acima_300 FROM botica_shopify.shopify_receita_diaria
+"""
 
 _SHOPIFY_DDL = """
 CREATE OR REPLACE VIEW shopify_receita_diaria AS
@@ -250,6 +289,7 @@ def _build_duck_conn() -> duckdb.DuckDBPyConnection:
     # Cria views — só as que têm os DBs necessários
     try:
         conn.execute(_V_PERFORMANCE_DDL)
+        conn.execute(_V_PERFORMANCE_AGG_DDL)
         conn.execute(_CAMPANHAS_UNIFICADA_DDL)
         logger.debug("[duck] Views v_performance e campanhas_unificada criadas")
     except Exception as e:
@@ -257,6 +297,7 @@ def _build_duck_conn() -> duckdb.DuckDBPyConnection:
 
     try:
         conn.execute(_SHOPIFY_DDL)
+        conn.execute(_SHOPIFY_POR_CLIENTE_DDL)
         logger.debug("[duck] View shopify_receita_diaria criada")
     except Exception as e:
         logger.warning("[duck] Erro ao criar view Shopify: %s", e)

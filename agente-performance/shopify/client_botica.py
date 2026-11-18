@@ -19,7 +19,7 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-_STORE   = os.getenv("SHOPIFY_BOTICA_STORE", "00mngb-he.myshopify.com")
+_STORE   = os.getenv("SHOPIFY_BOTICA_STORE", "00mngb-he").removesuffix(".myshopify.com") + ".myshopify.com"  # aceita os dois formatos
 _TOKEN   = os.getenv("SHOPIFY_BOTICA_TOKEN", "")
 _API_VER = "2024-01"
 _BASE    = f"https://{_STORE}/admin/api/{_API_VER}"

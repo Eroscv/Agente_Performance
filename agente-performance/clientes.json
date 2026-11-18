@@ -109,7 +109,7 @@
       "ativo": true,
       "plataformas": {
         "meta_ads": {
-          "ativo": true,
+          "ativo": false,
           "meta_account_id": "act_512078729981131",
           "meta_token_env": "META_BOTICA_ACCESS_TOKEN",
           "loader": "meta_ads.loader",
@@ -117,7 +117,8 @@
           "loader_params": {
             "dias": 8
           },
-          "tabela_db": "botica_meta_ads_diario"
+          "tabela_db": "botica_meta_ads_diario",
+          "pausado_motivo": "aguarda vínculo da conta act_512078729981131 no Business Manager (13/11/2026)"
         },
         "shopify": {
           "ativo": true,

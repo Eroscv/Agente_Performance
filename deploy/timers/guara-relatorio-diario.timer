@@ -1,0 +1,11 @@
+[Unit]
+Description=Agenda de guara-job@relatorio_diario
+
+[Timer]
+OnCalendar=*-*-* 13:00 UTC
+Persistent=true
+RandomizedDelaySec=120
+Unit=guara-job@relatorio_diario.service
+
+[Install]
+WantedBy=timers.target
