@@ -7,7 +7,9 @@ Para cada conta ativa (Meta e Google Ads), nos últimos N dias fechados:
   2. Duplicidade: linhas repetidas pelo grão da tabela (deveria ser sempre zero; o UNIQUE garante).
   3. Teste-ouro da leitura: investimento por dia na view v_performance (o que relatórios, alertas e bot
      leem) × soma da API das contas do cliente. Pega erro na camada de leitura com o SQLite certo
-     (ex.: campanha duplicada por anúncio na view, nov/2026).
+     (ex.: campanha duplicada por anúncio na view, nov/2026). Também compras e receita, que são o ROAS
+     enviado ao cliente (AUD-04): Meta com a mesma janela 7d_click+1d_view do sync, Google pelas
+     conversões da conta. Tolerâncias em TOLERANCIAS (contrato em docs/contratos/qualidade_dados.md).
 
 Saída: tabela no log; se houver divergência, alerta no Slack (SLACK_ALERT_CHANNEL), uma vez por dia
 por conjunto de problemas, e exit 1 para a unit aparecer como falha.
@@ -25,6 +27,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import sys
 from collections import defaultdict
@@ -41,6 +44,10 @@ log = logging.getLogger("qualidade")
 
 TOLERANCIA_REL = 0.01   # 1%: atribuição tardia da Meta mexe em centavos
 TOLERANCIA_ABS = 1.00   # R$ 1
+# (absoluta, relativa) por métrica. Compras: a API no nível da conta conta algumas atribuições que não
+# descem ao anúncio (ver meta_ads/loader.py), daí a folga de 2 pedidos.
+TOLERANCIAS = {"investimento": (TOLERANCIA_ABS, TOLERANCIA_REL), "compras": (2.0, 0.02), "receita": (50.0, 0.02)}
+METRICAS = tuple(TOLERANCIAS)
 BR = str.maketrans(",.", ".,")  # 1,234.50 -> 1.234,50
 GRAOS = {"meta_ads": ("account_id", "data", "ad_id"), "google_ads": ("data", "campaign_id")}
 
@@ -71,47 +78,77 @@ def _duplicatas(db: Path, tabela: str, grao: tuple) -> int:
             return 0
 
 
-def _view(cliente: str, plat: str, ini: str, fim: str) -> dict[str, float]:
-    """Investimento por dia como os relatórios enxergam (DuckDB sobre todos os SQLite)."""
+def _view(cliente: str, plat: str, ini: str, fim: str) -> dict[str, dict[str, float]]:
+    """{métrica: {dia: valor}} como os relatórios enxergam (DuckDB sobre todos os SQLite)."""
     from db.connections import query_fed
-    rows = query_fed("SELECT CAST(data AS VARCHAR) AS d, SUM(investimento) AS v FROM v_performance "
+    rows = query_fed("SELECT CAST(data AS VARCHAR) AS d, SUM(investimento) AS investimento, "
+                     "SUM(conversoes) AS compras, SUM(receita) AS receita FROM v_performance "
                      "WHERE cliente_key = ? AND plataforma = ? AND data BETWEEN ? AND ? GROUP BY 1",
                      [cliente, plat, ini, fim])
-    return {r["d"]: float(r["v"] or 0) for r in rows}
+    return {m: {r["d"]: float(r[m] or 0) for r in rows} for m in METRICAS}
+
+
+def sem_token(e) -> str:
+    """Mensagem de erro sem o access_token (o HTTPError da Meta traz a URL inteira)."""
+    return re.sub(r"(access_token=)[^&\s]+", r"\1***", str(e))
 
 
 def _brl(v: float) -> str:
     return f"R$ {v:,.2f}".translate(BR)
 
 
-def _api_meta(conta: str, token_env: str, ini: str, fim: str) -> dict[str, float]:
+def _api_meta_dias(conta: str, token_env: str, ini: str, fim: str) -> dict[str, dict[str, float]]:
+    """{dia: {investimento, compras, receita}} da conta, com a janela de atribuição do sync."""
+    from meta_ads.loader import ATTRIBUTION_WINDOWS, _normalizar
     r = requests.get(f"https://graph.facebook.com/v20.0/act_{conta}/insights", timeout=60, params={
-        "access_token": os.environ[token_env], "level": "account", "fields": "spend",
+        "access_token": os.environ[token_env], "level": "account", "fields": "spend,actions,action_values",
+        "action_attribution_windows": ATTRIBUTION_WINDOWS,
         "time_increment": 1, "time_range": json.dumps({"since": ini, "until": fim}), "limit": 100})
     r.raise_for_status()
-    return {x["date_start"]: float(x.get("spend") or 0) for x in r.json().get("data", [])}
-
-
-def _api_gads(customer_id: str, ini: str, fim: str) -> dict[str, float]:
-    from google_ads.client import get_client
-    svc = get_client().get_service("GoogleAdsService")
-    q = (f"SELECT segments.date, metrics.cost_micros FROM customer "
-         f"WHERE segments.date BETWEEN '{ini}' AND '{fim}'")
-    out: dict[str, float] = {}
-    for lote in svc.search_stream(customer_id=customer_id, query=q):
-        for row in lote.results:
-            out[row.segments.date] = out.get(row.segments.date, 0.0) + row.metrics.cost_micros / 1e6
+    out = {}
+    for x in r.json().get("data", []):
+        n = _normalizar(x)
+        out[x["date_start"]] = {"investimento": n["investimento"], "compras": n["compras"], "receita": n["valor_compras"]}
     return out
 
 
-def comparar(local: dict[str, float], api: dict[str, float], ini: date, fim: date) -> list[tuple]:
+def _api_gads_dias(customer_id: str, ini: str, fim: str) -> dict[str, dict[str, float]]:
+    from google_ads.client import get_client
+    svc = get_client().get_service("GoogleAdsService")
+    q = (f"SELECT segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value "
+         f"FROM customer WHERE segments.date BETWEEN '{ini}' AND '{fim}'")
+    out: dict[str, dict[str, float]] = defaultdict(lambda: dict.fromkeys(METRICAS, 0.0))
+    for lote in svc.search_stream(customer_id=customer_id, query=q):
+        for row in lote.results:
+            d = out[row.segments.date]
+            d["investimento"] += row.metrics.cost_micros / 1e6
+            d["compras"] += row.metrics.conversions
+            d["receita"] += row.metrics.conversions_value
+    return dict(out)
+
+
+def _so_investimento(dias: dict[str, dict[str, float]]) -> dict[str, float]:
+    return {d: v["investimento"] for d, v in dias.items()}
+
+
+def _api_meta(conta: str, token_env: str, ini: str, fim: str) -> dict[str, float]:
+    return _so_investimento(_api_meta_dias(conta, token_env, ini, fim))
+
+
+def _api_gads(customer_id: str, ini: str, fim: str) -> dict[str, float]:
+    return _so_investimento(_api_gads_dias(customer_id, ini, fim))
+
+
+def comparar(local: dict[str, float], api: dict[str, float], ini: date, fim: date,
+             metrica: str = "investimento") -> list[tuple]:
     """Dias divergentes: (dia, local, api). Dia ausente nos dois lados conta como zero."""
+    tol_abs, tol_rel = TOLERANCIAS[metrica]
     ruins = []
     d = ini
     while d <= fim:
         k = d.isoformat()
         lo, ap = round(local.get(k, 0.0), 2), round(api.get(k, 0.0), 2)
-        if abs(lo - ap) > max(TOLERANCIA_ABS, TOLERANCIA_REL * ap):
+        if abs(lo - ap) > max(tol_abs, tol_rel * ap):
             ruins.append((k, lo, ap))
         d += timedelta(days=1)
     return ruins
@@ -156,7 +193,7 @@ def _alertar(texto: str, chave: str) -> None:
 def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[str]:
     """Divergências local × API (e grãos duplicados) no período; lista vazia = tudo confere."""
     problemas: list[str] = []
-    api_grupo: dict[tuple, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+    api_grupo: dict[tuple, dict[str, dict[str, float]]] = defaultdict(lambda: {m: defaultdict(float) for m in METRICAS})
     sem_api: set[tuple] = set()
     for c in contas():
         if clientes and c["cliente"] not in clientes:
@@ -166,14 +203,16 @@ def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[st
             problemas.append(f"{rotulo}: sem banco/tabela configurados")
             continue
         try:
-            api = (_api_meta(c["conta"], c["token"], ini.isoformat(), fim.isoformat()) if c["plat"] == "meta_ads"
-                   else _api_gads(c["conta"], ini.isoformat(), fim.isoformat()))
+            dias = (_api_meta_dias(c["conta"], c["token"], ini.isoformat(), fim.isoformat()) if c["plat"] == "meta_ads"
+                    else _api_gads_dias(c["conta"], ini.isoformat(), fim.isoformat()))
         except Exception as e:
-            problemas.append(f"{rotulo}: API indisponível ({str(e)[:120]})")
+            problemas.append(f"{rotulo}: API indisponível ({sem_token(e)[:120]})")
             sem_api.add((c["cliente"], c["plat"]))
             continue
-        for d, v in api.items():
-            api_grupo[(c["cliente"], c["plat"])][d] += v
+        for d, v in dias.items():
+            for m in METRICAS:
+                api_grupo[(c["cliente"], c["plat"])][m][d] += v[m]
+        api = _so_investimento(dias)
         local = _local(Path(c["db"]), c["tabela"], ini.isoformat(), fim.isoformat(),
                        c["conta"] if c["plat"] == "meta_ads" else None)
         ruins = comparar(local, api, ini, fim)
@@ -193,11 +232,16 @@ def verificar(ini: date, fim: date, clientes: set[str] | None = None) -> list[st
         except Exception as e:
             problemas.append(f"{cli}/{plat}: view dos relatórios ilegível ({str(e)[:120]})")
             continue
-        ruins = comparar(vis, api, ini, fim)
-        log.info("%-45s relatório R$ %12.2f | API R$ %12.2f | dias divergentes %d",
-                 f"{cli}/{plat} (v_performance)", sum(vis.values()), sum(api.values()), len(ruins))
-        for d, lo, apv in ruins:
-            problemas.append(f"{cli}/{plat} {d}: relatório mostra {_brl(lo)} × API {_brl(apv)}")
+        for m in METRICAS:
+            # Compras e receita do último dia ainda crescem com a atribuição (7d_click; conversão tardia do
+            # Google): só entram a partir do dia anterior a ele.
+            fim_m = fim if m == "investimento" else fim - timedelta(days=1)
+            ruins = comparar(vis[m], api[m], ini, fim_m, m) if fim_m >= ini else []
+            log.info("%-45s %-12s relatório %12.2f | API %12.2f | dias divergentes %d",
+                     f"{cli}/{plat} (v_performance)", m, sum(vis[m].values()), sum(api[m].values()), len(ruins))
+            fmt = (lambda v: f"{v:g}") if m == "compras" else _brl
+            for d, lo, apv in ruins:
+                problemas.append(f"{cli}/{plat} {d}: {m} no relatório {fmt(lo)} × API {fmt(apv)}")
     return problemas
 
 

@@ -1,0 +1,11 @@
+[Unit]
+Description=Agenda de guara-job@ciclo_3h (Source Of + POD: sync com hoje, checagem e alertas)
+
+[Timer]
+# :50 para não cruzar com os syncs diários (06:00/06:30/12:30/12:41 UTC)
+OnCalendar=*-*-* 00/3:50 UTC
+Persistent=true
+Unit=guara-job@ciclo_3h.service
+
+[Install]
+WantedBy=timers.target
