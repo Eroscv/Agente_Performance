@@ -76,10 +76,12 @@ A regra de canal fica em uma função por cliente no gold, nunca repetida em con
 |---|---|---|---|
 | Agente de Performance | tenta o BigQuery primeiro, mas na camada bruta (`ads_diario`) com tradução de SQL por regex que perdia colunas e escondia erros; parte das consultas lia direto o banco local (SQLite/DuckDB). Em migração (PR 13): views de consumo `correlacao.v_agente_performance`, `v_agente_campanhas`, `v_agente_anuncios` e `v_agente_shopify_diario`, com as mesmas colunas das views locais | as views de consumo acima; depois `fato_performance_diaria` e `fato_cac` para os números de negócio | `correlacao` |
 | Artefatos recorrentes (painéis) | painel ao vivo (PR 5) e API do painel da Source Of leem `fato_performance_diaria` e as tabelas `ing_ads_diario` e `ing_shopify_resumo_diario` da silver | as mesmas informações, por views de consumo no gold (`v_painel_campanhas`, `v_painel_loja`), para nenhum app ler a silver | `correlacao` |
-| Referenciador de ads | ainda não grava no banco (código pronto) | cópia semanal das referências | `referencias` (novo) |
-| AprovaPost | ainda não grava no banco | criativos, versões, status, datas, cliente e responsável, em lote diário. Os arquivos ficam no R2 e o banco guarda só o caminho | `aprovapost` (novo) |
+| Referenciador de ads | carga testada em 18/11 no dataset `referencias_teste` (tabelas `marcas`, `anuncios`, `salvos`), já removido; produção depende do deploy na VM | cópia semanal das marcas acompanhadas, anúncios coletados e salvos | `referencias` (novo) |
+| AprovaPost | carga diária testada em 18/11 no dataset `aprovapost_teste` (tabelas `criativos`, `versoes`, `decisoes`, `acessos_cliente`), já removido; produção depende do deploy na VM e do id da agência no Neon | criativos, versões, decisões, datas, cliente e responsável, em lote diário. Os arquivos ficam no Cloudflare R2 e o banco guarda só o caminho | `aprovapost` (novo) |
 | Central de leads | ainda não existe no banco (só `eco1100.leads_eco_1100`, de uma LP) | leads por fonte, ver seção 7 | `leads` (novo) |
 | Sistema de alertas técnicos | alerta de frescor (PR 3) lê a hora de atualização do gold | `alertas_qualidade_dados`, `qualidade_dados_checks`, `log_cargas`, `log_alteracoes_bq` e a hora da última carga de cada fonte | `correlacao`, `ingestao` |
+
+As cargas do AprovaPost e do Referenciador usam a conta de serviço `aprovapost-carga` e ficam na região US, a mesma dos outros datasets.
 
 ## 7. Tabelas da Central de leads (primeira versão)
 
