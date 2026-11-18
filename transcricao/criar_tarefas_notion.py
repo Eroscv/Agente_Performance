@@ -359,33 +359,28 @@ def registrar_card_local(fonte_id: str, titulo_tarefa: str, url_notion: str = ""
 
 def cards_ja_criados_notion(fonte_id: str) -> set:
     """
-    Guardrail secundário: consulta Notion API buscando por título de tarefa.
-    Filtra por Tipo=Reunião para limitar escopo.
+    Guardrail secundário: títulos de todas as tarefas Tipo=Reunião no Notion (paginado).
+    Falha fechada: erro na API levanta exceção e o chamador pula a reunião, em vez de
+    seguir "sem dedup" e duplicar cards. Antes lia só as 100 primeiras e devolvia vazio no erro.
     """
-    resp = requests.post(
-        f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query",
-        headers=NOTION_HEADERS,
-        json={
-            "filter": {
-                "property": "Tipo",
-                "select": {"equals": "Reunião"}
-            },
-            "page_size": 100,
-        },
-        timeout=15,
-    )
-    if resp.status_code != 200:
-        logger.warning("[dedup-notion] Erro %s: %s", resp.status_code, resp.text[:100])
-        return set()
-    results = resp.json().get("results", [])
-    titulos = set()
-    for r in results:
-        props = r.get("properties", {})
-        t = props.get("Tarefa", {})
-        titulo = "".join([x.get("plain_text", "") for x in t.get("title", [])])
-        if titulo:
-            titulos.add(titulo)
-    return titulos
+    titulos, cursor = set(), None
+    while True:
+        corpo = {"filter": {"property": "Tipo", "select": {"equals": "Reunião"}}, "page_size": 100}
+        if cursor:
+            corpo["start_cursor"] = cursor
+        resp = requests.post(f"https://api.notion.com/v1/databases/{NOTION_DB_ID}/query",
+                             headers=NOTION_HEADERS, json=corpo, timeout=15)
+        if resp.status_code != 200:
+            raise RuntimeError(f"[dedup-notion] Erro {resp.status_code}: {resp.text[:100]}")
+        j = resp.json()
+        for r in j.get("results", []):
+            t = r.get("properties", {}).get("Tarefa", {})
+            titulo = "".join(x.get("plain_text", "") for x in t.get("title", []))
+            if titulo:
+                titulos.add(titulo)
+        if not j.get("has_more"):
+            return titulos
+        cursor = j.get("next_cursor")
 
 
 def tarefas_ja_criadas(fonte_id: str) -> set:

@@ -16,6 +16,7 @@ Uso:
 from __future__ import annotations
 
 import logging
+import re
 import os
 from typing import Optional
 
@@ -58,6 +59,8 @@ Liste até 3 oportunidades identificadas nos dados (campanhas com bom ROAS para 
 Formato: "• [oportunidade] → [como aproveitar]"
 
 Seja específico. Use os nomes reais das campanhas dos dados fornecidos.
+Cite apenas números que aparecem nos dados acima, como estão. Não calcule números novos (variações,
+totais, médias, projeções): texto com número que não está nos dados é descartado.
 Máximo 2 linhas por item. Sem introduções ou conclusões genéricas."""
 
 
@@ -122,21 +125,41 @@ def _campanhas_para_texto(campanhas: list[dict], max_camps: int = 10) -> str:
     return "\n".join(linhas)
 
 
+def _leituras(tok: str) -> set[float]:
+    """Valores possíveis de um número escrito em BR ou US: "12.000" -> {12.0, 12000.0}; "9,324.75" -> {9324.75}."""
+    seps = [c for c in tok if c in ".,"]
+    if not seps:
+        return {float(tok)}
+    if len(set(seps)) == 2:  # o último separador é o decimal
+        dec = tok[max(tok.rfind("."), tok.rfind(","))]
+        return {float(tok.replace("," if dec == "." else ".", "").replace(",", "."))}
+    partes = re.split(r"[.,]", tok)
+    out = {float(tok.replace(",", ".") if len(partes) == 2 else partes[0] + "." + "".join(partes[1:]))}
+    if all(len(p) == 3 for p in partes[1:]):
+        out.add(float("".join(partes)))  # separador de milhar
+    return out
+
+
+def numeros_fora_dos_dados(texto: str, entrada: str) -> list[str]:
+    """Números do texto do LLM sem origem na entrada que ele recebeu (dados, nomes de campanha e
+    instruções). Aceita o mesmo valor arredondado (6,17 → 6,2; 9.324,75 → 9.325 ou "9,3 mil")."""
+    achar = lambda t: re.findall(r"\d(?:[\d.,]*\d)?", t)  # noqa: E731
+    base = set()
+    for tok in achar(entrada):
+        for v in _leituras(tok):
+            base.update(round(v, d) for d in (2, 1, 0, -1, -2, -3))
+            base.update((round(v / 1000, 1), round(v / 1000)))  # "9,3 mil"
+    ok = lambda n: any(abs(n - b) <= max(0.005, abs(b) * 0.005) for b in base)  # noqa: E731
+    return [tok for tok in achar(texto) if not any(ok(n) for n in _leituras(tok))]
+
+
 def _chamar_claude(prompt: str) -> str:
     """Chama Claude e retorna o texto gerado."""
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
-        model = os.getenv("CLAUDE_MODEL", "claude-haiku-4-5-20251001")
-        response = client.messages.create(
-            model=model,
-            max_tokens=1200,
-            system=_PROMPT_SISTEMA,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.content[0].text.strip()
+        from utils.llm import gerar
+        return gerar(_PROMPT_SISTEMA, prompt, max_tokens=1200)
     except Exception as e:
-        logger.warning("[Insights] Claude falhou: %s", e)
+        logger.warning("[Insights] LLM falhou: %s", e)
         return None
 
 
@@ -240,13 +263,12 @@ def gerar_insights(
             pedidos = shopify.get("pedidos") or shopify.get("total_pedidos")
             ticket = shopify.get("ticket_medio")
             if receita_s:
-                partes.append(f"## Shopify (receita real):\n- Receita: R$ {float(receita_s):,.2f}")
+                # Loja inteira, todos os canais: não dividir pelo investimento de uma plataforma só
+                # (dava "ROAS real" de 40x+ no relatório do Google).
+                partes.append(f"## Shopify (loja inteira, todos os canais — não atribuir a esta plataforma):\n"
+                              f"- Receita: R$ {float(receita_s):,.2f}")
                 if pedidos: partes.append(f"- Pedidos: {int(float(pedidos))}")
                 if ticket: partes.append(f"- Ticket médio: R$ {float(ticket):,.2f}")
-                invest = resumo.get("investimento") or resumo.get("total_invest") or 0
-                if invest:
-                    roas_real = float(receita_s) / (float(invest) * 1.1383)
-                    partes.append(f"- ROAS real (Shopify/invest+imposto): {roas_real:.2f}x")
         comparativo = dados_extras.get("comparativo")
         if comparativo:
             partes.append(f"## Comparativo período anterior:\n{comparativo}")
@@ -265,6 +287,14 @@ def gerar_insights(
 
     logger.info("[Insights] Gerando insights %s para %s·%s", periodo, cliente_key, plataforma)
     texto = _chamar_claude(prompt)
+    if texto and (fora := numeros_fora_dos_dados(texto, prompt)):
+        logger.warning("[Insights] %s·%s descartado: números sem origem nos dados %s", cliente_key, plataforma, fora[:5])
+        from notion.blocks import h2, paragrafo, divider
+        return [
+            h2("💡 Insights & Ações"),
+            paragrafo("⚠️ Insights automáticos omitidos: o texto gerado citou números que não estão nos dados do período."),
+            divider(),
+        ]
 
     if not texto:
         from notion.blocks import h2, paragrafo, divider

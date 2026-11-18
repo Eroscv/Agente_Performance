@@ -1,0 +1,11 @@
+[Unit]
+Description=Agenda de guara-job@renovar_tokens_shopify (token Shopify expira em ~24h)
+
+[Timer]
+# 03:20 e 15:20 BRT: token sempre válido para os syncs das 12:30 UTC e para o bot
+OnCalendar=*-*-* 06,18:20 UTC
+Persistent=true
+Unit=guara-job@renovar_tokens_shopify.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,23 @@
+[Unit]
+Description=Transcrição de reuniões da Guará (Drive → Claude → Notion)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=guara
+WorkingDirectory=/home/guara/guara-performance/transcricao
+EnvironmentFile=/home/guara/guara-performance/agente-performance/.env
+# shim primeiro: repõe o tz.py do servidor antigo
+Environment=PYTHONPATH=/home/guara/shim:/home/guara/guara-performance/transcricao:/home/guara/guara-performance:/home/guara/guara-performance/agente-performance
+ExecStartPre=/bin/mkdir -p /home/guara/guara-performance/agente-performance/data/locks
+ExecStart=/usr/bin/flock -n -E 0 /home/guara/guara-performance/agente-performance/data/locks/transcricao.lock /home/guara/guara-performance/.venv/bin/python orquestrador.py
+TimeoutStartSec=25min
+SyslogIdentifier=guara-transcricao
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/guara/guara-performance
+MemoryHigh=250M
+MemoryMax=300M
+CPUQuota=60%
+Nice=10

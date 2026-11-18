@@ -87,9 +87,8 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
 
     html = None
     try:
-        import anthropic, asyncio, functools
-        api_key = os.getenv("ANTHROPIC_API_KEY") or os.getenv("AWS_CLAUDE_KEY", "")
-        client  = anthropic.Anthropic(api_key=api_key)
+        import asyncio, functools
+        from utils.llm import gerar
         # Semáforo: máx 3 gerações simultâneas para não saturar a API
         sem = _get_semaforo()
         async with sem:
@@ -97,14 +96,10 @@ Entregue APENAS o código HTML. Sem explicações, sem markdown, sem backticks."
             loop = asyncio.get_event_loop()
             msg = await loop.run_in_executor(
                 None,
-                functools.partial(
-                    client.messages.create,
-                    model=os.getenv("CLAUDE_MODEL_LP", "claude-sonnet-4-6"),
-                    max_tokens=8192,
-                    messages=[{"role": "user", "content": prompt}],
-                )
+                functools.partial(gerar, "", prompt, max_tokens=16384, temperature=0.7,
+                                  modelo=os.getenv("GEMINI_MODEL_LP") or None)
             )
-        html = msg.content[0].text.strip()
+        html = msg.strip()
         html = re.sub(r"^```[a-z]*\n?", "", html)
         html = re.sub(r"\n?```$", "", html)
         html = html.strip()

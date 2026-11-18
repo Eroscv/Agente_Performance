@@ -29,7 +29,7 @@ CLIENT_ID     = "57f90faf153f67626703ae5a7422233e"
 CLIENT_SECRET = os.environ.get("SHOPIFY_BOTICA_CLIENT_SECRET", "").strip()
 REDIRECT_URI  = "https://guara.com.br/callback"
 SCOPES        = "read_orders,read_products,read_analytics"
-ENV_FILE      = Path(__file__).parent.parent / ".env"
+ENV_FILE      = Path(__file__).resolve().parent.parent / ".env"
 ENV_KEY       = "SHOPIFY_BOTICA_TOKEN"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

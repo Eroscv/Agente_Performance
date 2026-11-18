@@ -414,18 +414,25 @@ def postar_alerta_ancorado(alerta: dict, channel: str = None) -> bool:
 
 # ── Pipeline por cliente ──────────────────────────────────────────────────────
 
+def rotulos(periodo: str, data_inicio, data_fim) -> tuple[str, str, str]:
+    """(periodo_str, tipo_label, tipo_builder) do período — usado pelo cron geral e pelos crons por cliente."""
+    return (f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}",
+            {"diario": "Diário", "semana": "Semanal", "mes": "Mensal"}.get(periodo, periodo.title()),
+            {"mes": "mensal", "semana": "semanal", "diario": "diario"}.get(periodo, "semanal"))
+
+
 def executar_cliente(
     cliente_key: str,
     cfg: dict,
     periodo: str,
     data_inicio: date,
     data_fim: date,
-    periodo_str: str,
-    tipo_label: str,
-    tipo_builder: str,
     publicar: bool,
     apenas_alertas: bool = False,
     skip_loader: bool = False,
+    periodo_str: str | None = None,
+    tipo_label: str | None = None,
+    tipo_builder: str | None = None,
 ) -> dict:
     """
     Executa loader + (alertas proativos) + builder + delta + Slack para um cliente.
@@ -437,6 +444,8 @@ def executar_cliente(
     emoji = cfg.get("slack_emoji", "📊")
     label = cfg.get("slack_label", nome)
 
+    periodo_str, tipo_label, tipo_builder = (a or b for a, b in zip(
+        (periodo_str, tipo_label, tipo_builder), rotulos(periodo, data_inicio, data_fim)))
     logger.info("--- [%s] %s ---", cliente_key, label)
 
     # ── Item 10: Alertas proativos ────────────────────────────────────────
@@ -693,12 +702,12 @@ def executar_cliente_multi_plataforma(
     periodo: str,
     data_inicio,
     data_fim,
-    periodo_str: str,
-    tipo_label: str,
-    tipo_builder: str,
     publicar: bool,
     apenas_alertas: bool = False,
     skip_loader: bool = False,
+    periodo_str: str | None = None,
+    tipo_label: str | None = None,
+    tipo_builder: str | None = None,
 ) -> dict:
     """
     Gera relatórios separados por plataforma (Google Ads, Meta Ads, Shopify)
@@ -712,6 +721,8 @@ def executar_cliente_multi_plataforma(
     emoji = cfg.get("slack_emoji", "📊")
     label = cfg.get("slack_label", nome)
 
+    periodo_str, tipo_label, tipo_builder = (a or b for a, b in zip(
+        (periodo_str, tipo_label, tipo_builder), rotulos(periodo, data_inicio, data_fim)))
     logger.info("--- [%s] %s (multi-plataforma) ---", cliente_key, label)
 
     # Alertas proativos
@@ -1032,9 +1043,7 @@ def main():
         data_inicio = date.fromisoformat(args.data_inicio)
     if args.data_fim:
         data_fim = date.fromisoformat(args.data_fim)
-    periodo_str  = f"{data_inicio.strftime('%d/%m/%Y')} → {data_fim.strftime('%d/%m/%Y')}"
-    tipo_label   = {"diario": "Diário", "semana": "Semanal", "mes": "Mensal"}.get(args.periodo, args.periodo.title())
-    tipo_builder = {"mes": "mensal", "semana": "semanal", "diario": "diario"}.get(args.periodo, "semanal")
+    periodo_str, tipo_label, tipo_builder = rotulos(args.periodo, data_inicio, data_fim)
 
     logger.info("=== Cron Todos os Clientes — %s (%s) ===", tipo_label, periodo_str)
 

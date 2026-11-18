@@ -11,3 +11,15 @@ reportlab>=4.0.0
 requests>=2.31.0
 
 duckdb>=1.5.5
+
+# Usados em produção e antes ausentes daqui (versões testadas na VM FEQ, nov/2026)
+google-cloud-bigquery>=3.47,<4
+google-cloud-storage>=3.17,<4
+google-ads>=35,<36            # a API do Google Ads aposenta versões: subir junto com o loader
+google-api-python-client>=2.201,<3
+google-auth>=2.62,<3
+google-genai>=3.0,<4
+pymongo>=4.19,<5
+python-docx>=1.2,<2
+httpx>=0.28,<1
+slack_sdk>=3.46,<4

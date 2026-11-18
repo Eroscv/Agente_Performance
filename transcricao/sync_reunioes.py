@@ -53,10 +53,7 @@ BQ_DATASET  = os.getenv("BQ_DATASET",  "transcricao")
 BQ_TABLE    = os.getenv("BQ_TABLE",    "transcricao")
 BQ_CREDS    = os.getenv("BQ_CREDS",    str(BASE_DIR / "credentials" / "gdrive-service-account.json"))
 
-MONGO_URI  = os.getenv(
-    "MONGODB_URI",
-    "mongodb+srv://erosvital9_db_user:6oDGHngGEDAgwLce@transcricoesefeedbacks.dmbgfdg.mongodb.net"
-)
+MONGO_URI  = os.getenv("MONGODB_URI", "")  # opcional; Mongo desativado na VPS FEQ (nov/2026)
 MONGO_DB   = "agente_performance"
 MONGO_COL  = "reunioes"
 
@@ -203,10 +200,24 @@ def get_conn() -> sqlite3.Connection:
 
 
 def ja_processado(conn: sqlite3.Connection, file_id: str) -> bool:
-    row = conn.execute(
-        "SELECT id FROM reunioes WHERE fonte_id = ?", (file_id,)
-    ).fetchone()
-    return row is not None
+    """Já processado se estiver no SQLite local OU no MongoDB (fonte que sobreviveu à perda da AWS).
+
+    Falha fechada: se o MongoDB não responder, trata como processado e pula. Reprocessar por engano
+    custa uma chamada ao Claude por arquivo e cria tarefas repetidas no Notion; pular só atrasa.
+    """
+    if conn.execute("SELECT id FROM reunioes WHERE fonte_id = ?", (file_id,)).fetchone():
+        return True
+    if os.getenv("TRANSCRICAO_SEM_MONGO") == "1" or not MONGO_URI:  # sem Mongo configurado: só SQLite
+        return False
+    col = get_mongo_col()
+    if col is None:
+        logger.error("[dedup] MongoDB indisponível — pulando %s para não reprocessar (falha fechada)", file_id)
+        return True
+    try:
+        return col.find_one({"fonte_id": file_id}, {"_id": 1}) is not None
+    except Exception as e:
+        logger.error("[dedup] erro ao consultar MongoDB (%s) — pulando %s", e, file_id)
+        return True
 
 
 def salvar_log(conn, file_id, nome, status, mensagem):
@@ -405,15 +416,16 @@ def parsear_reuniao(texto: str, nome_arquivo: str, doc=None) -> dict:
         ]
         detalhes = "\n\n".join(extras)[:4000]
 
+    from glossario import normalizar  # ASR do Meet: "Sorso Soft" -> "Source Of", "FEC" -> "FEQ"
     return {
         "data":            data_str,
         "hora":            hora_str,
-        "titulo":          titulo,
+        "titulo":          normalizar(titulo),
         "participantes":   participantes,
-        "resumo":          resumo,
-        "decisoes":        decisoes,
-        "proximas_etapas": proximas,
-        "detalhes":        detalhes,
+        "resumo":          normalizar(resumo),
+        "decisoes":        normalizar(decisoes),
+        "proximas_etapas": normalizar(proximas),
+        "detalhes":        normalizar(detalhes),
     }
 
 
@@ -481,7 +493,7 @@ _mongo_client = None
 def get_mongo_col():
     """Retorna a collection MongoDB, criando índice único na primeira vez."""
     global _mongo_client
-    if not _MONGO_AVAILABLE:
+    if not (_MONGO_AVAILABLE and MONGO_URI):
         return None
     try:
         if _mongo_client is None:
@@ -583,31 +595,18 @@ def reformatar_proximas_etapas(texto: str, anthropic_key: str = "") -> str:
 
     Retorna o texto reformatado, ou o original se falhar.
     """
-    if not anthropic_key:
-        import os
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not anthropic_key:
-        return texto
-
     # Se já está no formato correto, não faz nada
     if re.search(r"\[[A-Z][a-z]+ [A-Z][a-z]+\]", texto):
         return texto  # já tem [Nome Sobrenome]
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=anthropic_key)
-        msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
-            max_tokens=1000,
-            system=_REFORMATAR_SYSTEM,
-            messages=[{"role": "user", "content": texto}],
-        )
-        resultado = msg.content[0].text.strip()
+        from utils.llm import gerar
+        resultado = gerar(_REFORMATAR_SYSTEM, texto, max_tokens=1000)
         if resultado == "NÃO_HÁ_TAREFAS" or not resultado:
             return texto
         return resultado
     except Exception as e:
-        logger.warning("[reformatar] Claude falhou: %s", e)
+        logger.warning("[reformatar] LLM falhou: %s", e)
         return texto
 
 

@@ -35,7 +35,7 @@ CLIENT_ID    = "5fabbf799363294310469c9e7db731f1"
 CLIENT_SECRET = os.environ.get("SHOPIFY_POD_CLIENT_SECRET", "").strip()
 REDIRECT_URI = "https://guara.com.br/callback"
 SCOPES       = "read_orders,write_orders,read_products,write_products"
-ENV_FILE     = Path(__file__).parent.parent / ".env"
+ENV_FILE     = Path(__file__).resolve().parent.parent / ".env"
 ENV_KEY      = "SHOPIFY_POD_TOKEN"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -1,0 +1,11 @@
+[Unit]
+Description=Agenda de guara-job@sync_shopify_sessions
+
+[Timer]
+OnCalendar=*-*-* 12:40 UTC
+Persistent=true
+RandomizedDelaySec=120
+Unit=guara-job@sync_shopify_sessions.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,19 @@
+[Unit]
+Description=Backup diário dos bancos da Guará (local 7 dias + GCS)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=guara
+EnvironmentFile=/home/guara/guara-performance/agente-performance/.env
+ExecStart=/home/guara/guara-performance/.venv/bin/python /home/guara/shim/backup_guara.py
+TimeoutStartSec=20min
+SyslogIdentifier=guara-backup
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/guara/backups
+# O RPTN fecha o banco entre ciclos e o -shm some; ler em modo ro exige poder recriá-lo (AUD-15).
+ReadWritePaths=/home/guara/reportana_api_shopify
+MemoryMax=200M
+Nice=15

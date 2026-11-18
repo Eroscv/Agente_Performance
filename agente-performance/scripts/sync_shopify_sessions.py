@@ -96,7 +96,7 @@ def _shopifyql(store: str, token: str, ql_query: str) -> list[dict]:
     Executa uma query ShopifyQL (API 2025-01) e retorna lista de dicts.
     Levanta RuntimeError em caso de parseErrors ou erro HTTP.
     """
-    url = f"https://{store}.myshopify.com/admin/api/{API_VERSION}/graphql.json"
+    url = f"https://{store.removesuffix('.myshopify.com')}.myshopify.com/admin/api/{API_VERSION}/graphql.json"
     headers = {
         "X-Shopify-Access-Token": token,
         "Content-Type": "application/json",
@@ -417,7 +417,7 @@ def main():
     logger.info(
         "Sync sessões concluído: %d sucesso(s), %d erro(s)", sucessos, erros
     )
-    sys.exit(1 if erros > 0 and sucessos == 0 else 0)
+    sys.exit(1 if erros else 0)  # falha parcial também falha a unit (antes: só se tudo falhasse)
 
 
 if __name__ == "__main__":

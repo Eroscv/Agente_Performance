@@ -4,75 +4,68 @@ notion/knowledge_base.py
 Memória de longo prazo do Agente de Performance Guará.
 
 Fluxo:
-  1. Toda resposta gerada é salva como PENDENTE (aprovado=False)
+  1. Toda resposta gerada é salva como PENDENTE (aprovado=0)
   2. Quando o usuário reage com 👍 no Slack, a entrada é APROVADA
   3. Antes de cada resposta do Claude, as top N entradas aprovadas para
      aquele intent/campanha são injetadas no system prompt como "memória"
 
-Database Notion: 🧠 Base de Conhecimento — Source OF
-  ID: 3888a727-a8ff-8163-9753-f7579b8a0bbe
+Armazenamento: SQLite em data/knowledge_base.db (migrado do Notion em 11/2026, na saída da AWS).
+O nome do módulo e a interface ficaram iguais para não mexer nos chamadores; "page_id" agora é o id da linha.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import sqlite3
+import threading
+from contextlib import contextmanager
 from datetime import date
+from pathlib import Path
 from typing import Optional
-
-import requests
-from dotenv import load_dotenv
-
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
 
 logger = logging.getLogger(__name__)
 
-# ── Configuração ──────────────────────────────────────────────────────────────
-
-NOTION_KEY     = os.getenv("NOTION_API_KEY", "")
-NOTION_VER     = "2022-06-28"
-KB_DATABASE_ID = "3888a727-a8ff-8163-9753-f7579b8a0bbe"
-
-_HEADERS = {
-    "Authorization": f"Bearer {NOTION_KEY}",
-    "Notion-Version": NOTION_VER,
-    "Content-Type": "application/json",
-}
+DB_PATH = Path(os.getenv("KB_DB_PATH", Path(__file__).resolve().parent.parent / "data" / "knowledge_base.db"))
 
 # Número máximo de entradas de contexto injetadas no prompt
 MAX_CONTEXT_ENTRIES = 5
 
-# ── Helpers de propriedade ────────────────────────────────────────────────────
+_lock = threading.Lock()  # ponytail: um lock global; volume é de uma escrita por resposta do bot
 
-def _prop_title(text: str) -> dict:
-    return {"title": [{"type": "text", "text": {"content": text[:2000]}}]}
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS kb_entradas (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    pergunta     TEXT NOT NULL,
+    resposta     TEXT NOT NULL,
+    intent       TEXT,
+    campanha     TEXT,
+    periodo      TEXT,
+    aprovado     INTEGER NOT NULL DEFAULT 0,
+    frequencia   INTEGER NOT NULL DEFAULT 1,
+    aprovado_por TEXT,
+    slack_ts     TEXT,
+    data         TEXT NOT NULL,
+    criado_em    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS kb_aprov_intent ON kb_entradas (aprovado, intent, frequencia DESC);
+CREATE INDEX IF NOT EXISTS kb_slack_ts     ON kb_entradas (slack_ts);
+"""
 
-def _prop_rich_text(text: str) -> dict:
-    # Notion rich_text tem limite de 2000 chars por elemento
-    chunks = [text[i:i+2000] for i in range(0, min(len(text), 6000), 2000)]
-    return {"rich_text": [{"type": "text", "text": {"content": c}} for c in chunks]}
 
-def _prop_select(name: str) -> dict:
-    return {"select": {"name": name}}
+@contextmanager
+def _conn():
+    with _lock:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        c = sqlite3.connect(DB_PATH, timeout=10)
+        c.row_factory = sqlite3.Row
+        try:
+            c.executescript(_SCHEMA)
+            yield c
+            c.commit()
+        finally:
+            c.close()
 
-def _prop_number(n: int) -> dict:
-    return {"number": n}
-
-def _prop_checkbox(v: bool) -> dict:
-    return {"checkbox": v}
-
-def _prop_date(d: str) -> dict:
-    return {"date": {"start": d}}
-
-def _extract_rich_text(prop: dict) -> str:
-    return "".join(t.get("plain_text", "") for t in prop.get("rich_text", []))
-
-def _extract_title(prop: dict) -> str:
-    return "".join(t.get("plain_text", "") for t in prop.get("title", []))
-
-def _extract_select(prop: dict) -> Optional[str]:
-    sel = prop.get("select")
-    return sel["name"] if sel else None
 
 # ── CRUD principal ────────────────────────────────────────────────────────────
 
@@ -85,87 +78,35 @@ def salvar_entrada(
     data_fim:   Optional[str] = None,
     slack_msg_ts: Optional[str] = None,
 ) -> Optional[str]:
-    """
-    Salva uma nova entrada (não aprovada) na base de conhecimento.
-    Retorna o page_id criado, ou None em caso de erro.
-    """
-    # Título = resumo da pergunta (primeiros 100 chars)
-    titulo = pergunta[:100]
+    """Salva uma nova entrada (não aprovada). Retorna o id criado, ou None em caso de erro."""
     periodo = f"{data_ini} → {data_fim}" if data_ini and data_fim else (data_ini or "")
-
-    properties = {
-        "Pergunta":   _prop_title(titulo),
-        "Resposta":   _prop_rich_text(resposta),
-        "Intent":     _prop_select(intent),
-        "Aprovado":   _prop_checkbox(False),
-        "Frequencia": _prop_number(1),
-        "Data":       _prop_date(date.today().isoformat()),
-    }
-    if campanha:
-        properties["Campanha"] = _prop_rich_text(campanha)
-    if periodo:
-        properties["Periodo"] = _prop_rich_text(periodo)
-    if slack_msg_ts:
-        properties["Aprovado_por"] = _prop_rich_text(f"pending:{slack_msg_ts}")
-
-    payload = {
-        "parent": {"database_id": KB_DATABASE_ID},
-        "properties": properties,
-    }
-
     try:
-        r = requests.post(
-            "https://api.notion.com/v1/pages",
-            headers=_HEADERS, json=payload, timeout=10
-        )
-        if r.status_code == 200:
-            page_id = r.json()["id"]
-            logger.debug("KB: entrada salva %s (intent=%s)", page_id, intent)
-            return page_id
-        else:
-            logger.warning("KB: erro ao salvar entrada: %s", r.json().get("message"))
-            return None
+        with _conn() as c:
+            cur = c.execute(
+                "INSERT INTO kb_entradas (pergunta, resposta, intent, campanha, periodo, slack_ts, data)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (pergunta, resposta, intent, campanha, periodo, slack_msg_ts, date.today().isoformat()),
+            )
+            logger.debug("KB: entrada salva %s (intent=%s)", cur.lastrowid, intent)
+            return str(cur.lastrowid)
     except Exception as e:
         logger.warning("KB: exceção ao salvar: %s", e)
         return None
 
 
 def aprovar_entrada(page_id: str, aprovado_por: str = "") -> bool:
-    """
-    Marca uma entrada como aprovada (👍 recebido no Slack).
-    Também incrementa frequência e registra quem aprovou.
-    """
-    # Busca entrada atual para pegar frequência
+    """Marca uma entrada como aprovada (👍 no Slack), incrementa frequência e registra quem aprovou."""
     try:
-        r = requests.get(
-            f"https://api.notion.com/v1/pages/{page_id}",
-            headers=_HEADERS, timeout=5
-        )
-        if r.status_code != 200:
-            logger.warning("KB: página não encontrada: %s", page_id)
-            return False
-
-        page = r.json()
-        props = page.get("properties", {})
-        freq_atual = props.get("Frequencia", {}).get("number") or 0
-
-        # Atualiza: aprovado=True, frequência+1, aprovado_por
-        patch = {
-            "properties": {
-                "Aprovado":   _prop_checkbox(True),
-                "Frequencia": _prop_number(freq_atual + 1),
-                "Aprovado_por": _prop_rich_text(aprovado_por[:200] if aprovado_por else "👍 Slack"),
-            }
-        }
-        r2 = requests.patch(
-            f"https://api.notion.com/v1/pages/{page_id}",
-            headers=_HEADERS, json=patch, timeout=5
-        )
-        ok = r2.status_code == 200
+        with _conn() as c:
+            ok = c.execute(
+                "UPDATE kb_entradas SET aprovado = 1, frequencia = frequencia + 1, aprovado_por = ? WHERE id = ?",
+                ((aprovado_por or "👍 Slack")[:200], int(page_id)),
+            ).rowcount == 1
         if ok:
             logger.info("KB: entrada aprovada %s por %s", page_id, aprovado_por)
+        else:
+            logger.warning("KB: entrada não encontrada: %s", page_id)
         return ok
-
     except Exception as e:
         logger.warning("KB: exceção ao aprovar: %s", e)
         return False
@@ -174,22 +115,19 @@ def aprovar_entrada(page_id: str, aprovado_por: str = "") -> bool:
 def incrementar_frequencia(page_id: str) -> bool:
     """Incrementa o contador de frequência quando a mesma pergunta é feita novamente."""
     try:
-        r = requests.get(
-            f"https://api.notion.com/v1/pages/{page_id}",
-            headers=_HEADERS, timeout=5
-        )
-        if r.status_code != 200:
-            return False
-        freq = r.json().get("properties", {}).get("Frequencia", {}).get("number") or 0
-        r2 = requests.patch(
-            f"https://api.notion.com/v1/pages/{page_id}",
-            headers=_HEADERS,
-            json={"properties": {"Frequencia": _prop_number(freq + 1)}},
-            timeout=5
-        )
-        return r2.status_code == 200
+        with _conn() as c:
+            return c.execute("UPDATE kb_entradas SET frequencia = frequencia + 1 WHERE id = ?",
+                             (int(page_id),)).rowcount == 1
     except Exception:
         return False
+
+
+def _casa_campanha(campanha: Optional[str], da_entrada: Optional[str]) -> bool:
+    # Mesmo fuzzy simples da versão Notion: substring nos dois sentidos; entrada sem campanha sempre casa.
+    if not campanha or not da_entrada:
+        return True
+    a, b = campanha.lower(), da_entrada.lower()
+    return a in b or b in a
 
 
 def buscar_contexto(
@@ -197,87 +135,36 @@ def buscar_contexto(
     campanha: Optional[str] = None,
     limit: int = MAX_CONTEXT_ENTRIES,
 ) -> list[dict]:
-    """
-    Busca as entradas aprovadas mais frequentes para um intent/campanha.
-    Retorna lista de dicts com pergunta, resposta, intent, campanha, frequencia.
-    Usado para injetar contexto no prompt do Claude.
-    """
-    filtros = [{"property": "Aprovado", "checkbox": {"equals": True}}]
-
-    if intent:
-        filtros.append({"property": "Intent", "select": {"equals": intent}})
-
-    payload: dict = {
-        "filter": {"and": filtros} if len(filtros) > 1 else filtros[0],
-        "sorts": [{"property": "Frequencia", "direction": "descending"}],
-        "page_size": limit,
-    }
-
+    """Entradas aprovadas mais frequentes para um intent/campanha, para injetar no prompt do Claude."""
+    sql = ("SELECT id, pergunta, resposta, intent, campanha, periodo, frequencia FROM kb_entradas"
+           " WHERE aprovado = 1" + (" AND intent = ?" if intent else "") +
+           " ORDER BY frequencia DESC, id DESC LIMIT 200")
     try:
-        r = requests.post(
-            f"https://api.notion.com/v1/databases/{KB_DATABASE_ID}/query",
-            headers=_HEADERS, json=payload, timeout=10
-        )
-        if r.status_code != 200:
-            logger.warning("KB: erro na busca: %s", r.json().get("message"))
-            return []
-
-        results = []
-        for page in r.json().get("results", []):
-            props = page.get("properties", {})
-            entry = {
-                "page_id":   page["id"],
-                "pergunta":  _extract_title(props.get("Pergunta", {})),
-                "resposta":  _extract_rich_text(props.get("Resposta", {})),
-                "intent":    _extract_select(props.get("Intent", {})),
-                "campanha":  _extract_rich_text(props.get("Campanha", {})),
-                "periodo":   _extract_rich_text(props.get("Periodo", {})),
-                "frequencia": props.get("Frequencia", {}).get("number", 0),
-            }
-            # Filtra por campanha se especificada (fuzzy simples)
-            if campanha and entry["campanha"]:
-                camp_lower = campanha.lower()
-                if camp_lower not in entry["campanha"].lower() and entry["campanha"].lower() not in camp_lower:
-                    continue
-            results.append(entry)
-
-        return results[:limit]
-
+        with _conn() as c:
+            linhas = c.execute(sql, (intent,) if intent else ()).fetchall()
     except Exception as e:
         logger.warning("KB: exceção na busca de contexto: %s", e)
         return []
+    res = [{"page_id": str(r["id"]), "pergunta": r["pergunta"], "resposta": r["resposta"],
+            "intent": r["intent"], "campanha": r["campanha"] or "", "periodo": r["periodo"] or "",
+            "frequencia": r["frequencia"]}
+           for r in linhas if _casa_campanha(campanha, r["campanha"])]
+    return res[:limit]
 
 
 def buscar_por_slack_ts(slack_ts: str) -> Optional[str]:
-    """
-    Busca o page_id da entrada associada a um timestamp de mensagem Slack.
-    Usado para encontrar a entrada quando o usuário dá 👍 em uma resposta.
-    """
+    """id da entrada associada a uma mensagem do Slack (para o 👍)."""
     try:
-        r = requests.post(
-            f"https://api.notion.com/v1/databases/{KB_DATABASE_ID}/query",
-            headers=_HEADERS,
-            json={
-                "filter": {
-                    "property": "Aprovado_por",
-                    "rich_text": {"contains": f"pending:{slack_ts}"}
-                },
-                "page_size": 1,
-            },
-            timeout=10
-        )
-        if r.status_code != 200:
-            return None
-        results = r.json().get("results", [])
-        return results[0]["id"] if results else None
+        with _conn() as c:
+            r = c.execute("SELECT id FROM kb_entradas WHERE slack_ts = ? ORDER BY id DESC LIMIT 1",
+                          (slack_ts,)).fetchone()
+        return str(r["id"]) if r else None
     except Exception:
         return None
 
 
 def formatar_contexto_para_prompt(entradas: list[dict]) -> str:
-    """
-    Formata as entradas aprovadas como bloco de texto para injetar no prompt do Claude.
-    """
+    """Formata as entradas aprovadas como bloco de texto para injetar no prompt do Claude."""
     if not entradas:
         return ""
 
@@ -303,33 +190,14 @@ def formatar_contexto_para_prompt(entradas: list[dict]) -> str:
 
 def listar_entradas(apenas_aprovadas: bool = False, limit: int = 20) -> list[dict]:
     """Lista entradas para administração / debug."""
-    payload: dict = {"page_size": limit, "sorts": [
-        {"property": "Frequencia", "direction": "descending"}
-    ]}
-    if apenas_aprovadas:
-        payload["filter"] = {"property": "Aprovado", "checkbox": {"equals": True}}
-
+    sql = ("SELECT id, pergunta, intent, campanha, aprovado, frequencia, data FROM kb_entradas" +
+           (" WHERE aprovado = 1" if apenas_aprovadas else "") + " ORDER BY frequencia DESC, id DESC LIMIT ?")
     try:
-        r = requests.post(
-            f"https://api.notion.com/v1/databases/{KB_DATABASE_ID}/query",
-            headers=_HEADERS, json=payload, timeout=10
-        )
-        if r.status_code != 200:
-            return []
-
-        results = []
-        for page in r.json().get("results", []):
-            props = page.get("properties", {})
-            results.append({
-                "page_id":   page["id"],
-                "pergunta":  _extract_title(props.get("Pergunta", {})),
-                "intent":    _extract_select(props.get("Intent", {})),
-                "campanha":  _extract_rich_text(props.get("Campanha", {})),
-                "aprovado":  props.get("Aprovado", {}).get("checkbox", False),
-                "frequencia": props.get("Frequencia", {}).get("number", 0),
-                "data":       (props.get("Data", {}).get("date") or {}).get("start"),
-            })
-        return results
+        with _conn() as c:
+            return [{"page_id": str(r["id"]), "pergunta": r["pergunta"][:100], "intent": r["intent"],
+                     "campanha": r["campanha"] or "", "aprovado": bool(r["aprovado"]),
+                     "frequencia": r["frequencia"], "data": r["data"]}
+                    for r in c.execute(sql, (limit,))]
     except Exception as e:
         logger.warning("KB listar_entradas erro: %s", e)
         return []
