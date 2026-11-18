@@ -68,7 +68,7 @@ A regra de canal fica em uma função por cliente no gold, nunca repetida em con
 | Escrever dados | só as contas de serviço das cargas (VM e GitHub Actions) | nenhuma pessoa escreve dado à mão |
 | Ler | uma conta de serviço só de leitura por app (BigQuery Data Viewer no dataset que ele usa) | a chave fica na plataforma do app (Vercel, VM), nunca no código |
 | Apagar tabela | Eros, com revisão | só depois de conferir em `INFORMATION_SCHEMA.JOBS` que nada leu a tabela em 30 dias |
-| Testes | qualquer um | num dataset ou projeto de teste separado, nunca em `guara_performance`, `ingestao` ou `correlacao` |
+| Testes | qualquer um | no dataset `dev` (criado em 18/11; toda tabela expira em 7 dias), nunca em `guara_performance`, `ingestao` ou `correlacao` |
 
 ## 6. Apps que vão consumir o banco
 
@@ -76,10 +76,12 @@ A regra de canal fica em uma função por cliente no gold, nunca repetida em con
 |---|---|---|---|
 | Agente de Performance | tenta o BigQuery primeiro, mas na camada bruta (`ads_diario`) com tradução de SQL por regex que perdia colunas e escondia erros; parte das consultas lia direto o banco local (SQLite/DuckDB). Em migração (PR 13): views de consumo `correlacao.v_agente_performance`, `v_agente_campanhas`, `v_agente_anuncios` e `v_agente_shopify_diario`, com as mesmas colunas das views locais | as views de consumo acima; depois `fato_performance_diaria` e `fato_cac` para os números de negócio | `correlacao` |
 | Artefatos recorrentes (painéis) | painel ao vivo (PR 5) e API do painel da Source Of leem `fato_performance_diaria` e as tabelas `ing_ads_diario` e `ing_shopify_resumo_diario` da silver | as mesmas informações, por views de consumo no gold (`v_painel_campanhas`, `v_painel_loja`), para nenhum app ler a silver | `correlacao` |
-| Referenciador de ads | ainda não grava no banco (código pronto) | cópia semanal das referências | `referencias` (novo) |
-| AprovaPost | ainda não grava no banco | criativos, versões, status, datas, cliente e responsável, em lote diário. Os arquivos ficam no R2 e o banco guarda só o caminho | `aprovapost` (novo) |
+| Referenciador de ads | carga testada em 18/11 no dataset `referencias_teste` (tabelas `marcas`, `anuncios`, `salvos`), já removido; produção depende do deploy na VM | cópia semanal das marcas acompanhadas, anúncios coletados e salvos | `referencias` (novo) |
+| AprovaPost | carga diária testada em 18/11 no dataset `aprovapost_teste` (tabelas `criativos`, `versoes`, `decisoes`, `acessos_cliente`), já removido; produção depende do deploy na VM e do id da agência no Neon | criativos, versões, decisões, datas, cliente e responsável, em lote diário. Os arquivos ficam no Cloudflare R2 e o banco guarda só o caminho | `aprovapost` (novo) |
 | Central de leads | ainda não existe no banco (só `eco1100.leads_eco_1100`, de uma LP) | leads por fonte, ver seção 7 | `leads` (novo) |
 | Sistema de alertas técnicos | alerta de frescor (PR 3) lê a hora de atualização do gold | `alertas_qualidade_dados`, `qualidade_dados_checks`, `log_cargas`, `log_alteracoes_bq` e a hora da última carga de cada fonte | `correlacao`, `ingestao` |
+
+As cargas do AprovaPost e do Referenciador usam a conta de serviço `aprovapost-carga` e ficam na região US, a mesma dos outros datasets.
 
 ## 7. Tabelas da Central de leads (primeira versão)
 
@@ -91,6 +93,8 @@ para depois. Mesmo desenho de camadas:
 | Bruto | `leads.raw_lp_formulario`, `leads.raw_meta_lead_ads`, `leads.raw_whatsapp` | a resposta de cada fonte como veio, com `recebido_em` |
 | Tratado | `leads.ing_leads` | `lead_id`, `cliente`, `fonte` (lp, meta, whatsapp), `recebido_em`, `nome`, `email`, `telefone`, `utm_source`, `utm_campaign`, `campanha_id`, `formulario_id`, `mensagem` |
 | Pronto para uso | `correlacao.fato_leads` | um lead por pessoa e cliente (sem duplicata por e-mail ou telefone), com a primeira fonte e a data |
+
+Em 18/11 foram criados o dataset `leads` e as tabelas brutas e a tratada, vazias (`bigquery/scripts/datasets/leads.sql`); `correlacao.fato_leads` entra com a carga.
 
 No WhatsApp entram só os campos essenciais: telefone, nome do contato, data da primeira mensagem
 e a campanha de origem, se houver. O texto das conversas não entra no banco.
