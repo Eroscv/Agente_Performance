@@ -1,0 +1,11 @@
+[Unit]
+Description=Guará — carga do BigQuery a cada 3h (02:10, 05:10, ... UTC; fora dos syncs da VM e do ciclo de 3h)
+
+[Timer]
+OnCalendar=*-*-* 02/3:10:00 UTC
+Persistent=true
+RandomizedDelaySec=60
+Unit=guara-carga-bq.service
+
+[Install]
+WantedBy=timers.target
