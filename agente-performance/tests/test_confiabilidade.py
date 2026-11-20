@@ -172,3 +172,21 @@ def test_saude_swap_e_rptn(tmp_path):
     assert rptn(tmp_path, "active", agora) == ["RPTN: nenhum ciclo registrado há 9 h"]
     assert rptn(tmp_path, "failed", agora) == ["RPTN: serviço guara-rptn failed"]
     assert rptn(tmp_path / "nao-existe") == []   # VM sem RPTN
+
+
+def test_saude_rptn_sem_envio(tmp_path):
+    """12-20/11/2026: o RPTN rodava todo ciclo sem enviar ninguém e a saúde só olhava status='erro'."""
+    import sqlite3, time
+    from datetime import datetime, timezone
+    from scripts.saude import rptn
+    (tmp_path / "reports").mkdir()
+    (tmp_path / "reports" / "sync_loop.log").write_text("x")
+    agora = datetime(2026, 11, 20, 18, tzinfo=timezone.utc).timestamp()
+    with sqlite3.connect(tmp_path / "leads_reportana.db") as c:
+        c.execute("CREATE TABLE seg_rptn_new (shopify_customer_id TEXT, status TEXT, erro TEXT, enviado_em TEXT)")
+        c.execute("INSERT INTO seg_rptn_new VALUES ('1', 'enviado', NULL, '2026-11-12T10:00:00+00:00')")
+    import os; os.utime(tmp_path / "reports" / "sync_loop.log", (agora, agora))
+    assert rptn(tmp_path, "active", agora) == ["RPTN: nenhum cliente enviado à Reportana há 8 dias (último em 2026-11-12)"]
+    with sqlite3.connect(tmp_path / "leads_reportana.db") as c:
+        c.execute("UPDATE seg_rptn_new SET enviado_em='2026-11-19T10:00:00+00:00'")
+    assert rptn(tmp_path, "active", agora) == []
