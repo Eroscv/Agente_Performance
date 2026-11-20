@@ -190,3 +190,15 @@ def test_saude_rptn_sem_envio(tmp_path):
     with sqlite3.connect(tmp_path / "leads_reportana.db") as c:
         c.execute("UPDATE seg_rptn_new SET enviado_em='2026-11-19T10:00:00+00:00'")
     assert rptn(tmp_path, "active", agora) == []
+
+
+def test_ciclo_3h_sincroniza_todos_os_dias_que_confere(monkeypatch):
+    """Sync de 2 dias × conferência de 3: conversão tardia do Google virava 'falha técnica' à noite (20/11)."""
+    from scripts import ciclo_3h
+    dias = []
+    for mod in (ciclo_3h.sync_meta_diario, ciclo_3h.sync_gads_diario):
+        monkeypatch.setattr(mod, "sync_cliente", lambda cli, cfg, d: dias.append(d) or True)
+    monkeypatch.setattr(ciclo_3h.cron_shopify_sync, "sync_cliente", lambda *a: True)
+    monkeypatch.setattr(ciclo_3h.cron_shopify_sync, "CLIENTES_SHOPIFY", [{"key": c} for c in ciclo_3h.CLIENTES])
+    assert ciclo_3h._sincronizar({c: {} for c in ciclo_3h.CLIENTES}) == []
+    assert dias and min(dias) > ciclo_3h.DIAS_CONFERIDOS  # hoje + os dias fechados conferidos
