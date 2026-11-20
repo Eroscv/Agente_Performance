@@ -11,7 +11,7 @@
 #
 # Fallback: etapa que falha é tentada de novo (SYNC_TENTATIVAS, padrão 3, com
 # SYNC_ESPERA_S segundos entre tentativas, padrão 120). Se alguma etapa terminar
-# falhando, o script sai com código 1 e, se SLACK_WEBHOOK_URL estiver no ambiente
+# falhando, o script sai com código 1 e, se SLACK_BOT_TOKEN e SLACK_ALERT_CHANNEL estiverem no ambiente
 # ou no .env, avisa no Slack quais etapas falharam. Carga sem falha também avisa
 # (hora, duração e etapas), a menos que SLACK_AVISAR_SUCESSO=0.
 #
@@ -67,15 +67,27 @@ run_step() {
     FALHAS+=("$desc")
 }
 
-# Posta no Slack (SLACK_WEBHOOK_URL do ambiente ou do .env). Quebra de linha no texto: \\n.
-avisar_slack() {
-    local url="${SLACK_WEBHOOK_URL:-}"
-    if [ -z "$url" ] && [ -f "$BASE_DIR/.env" ]; then
-        url="$(grep -m1 '^SLACK_WEBHOOK_URL=' "$BASE_DIR/.env" | cut -d= -f2- | tr -d "\"'")"
+# Valor de uma variável do ambiente ou, se ausente, do .env.
+env_var() {
+    local v="${!1:-}"
+    if [ -z "$v" ] && [ -f "$BASE_DIR/.env" ]; then
+        v="$(grep -m1 "^$1=" "$BASE_DIR/.env" | cut -d= -f2- | tr -d "\"'")"
     fi
-    [ -z "$url" ] && return 0
-    curl -sS -m 15 -X POST -H 'Content-Type: application/json' \
-        --data "{\"text\":\"$1\"}" "$url" >> "$LOG_FILE" 2>&1 || true
+    printf '%s' "$v"
+}
+
+# Posta em SLACK_ALERT_CHANNEL (#alertas-tecnicos) com o bot do SLACK_BOT_TOKEN, o mesmo do
+# post de saúde. Sem token ou canal, não posta. Quebra de linha no texto: \\n.
+avisar_slack() {
+    local token canal
+    token="$(env_var SLACK_BOT_TOKEN)"
+    canal="$(env_var SLACK_ALERT_CHANNEL)"
+    [ -z "$token" ] || [ -z "$canal" ] && return 0
+    # token pelo header num fd, fora da linha de comando (ps)
+    curl -sS -m 15 -X POST https://slack.com/api/chat.postMessage \
+        -H 'Content-Type: application/json; charset=utf-8' \
+        -H @<(printf 'Authorization: Bearer %s\n' "$token") \
+        --data "{\"channel\":\"$canal\",\"text\":\"$1\"}" >> "$LOG_FILE" 2>&1 || true
     echo >> "$LOG_FILE"
 }
 
