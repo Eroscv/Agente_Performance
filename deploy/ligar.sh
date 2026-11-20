@@ -33,7 +33,7 @@ for par in sync_meta_diario:META_ACCESS_TOKEN sync_gads_diario:GOOGLE_ADS_REFRES
 done
 for t in sync-meta:META_ACCESS_TOKEN meta-semanal:META_ACCESS_TOKEN sync-gads:GOOGLE_ADS_REFRESH_TOKEN \
          sync-shopify:SHOPIFY_TOKEN sync-sessoes:SHOPIFY_TOKEN dashboard-ingest:DASHBOARD_INGEST_TOKEN \
-         relatorio-diario:SLACK_BOT_TOKEN relatorio-pod:SLACK_BOT_TOKEN qualidade:META_ACCESS_TOKEN saude:SLACK_BOT_TOKEN tokens:SLACK_BOT_TOKEN; do
+         relatorio-diario:SLACK_BOT_TOKEN relatorio-pod:SLACK_BOT_TOKEN qualidade:META_ACCESS_TOKEN saude:SLACK_BOT_TOKEN tokens:SLACK_BOT_TOKEN carga-bq:GOOGLE_ADS_REFRESH_TOKEN; do
   tem $P ${t#*:} && sudo systemctl enable --now guara-${t%%:*}.timer >/dev/null 2>&1 && echo "timer ${t%%:*}: ligado"
 done
 if tem $P NOTION_API_KEY && tem $P GEMINI_API_KEY && sudo test -s /home/guara/guara-performance/transcricao/credentials/gdrive-service-account.json; then

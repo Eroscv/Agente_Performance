@@ -1,0 +1,27 @@
+[Unit]
+Description=Guará — carga do BigQuery (cron_master_sync da main: Shopify, Meta, Google, Yampi e camadas silver/gold)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=guara
+# Código da branch main (deploy.sh <clone> origin/main ... guara-bq agente-performance), separado do
+# guara-performance (migracao-vps-feq). O .env é link para o do guara-performance: mesmos segredos e
+# tokens Shopify renovados pelo guara-shopify-token.timer.
+WorkingDirectory=/home/guara/guara-bq/agente-performance
+Environment=PATH=/home/guara/guara-bq/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TZ=America/Sao_Paulo
+# Sucesso a cada 3h não vai ao Slack; falha aparece no post de saúde (rotina guara-*) e no alerta de frescor do GitHub.
+Environment=SLACK_AVISAR_SUCESSO=0
+ExecStart=/usr/bin/env bash /home/guara/guara-bq/agente-performance/scripts/cron_master_sync.sh
+# Carga normal ~20 min; acima de 90 está travada.
+TimeoutStartSec=90min
+SyslogIdentifier=guara-carga-bq
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/guara/guara-bq /home/guara/guara-performance/agente-performance/.env
+MemoryHigh=250M
+MemoryMax=300M
+CPUQuota=60%
+Nice=10

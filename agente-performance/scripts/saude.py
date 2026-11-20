@@ -22,7 +22,7 @@ import sqlite3
 import time
 import subprocess
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -33,6 +33,7 @@ SWAP_MAX_MB = 300
 DISCO_MIN_GB = 2
 RPTN = Path("/home/guara/reportana_api_shopify")
 RPTN_CICLO_MAX_H = 8   # intervalo adaptativo vai até 4 h; 2 ciclos sem log = parado
+RPTN_SEM_ENVIO_DIAS = 3  # a Source Of ganha clientes todo dia; 3 dias sem envio = sync travado (12-20/11/2026)
 
 
 def _show(units: list[str], props: str) -> list[dict]:
@@ -82,9 +83,21 @@ def rptn(raiz: Path = RPTN, ativo: str | None = None, agora: float | None = None
                 n, motivo = c.execute(f"SELECT COUNT(*), MAX(erro) FROM {t} WHERE status='erro'").fetchone()
                 if n:
                     out.append(f"RPTN: {n} cliente(s) presos em erro em {t} (ex.: {' '.join(str(motivo).split())[:80]})")
+            ultimo = max((u for t in tabelas if (u := _ultimo_envio(c, t))), default=None)
+            if ultimo:
+                dias = ((agora or time.time()) - datetime.fromisoformat(ultimo).timestamp()) / 86400
+                if dias > RPTN_SEM_ENVIO_DIAS:
+                    out.append(f"RPTN: nenhum cliente enviado à Reportana há {dias:.0f} dias (último em {ultimo[:10]})")
     except sqlite3.Error as e:
         out.append(f"RPTN: banco ilegível ({e})")
     return out
+
+
+def _ultimo_envio(c, tabela: str) -> str | None:
+    try:
+        return c.execute(f"SELECT MAX(enviado_em) FROM {tabela} WHERE status='enviado'").fetchone()[0]
+    except sqlite3.Error:
+        return None  # tabela sem enviado_em (seg_last_edit e afins)
 
 
 def _swap_mb() -> int:
