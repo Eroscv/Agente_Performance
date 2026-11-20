@@ -53,9 +53,9 @@ from google.oauth2 import service_account as _sa
 BASE_DIR   = Path(__file__).parent.parent
 ENV_FILE   = BASE_DIR / ".env"
 DB_PATH    = BASE_DIR / "data" / "performance" / "pod_kombucha" / "dooki.db"
-BQ_CREDS   = Path(os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or BASE_DIR / "credentials" / "bq-service-account.json")  # VM: .env aponta a credencial; notebook: caminho antigo
 
 load_dotenv(ENV_FILE)
+BQ_CREDS   = Path(os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or BASE_DIR / "credentials" / "bq-service-account.json")  # depois do load_dotenv: na VM o .env aponta a credencial; notebook: caminho antigo
 
 BQ_PROJECT = "guara-db"
 BQ_DATASET = "guara_performance"
