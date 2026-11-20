@@ -53,7 +53,7 @@ from google.oauth2 import service_account as _sa
 BASE_DIR   = Path(__file__).parent.parent
 ENV_FILE   = BASE_DIR / ".env"
 DB_PATH    = BASE_DIR / "data" / "performance" / "pod_kombucha" / "dooki.db"
-BQ_CREDS   = BASE_DIR / "credentials" / "bq-service-account.json"
+BQ_CREDS   = Path(os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or BASE_DIR / "credentials" / "bq-service-account.json")  # VM: .env aponta a credencial; notebook: caminho antigo
 
 load_dotenv(ENV_FILE)
 
@@ -390,7 +390,9 @@ def main():
             )
             client = bq.Client(project=BQ_PROJECT, credentials=creds)
         except Exception as e:
+            # sem BigQuery a carga não serve: falhar alto em vez de seguir só no SQLite (20/11/2026: seguia e saía 0)
             logger.error("[BQ] Não foi possível criar client: %s", e)
+            raise SystemExit(1)
 
     for loja in lojas:
         sync_loja(client, loja, data_ini, data_fim, args.dry_run)

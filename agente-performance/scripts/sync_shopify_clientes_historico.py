@@ -61,7 +61,7 @@ CLIENTE      = "pod_kombucha"
 BQ_PROJECT   = "guara-db"
 BQ_DATASET   = "guara_performance"
 BQ_TABLE     = "shopify_clientes_historico"
-BQ_CREDS     = BASE_DIR / "credentials" / "bq-service-account.json"
+BQ_CREDS     = Path(os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or BASE_DIR / "credentials" / "bq-service-account.json")  # VM: .env aponta a credencial; notebook: caminho antigo
 JANELA_MAX   = 60   # limite da API de pedidos sem read_all_orders
 ANTES_JANELA = datetime(1970, 1, 1, tzinfo=timezone.utc)
 
