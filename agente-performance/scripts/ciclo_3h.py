@@ -35,6 +35,10 @@ log = logging.getLogger("ciclo_3h")
 CLIENTES = ("source_of", "pod_kombucha")
 DADOS = BASE_DIR / "data" / "performance"
 TOLERANCIA = 0.20  # desvio aceito contra o plano antes de alertar
+DIAS_CONFERIDOS = 3  # dias fechados comparados com a API
+# sync cobre hoje + os dias conferidos: com 2 dias, conversão tardia do Google nos dias mais antigos só
+# entrava na sync das 06:30 e o ciclo acusava divergência à tarde/noite (20/11/2026)
+DIAS_SYNC = DIAS_CONFERIDOS + 1
 PLATAFORMAS = {"meta_ads": "Meta", "google_ads": "Google"}
 BR = str.maketrans(",.", ".,")  # 1,234.50 -> 1.234,50
 
@@ -43,8 +47,8 @@ def _sincronizar(cfg: dict) -> list[str]:
     problemas = []
     shopify = {c["key"]: c for c in cron_shopify_sync.CLIENTES_SHOPIFY}
     for cli in CLIENTES:
-        etapas = [("Meta", lambda: sync_meta_diario.sync_cliente(cli, cfg[cli], 2)),
-                  ("Google Ads", lambda: sync_gads_diario.sync_cliente(cli, cfg[cli], 2)),
+        etapas = [("Meta", lambda: sync_meta_diario.sync_cliente(cli, cfg[cli], DIAS_SYNC)),
+                  ("Google Ads", lambda: sync_gads_diario.sync_cliente(cli, cfg[cli], DIAS_SYNC)),
                   ("Shopify", lambda: cron_shopify_sync.sync_cliente(shopify[cli], 2, False))]
         for nome, rodar in etapas:
             try:
@@ -159,7 +163,7 @@ def main() -> int:
     hoje = hoje_brt()
 
     tecnicos = _sincronizar(cfg) + _frescor(cfg)
-    tecnicos += qualidade_dados.verificar(hoje - timedelta(days=3), hoje - timedelta(days=1), set(CLIENTES))
+    tecnicos += qualidade_dados.verificar(hoje - timedelta(days=DIAS_CONFERIDOS), hoje - timedelta(days=1), set(CLIENTES))
     problemas = tecnicos + _plano_semana(cfg)
 
     if not problemas:
