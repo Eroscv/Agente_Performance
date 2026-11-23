@@ -1,0 +1,12 @@
+[Unit]
+Description=Agenda de guara-job@pod-cron
+
+[Timer]
+OnCalendar=*-*-* 11:30 UTC
+OnCalendar=*-*-* 19:30 UTC
+Persistent=true
+RandomizedDelaySec=120
+Unit=guara-job@pod-cron.service
+
+[Install]
+WantedBy=timers.target

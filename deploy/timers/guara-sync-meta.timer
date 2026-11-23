@@ -1,0 +1,11 @@
+[Unit]
+Description=Agenda de guara-job@sync_meta_diario
+
+[Timer]
+OnCalendar=*-*-* 06:00 UTC
+Persistent=true
+RandomizedDelaySec=120
+Unit=guara-job@sync_meta_diario.service
+
+[Install]
+WantedBy=timers.target

@@ -22,6 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import criar_tarefas_notion as _impl  # noqa: E402
 
 from .base import BaseSubagente  # noqa: E402
+from utils.idempotencia import uma_vez  # noqa: E402  (agente-performance no PYTHONPATH)
+
+
+class _CardFalhou(Exception):
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +109,10 @@ class ComunicacaoAgent(BaseSubagente):
             try:
                 ja_criadas = self.tarefas_ja_criadas(fonte_id)
             except Exception as e:
-                logger.warning("  ⚠️  Falha ao consultar dedup no Notion (%s) — seguindo sem dedup", e)
-                ja_criadas = set()
+                # Falha fechada: sem dedup confiável, não cria nada desta reunião agora (tenta na próxima execução).
+                logger.error("  ⛔ Dedup no Notion indisponível (%s) — reunião %s pulada", e, fonte_id)
+                erros += 1
+                continue
 
             for tarefa in tarefas:
                 if tarefa["titulo"] in ja_criadas:
@@ -113,15 +120,24 @@ class ComunicacaoAgent(BaseSubagente):
                     duplicados += 1
                     continue
 
-                ok = self.criar_card(
-                    tarefa=tarefa,
-                    reuniao_data=data_r,
-                    reuniao_titulo=titulo,
-                    fonte_id=fonte_id,
-                    clientes=clientes,
-                    area=area,
-                    dry_run=dry_run,
-                )
+                # Trava principal: uma chave por (reunião, tarefa) no livro-razão de efeitos.
+                chave = f"notion_tarefa:{fonte_id}:{' '.join(tarefa['titulo'].lower().split())}"
+                if dry_run:
+                    ok = self.criar_card(tarefa=tarefa, reuniao_data=data_r, reuniao_titulo=titulo,
+                                         fonte_id=fonte_id, clientes=clientes, area=area, dry_run=True)
+                else:
+                    try:
+                        with uma_vez(chave) as pode:
+                            if not pode:
+                                logger.info("    ⏭  Já criado (livro-razão): %s", tarefa["titulo"])
+                                duplicados += 1
+                                continue
+                            ok = self.criar_card(tarefa=tarefa, reuniao_data=data_r, reuniao_titulo=titulo,
+                                                 fonte_id=fonte_id, clientes=clientes, area=area, dry_run=False)
+                            if not ok:
+                                raise _CardFalhou  # libera a chave para nova tentativa
+                    except _CardFalhou:
+                        ok = False
                 if ok:
                     logger.info("    ✅ %s → %s", tarefa["responsavel_nome"], tarefa["titulo"])
                     criados += 1

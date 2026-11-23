@@ -1,0 +1,10 @@
+[Unit]
+Description=Guará — post diário de saúde dos agentes em #alertas-tecnicos
+
+[Timer]
+OnCalendar=*-*-* 13:30:00 UTC
+Persistent=true
+Unit=guara-job@saude.service
+
+[Install]
+WantedBy=timers.target

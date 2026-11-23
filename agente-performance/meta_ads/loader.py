@@ -33,6 +33,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+def _fim_janela() -> date:
+    """
+    Fim da janela de sincronização: hoje em Brasília (dia parcial; a próxima carga sobrescreve).
+    SYNC_ATE_ONTEM=1 para parar em ontem. Usa hoje_brt(): a VM roda em UTC e, entre 21h e 24h de
+    Brasília, date.today() já é o dia seguinte.
+    """
+    from agent.tz import hoje_brt
+    hoje = hoje_brt()
+    return hoje - timedelta(days=1) if os.getenv("SYNC_ATE_ONTEM") == "1" else hoje
+
 BASE_DIR  = Path(__file__).parent.parent
 DB_PATH   = BASE_DIR / "data" / "campanhas.db"
 API_BASE  = "https://graph.facebook.com/v20.0"
@@ -47,7 +58,7 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     adset_name          TEXT,
     adset_id            TEXT,
     ad_name             TEXT,
-    ad_id               TEXT,
+    ad_id               TEXT NOT NULL,
     objetivo            TEXT,
     status_criativo     TEXT,
     impressoes          REAL DEFAULT 0,
@@ -70,10 +81,33 @@ CREATE TABLE IF NOT EXISTS {tabela} (
     qualidade_ranking   TEXT,
     engagement_ranking  TEXT,
     conversion_ranking  TEXT,
-    account_id          TEXT,
-    UNIQUE(data, campanha, ad_id)
+    account_id          TEXT NOT NULL DEFAULT '',
+    -- Grão: um anúncio, num dia, numa conta. Nome de campanha fica fora da chave: renomear
+    -- campanha duplicava o investimento. ad_id NOT NULL porque NULL nunca colide no UNIQUE.
+    UNIQUE(account_id, data, ad_id)
 )
 """
+
+_CHAVE_ANTIGA = "UNIQUE(data, campanha, ad_id)"
+
+
+def _migrar_chave(conn: sqlite3.Connection, tabela: str) -> None:
+    """Tabelas criadas com a chave antiga são reconstruídas uma vez, deduplicando (a linha mais nova vence)."""
+    ddl = conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (tabela,)).fetchone()
+    if not ddl or _CHAVE_ANTIGA not in ddl[0]:
+        return
+    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({tabela})") if r[1] != "id"]
+    sel = ", ".join("REPLACE(COALESCE(account_id, ''), 'act_', '')" if c == "account_id" else c for c in cols)
+    antes = conn.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0]
+    conn.execute(f"ALTER TABLE {tabela} RENAME TO {tabela}__chave_antiga")
+    conn.execute(_CREATE_TABLE_TPL.format(tabela=tabela))
+    conn.execute(f"INSERT OR REPLACE INTO {tabela} ({', '.join(cols)}) "
+                 f"SELECT {sel} FROM {tabela}__chave_antiga WHERE ad_id IS NOT NULL ORDER BY id")
+    depois = conn.execute(f"SELECT COUNT(*) FROM {tabela}").fetchone()[0]
+    conn.execute(f"DROP TABLE {tabela}__chave_antiga")
+    conn.commit()
+    logger.warning("[%s] chave migrada para (account_id, data, ad_id): %d → %d linhas (%d duplicatas removidas)",
+                   tabela, antes, depois, antes - depois)
 
 # Campos que vamos pedir à API
 # Janela de atribuição padrão — usada em ads_diario E campaign_totals
@@ -100,6 +134,7 @@ FIELDS = ",".join([
     "video_thruplay_watched_actions",
     "video_p25_watched_actions",
     "video_p50_watched_actions",
+    # video_view_3_sec_actions foi removido da Graph API (erro #100 em 11/2026); 3s vem de actions[video_view].
     "objective",
     "quality_ranking",
     "engagement_rate_ranking",
@@ -344,11 +379,20 @@ def _enriquecer_status(
     return rows
 
 
+class SyncIncompleto(Exception):
+    """Alguns dias não vieram da API. `rows` tem o que veio (pode e deve ser gravado); `dias` lista os que faltam."""
+
+    def __init__(self, account_id: str, rows: list, dias: list):
+        self.rows, self.dias = rows, dias
+        super().__init__(f"{account_id}: {len(dias)} dia(s) sem dados após 3 tentativas: "
+                         f"{', '.join(str(d) for d in dias[:10])}{'…' if len(dias) > 10 else ''}")
+
+
 def buscar_insights(account_id: str, dias: int = 30,
                     token_env: str = "META_ACCESS_TOKEN") -> list[dict]:
     """Busca insights de anúncios via API em lotes de 14 dias."""
     _get_token(token_env)  # valida token antes de iterar
-    date_end   = date.today()  # inclui o dia corrente (parcial); a próxima carga sobrescreve
+    date_end   = _fim_janela()
     date_start = date_end - timedelta(days=dias - 1)
 
     logger.info("[%s] Buscando %d dias (%s → %s) em lotes", account_id, dias, date_start, date_end)
@@ -358,6 +402,7 @@ def buscar_insights(account_id: str, dias: int = 30,
     dias_falhos: list[date] = []
     cursor   = date_start
 
+    falhas: list = []
     while cursor <= date_end:
         lote_fim = min(cursor + timedelta(days=LOTE - 1), date_end)
         # Retry por lote: até 3 tentativas com backoff
@@ -373,19 +418,14 @@ def buscar_insights(account_id: str, dias: int = 30,
                     time.sleep(5 * tentativa)
                 else:
                     logger.error("[%s] Dia %s abortado após 3 tentativas", account_id, cursor)
-                    dias_falhos.append(cursor)
+                    falhas.append(cursor)
         cursor = lote_fim + timedelta(days=1)
         if cursor <= date_end:
             time.sleep(0.5)  # pausa leve entre dias
 
     logger.info("[%s] Total: %d linhas", account_id, len(all_rows))
-    if dias_falhos:
-        logger.error("[%s] %d dia(s) sem dados por erro da API: %s", account_id, len(dias_falhos),
-                     ", ".join(d.isoformat() for d in dias_falhos))
-        # Todos os dias falharam (token inválido/expirado, conta sem acesso): não é "0 linhas", é falha.
-        if len(dias_falhos) == (date_end - date_start).days + 1:
-            raise RuntimeError(f"Meta API falhou em todos os {len(dias_falhos)} dias de {account_id} "
-                               "(veja o log: token inválido ou expirado?)")
+    if falhas:
+        raise SyncIncompleto(account_id, all_rows, falhas)
     return all_rows
 
 
@@ -401,8 +441,22 @@ def salvar(rows: list[dict], append: bool = False,
     _db.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(str(_db))
     conn.execute("PRAGMA journal_mode=WAL")
+    _migrar_chave(conn, tabela)
     conn.execute(_CREATE_TABLE_TPL.format(tabela=tabela))
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_data ON {tabela}(data)")
+
+    # Filtro de duplicidade/qualidade antes de gravar: sem ad_id não há grão; mesma chave no lote → última vence.
+    sem_ad = sum(1 for r in rows if not r.get("ad_id"))
+    if sem_ad:
+        logger.warning("[%s] %d linhas sem ad_id descartadas", tabela, sem_ad)
+    unicas: dict = {}
+    for r in rows:
+        if r.get("ad_id"):
+            r["account_id"] = str(r.get("account_id") or "").removeprefix("act_")
+            unicas[(r["account_id"], r["data"], str(r["ad_id"]))] = r
+    if len(unicas) < len(rows) - sem_ad:
+        logger.warning("[%s] %d linhas repetidas no lote da API colapsadas", tabela, len(rows) - sem_ad - len(unicas))
+    rows = list(unicas.values())
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_camp ON {tabela}(campanha)")
     conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{tabela}_data_camp ON {tabela}(data, campanha)")
 
@@ -579,7 +633,12 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
         account_id = f"act_{account_id}"
 
     try:
-        rows   = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
+        incompleto = None
+        try:
+            rows = buscar_insights(account_id=account_id, dias=dias, token_env=token_env)
+        except SyncIncompleto as e:
+            # Grava o que veio (dias bons não podem esperar pelos ruins) e falha no fim, para alertar.
+            rows, incompleto = e.rows, e
         # Guarda: rejeitar linhas de contas diferentes da solicitada
         # (pode ocorrer em Business Managers com contas compartilhadas)
         # Normaliza: Meta API retorna account_id sem o prefixo 'act_'
@@ -631,10 +690,18 @@ def carregar_meta(account_id: str, dias: int = 30, append: bool = False,
     # Registra sucesso no monitor de alertas
     try:
         from db.sync_alerts import registrar_resultado
-        registrar_resultado(cliente_key, "meta", sucesso=True)
+        if not incompleto:  # sucesso aqui zeraria a contagem de falhas e o alerta nunca dispararia
+            registrar_resultado(cliente_key, "meta", sucesso=True)
     except Exception:
         pass
 
+    if incompleto:
+        try:
+            from db.sync_alerts import registrar_resultado
+            registrar_resultado(cliente_key, "meta", sucesso=False, erro=str(incompleto))
+        except Exception as e_alerta:
+            logger.error("[alerta] não consegui registrar sync incompleto: %s", e_alerta)
+        raise incompleto
     info   = resumo_banco(tabela, db_path=db_path)
     periodo = f"{info.get('inicio', '?')} → {info.get('fim', '?')}"
     return linhas, periodo

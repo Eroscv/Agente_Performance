@@ -80,7 +80,7 @@ def _paginar_pedidos(store: str, token: str,
                      financial_status: str | None = "paid",
                      fields: str = _FIELDS) -> list[dict]:
     """Busca os pedidos do período com cursor pagination (por padrão só os pagos)."""
-    url = f"https://{store}.myshopify.com/admin/api/{API_VERSION}/orders.json"
+    url = f"https://{store.removesuffix('.myshopify.com')}.myshopify.com/admin/api/{API_VERSION}/orders.json"
     headers = _get_headers(token)
     params = {
         "limit":            250,

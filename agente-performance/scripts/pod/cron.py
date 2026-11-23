@@ -57,12 +57,34 @@ def main():
     logger.info("POD Kombucha · período=%s · %s → %s · alertas=%s",
                 args.periodo, data_inicio, data_fim, args.apenas_alertas)
 
-    from scripts.cron_todos_relatorios import executar_cliente, executar_cliente_multi_plataforma
     from db.registry import get_cliente
 
     cfg = get_cliente(CLIENTE_KEY)
     plataformas_ativas = [p for p, pc in cfg.get("plataformas", {}).items() if pc.get("ativo")]
 
+    # Idempotência: mesma janela + mesmo turno (manhã/tarde, os dois horários do cron antigo) publica uma vez só.
+    # Catch-up do timer, rerun manual ou retry não repostam. Falha (ok=False) libera a chave.
+    from datetime import datetime, timezone
+    from utils.idempotencia import uma_vez
+    turno = "manha" if datetime.now(timezone.utc).hour < 16 else "tarde"
+    chave = (f"pod_cron:{args.periodo}:{'alertas' if args.apenas_alertas else 'relatorio'}:"
+             f"{data_inicio}:{data_fim}:{turno}")
+    if not args.publicar:
+        result = _executar(cfg, plataformas_ativas, data_inicio, data_fim, args)
+        logger.info("Resultado (sem publicar): %s", result)
+        return
+    with uma_vez(chave) as pode:
+        if not pode:
+            logger.info("Já publicado (%s) — pulando", chave)
+            return
+        result = _executar(cfg, plataformas_ativas, data_inicio, data_fim, args)
+        if not (result or {}).get("ok"):
+            raise RuntimeError(f"Publicação falhou, chave liberada para nova tentativa: {result}")
+    logger.info("Resultado: %s", result)
+
+
+def _executar(cfg, plataformas_ativas, data_inicio, data_fim, args):
+    from scripts.cron_todos_relatorios import executar_cliente, executar_cliente_multi_plataforma
     if len(plataformas_ativas) > 1:
         result = executar_cliente_multi_plataforma(
             cfg=cfg,
@@ -83,8 +105,7 @@ def main():
             publicar=args.publicar,
             apenas_alertas=args.apenas_alertas,
         )
-
-    logger.info("Resultado: %s", result)
+    return result
 
 
 if __name__ == "__main__":

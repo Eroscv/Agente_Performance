@@ -40,6 +40,8 @@ from google.oauth2 import service_account as _sa
 # ── Config ────────────────────────────────────────────────────────────────────
 
 BASE_DIR    = Path(__file__).parent
+sys.path.insert(0, str(BASE_DIR))
+from glossario import CLIENTES  # noqa: E402
 AGENTE_DIR  = BASE_DIR.parent / "agente-performance"
 ENV_FILE    = AGENTE_DIR / ".env"
 DB_PATH     = BASE_DIR / "db" / "reunioes.db"
@@ -100,6 +102,8 @@ Regras:
 - "urgente": deadline próximo, cliente pediu urgência, risco de perder conta
 - "sem_acesso": falta de acesso a conta de anúncio, sistema, plataforma
 - "bloqueio": algo impedindo a equipe de avançar num cliente
+- Nomes de clientes: use exatamente a grafia oficial — """ + CLIENTES + """.
+  A transcrição é automática e pode deturpar nomes; corrija para a grafia oficial, nunca invente cliente novo
 """
 
 # ── SQLite ────────────────────────────────────────────────────────────────────
@@ -241,15 +245,6 @@ def salvar_analise_bq(reuniao, resultado: dict) -> bool:
 
 # ── Claude ────────────────────────────────────────────────────────────────────
 
-_claude = None
-
-def get_claude():
-    global _claude
-    if _claude is None:
-        _claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    return _claude
-
-
 def analisar_com_claude(reuniao) -> dict:
     """Envia o texto da reunião ao Claude e retorna JSON estruturado."""
     texto = f"""Título: {reuniao['titulo']}
@@ -268,14 +263,8 @@ Próximas Etapas:
 Detalhes:
 {(reuniao['detalhes'] or '')[:4000]}"""
 
-    client = get_claude()
-    msg = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=1024,
-        system=PROMPT_SISTEMA,
-        messages=[{"role": "user", "content": texto}],
-    )
-    raw = msg.content[0].text.strip()
+    from utils.llm import gerar
+    raw = gerar(PROMPT_SISTEMA, texto, max_tokens=1024, temperature=0.0)
 
     # Remove possível markdown
     if raw.startswith("```"):
@@ -284,7 +273,8 @@ Detalhes:
             raw = raw[4:]
     raw = raw.strip()
 
-    return json.loads(raw)
+    from glossario import normalizar  # o texto de entrada já vem corrigido; isto pega o que o LLM reescrever
+    return json.loads(normalizar(raw))
 
 
 # ── Slack ─────────────────────────────────────────────────────────────────────
