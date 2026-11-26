@@ -12,7 +12,8 @@
 # Fallback: etapa que falha é tentada de novo (SYNC_TENTATIVAS, padrão 3, com
 # SYNC_ESPERA_S segundos entre tentativas, padrão 120). Se alguma etapa terminar
 # falhando, o script sai com código 1 e, se SLACK_BOT_TOKEN e SLACK_ALERT_CHANNEL estiverem no ambiente
-# ou no .env, avisa no Slack quais etapas falharam. Carga sem falha também avisa
+# ou no .env, avisa no Slack quais etapas falharam e, por cliente e fonte, quem seguiu em erro
+# (fluxograma: bigquery/docs/carga_fluxo.md). Carga sem falha também avisa
 # (hora, duração e etapas), a menos que SLACK_AVISAR_SUCESSO=0.
 #
 # Uso:
@@ -30,6 +31,9 @@ LOG_FILE="$LOG_DIR/cron_master_sync.log"
 SYNC_TENTATIVAS="${SYNC_TENTATIVAS:-3}"
 SYNC_ESPERA_S="${SYNC_ESPERA_S:-120}"
 SLACK_AVISAR_SUCESSO="${SLACK_AVISAR_SUCESSO:-1}"
+# Os syncs registram cada cliente/fonte em db/sync_alerts; o aviso sai um só, no fim, com a lista.
+export SYNC_ALERT_SLACK=0
+INICIO_EPOCH="$(date +%s)"
 FALHAS=()
 ETAPAS_OK=0
 RECUPERADAS=()   # etapas que só passaram numa nova tentativa
@@ -96,9 +100,12 @@ duracao() {
 }
 
 avisar_falhas() {
-    local lista
+    local lista clientes
     lista="$(printf '• %s\\n' "${FALHAS[@]}")"
-    avisar_slack ":x: *Carga do BigQuery ($(hostname)) terminou com falhas* em $(duracao)\\n${lista}Etapas OK: ${ETAPAS_OK}. Log: logs/cron_master_sync.log"
+    # Cliente e fonte que seguiram em erro depois das novas tentativas (vazio se a etapa caiu antes de registrar)
+    clientes="$(python3 -m db.sync_alerts --desde "$INICIO_EPOCH" 2>> "$LOG_FILE")"
+    [ -n "$clientes" ] && clientes="*Por cliente e fonte:*\\n${clientes}"
+    avisar_slack ":x: *Carga do BigQuery ($(hostname)) terminou com falhas* em $(duracao)\\n*Etapas:*\\n${lista}${clientes}Etapas OK: ${ETAPAS_OK}. Log: logs/cron_master_sync.log"
 }
 
 avisar_sucesso() {

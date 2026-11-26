@@ -200,4 +200,11 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    from db.sync_alerts import registrar_resultado
+    try:
+        main()
+    except (Exception, SystemExit) as exc:  # SystemExit: store/token ausentes
+        erro = str(exc) if isinstance(exc, Exception) else "store/token não configurados"
+        registrar_resultado(CLIENTE, "shopify_clientes", sucesso=False, erro=erro)
+        raise
+    registrar_resultado(CLIENTE, "shopify_clientes", sucesso=True)

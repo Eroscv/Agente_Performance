@@ -302,8 +302,7 @@ def sync_cliente(cliente_key: str, date_start: date, date_end: date) -> int:
     utm_source_type = cfg["utm_source"]
 
     if not store or not token:
-        logger.error("[%s] store/token não configurados", cliente_key)
-        return 0
+        raise RuntimeError("store/token não configurados")
 
     logger.info("[%s] Buscando pedidos %s → %s (utm via %s)",
                 cliente_key, date_start, date_end, utm_source_type)
@@ -324,13 +323,12 @@ def sync_cliente(cliente_key: str, date_start: date, date_end: date) -> int:
     salvar_raw("raw_shopify_pedidos", ["cliente", "order_id"],
                [{"cliente": cliente_key, "order_id": p["id"], "payload": _sem_endereco(p)} for p in pedidos_raw])
 
-    try:
-        from db.bq_writer import enabled, _insert
-        if enabled():
-            _insert("pedidos_diario", rows, f"pedidos/{cliente_key}")
-            _insert("pedido_itens", itens, f"pedido_itens/{cliente_key}")
-    except Exception as exc:
-        logger.warning("[BQ] pedidos/%s falha: %s", cliente_key, exc)
+    # _insert devolve 0 se gravou; erro aqui antes só virava warning e a etapa saía OK
+    from db.bq_writer import enabled, _insert
+    if enabled():
+        for tabela, linhas in (("pedidos_diario", rows), ("pedido_itens", itens)):
+            if _insert(tabela, linhas, f"{tabela}/{cliente_key}") != 0:
+                raise RuntimeError(f"BigQuery não gravou {tabela}")
 
     # Recalcula novo_cliente para todo o histórico do cliente
     n_updated = _atualizar_novo_cliente_bq(cliente_key)
@@ -353,12 +351,20 @@ def main():
     date_start = date.fromisoformat(args.data_inicio) if args.data_inicio else \
                  date_end - timedelta(days=args.dias - 1)
 
+    from db.sync_alerts import registrar_resultado
     clientes = [args.cliente] if args.cliente else list(_CLIENT_CFG)
-    total = 0
+    total = erros = 0
     for key in clientes:
-        total += sync_cliente(key, date_start, date_end)
+        try:
+            total += sync_cliente(key, date_start, date_end)
+            registrar_resultado(key, "pedidos", sucesso=True)
+        except Exception as exc:
+            erros += 1
+            logger.error("[%s] ❌ Sync pedidos falhou: %s", key, exc)
+            registrar_resultado(key, "pedidos", sucesso=False, erro=str(exc))
 
-    logger.info("Sync pedidos concluído: %d pedidos processados", total)
+    logger.info("Sync pedidos concluído: %d pedidos processados, %d cliente(s) com erro", total, erros)
+    sys.exit(1 if erros else 0)
 
 
 if __name__ == "__main__":
