@@ -4,7 +4,7 @@ relatorio/meta.py
 Constrói os blocos de dados para relatórios Meta Ads.
 
 Aplica as regras de negócio definidas na reunião (regras.py):
-  - Investimento sempre corrigido pelo fator de imposto (1,1215)
+  - Investimento sempre corrigido pelo fator de imposto (1,1383)
   - ROAS recalculado  (Receita Shopify / Invest. c/ Imposto)
   - CAC  recalculado  (Invest. c/ Imposto / Novos Clientes — Shopify via UTM)
   - CPA  recalculado  (Invest. c/ Imposto / Compras)
@@ -65,7 +65,7 @@ def tabela_principal(
     Campos da tabela principal do relatório semanal Meta:
 
       Investimento Meta Ads        (spend bruto)
-      Investimento + Imposto       (spend × 1,1215)
+      Investimento + Imposto       (spend × 1,1383)
       Transações Shopify           (do Shopify)
       Receita Shopify              (do Shopify)
       ROAS                         (recalculado)

@@ -78,7 +78,7 @@ def comparar_periodos(
                 ROUND(AVG(ctr_link), 4)                AS ctr,
                 ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
                 ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
-                ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
+                ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
                 ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia,
                 ROUND(SUM(COALESCE(adicoes_carrinho, 0)), 0)        AS carrinho,
                 ROUND(SUM(COALESCE(checkout_iniciado, 0)), 0)       AS checkout
@@ -169,7 +169,7 @@ def comparar_campanhas_detalhado(
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
             ROUND(CAST(SUM(COALESCE(cliques_link, 0)) AS FLOAT) / NULLIF(SUM(impressoes), 0) * 100, 4) AS ctr,
             ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
-            ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
+            ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
             ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia,
             ROUND(SUM(impressoes), 0)             AS impressoes,
             ROUND(SUM(alcance), 0)                AS alcance,
@@ -305,7 +305,7 @@ def comparar_mes_a_mes(
                 ROUND(AVG(ctr_link), 4)         AS ctr,
                 ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
                 ROUND(SUM(impressoes), 0)       AS impressoes,
-                ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra
+                ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra
             FROM campanhas_unificada
             WHERE data_inicio >= ? AND data_fim <= ?
             {filtro_camp}
@@ -361,7 +361,7 @@ def comparar_antes_depois(
                 ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(cliques_link, 0)), 0), 2) AS cpc,
                 ROUND(AVG(ctr_link), 4)                AS ctr,
                 ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2) AS cpm,
-                ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
+                ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(COALESCE(compras, 0)), 0), 2) AS custo_por_compra,
                 ROUND(CAST(SUM(COALESCE(impressoes, 0)) AS FLOAT) / NULLIF(SUM(COALESCE(alcance, 0)), 0), 2) AS frequencia,
                 ROUND(SUM(impressoes), 0)              AS impressoes,
                 MIN(data_inicio)                       AS data_inicio_real,
@@ -434,7 +434,7 @@ def ranking_comparativo(
     elif func == "DIV_INVEST_CPM":
         expr_metrica = "ROUND(SUM(investimento) / NULLIF(SUM(impressoes), 0) * 1000, 2)"
     elif func == "CPA_CALC":
-        expr_metrica = "ROUND(SUM(investimento) * 1.1215 / NULLIF(SUM(compras), 0), 2)"
+        expr_metrica = "ROUND(SUM(investimento) * 1.1383 / NULLIF(SUM(compras), 0), 2)"
     elif func == "AVG":
         expr_metrica = f"ROUND(AVG({col}), 4)"
     else:

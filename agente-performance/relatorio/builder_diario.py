@@ -186,14 +186,14 @@ def _buscar_top_campanhas_ranking(data: str, cliente_key: str, plataforma: str) 
 # ── Gerador de blocos ─────────────────────────────────────────────────────────
 
 def _blocos_visao_geral(resumo: dict, plataforma: str, data_fmt: str) -> list[dict]:
-    invest_imp = round(float(resumo.get("investimento", 0)) * 1.1215, 2) if plataforma == "meta_ads" else None
+    invest_imp = round(float(resumo.get("investimento", 0)) * 1.1383, 2) if plataforma == "meta_ads" else None
     roas_e = roas_emoji(resumo.get("roas"))
 
     linhas = [
         ["💰 Investimento",        fmt_brl(resumo.get("investimento"))],
     ]
     if invest_imp:
-        linhas.append(["💰 +Imposto (1,1215x)", fmt_brl(invest_imp)])
+        linhas.append(["💰 +Imposto (1,1383x)", fmt_brl(invest_imp)])
     linhas += [
         ["💵 Receita",             fmt_brl(resumo.get("receita"))],
         [f"{roas_e} ROAS",         fmt_x(resumo.get("roas"))],

@@ -81,7 +81,7 @@ def _resumo_para_texto(resumo: dict, plataforma: str) -> str:
     campanhas_n = resumo.get("campanhas")
     frequencia = resumo.get("frequencia")
 
-    invest_imp = round(float(invest) * 1.1215, 2) if plataforma == "meta_ads" and invest else None
+    invest_imp = round(float(invest) * 1.1383, 2) if plataforma == "meta_ads" and invest else None
 
     linhas = [
         f"- Investimento: R$ {float(invest):,.2f}" + (f" (com imposto: R$ {float(invest_imp):,.2f})" if invest_imp else ""),

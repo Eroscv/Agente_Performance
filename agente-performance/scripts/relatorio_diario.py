@@ -196,7 +196,7 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
     ep       = EMOJIS_PLAT.get(plataforma, "📊")
     data_fmt = f"{data[8:10]}/{data[5:7]}/{data[:4]}"
     roas_e   = roas_emoji(d.get("roas"))
-    invest_imp = round(float(d.get("investimento", 0)) * 1.1215, 2) if plataforma == "meta_ads" else None
+    invest_imp = round(float(d.get("investimento", 0)) * 1.1383, 2) if plataforma == "meta_ads" else None
 
     blocos: list[dict] = []
 
@@ -210,7 +210,7 @@ def _blocos_relatorio(data: str, cliente_key: str, plataforma: str,
         ["📊 Campanhas Ativas",   str(d.get("campanhas", "—"))],
     ]
     if invest_imp:
-        vg_rows.insert(1, ["💸 c/ Imposto (1,1215x)",  fmt_brl(invest_imp)])
+        vg_rows.insert(1, ["💸 c/ Imposto (1,1383x)",  fmt_brl(invest_imp)])
     blocos.append(_bk_section(_tabela_codigo(["Métrica", "Valor"], vg_rows)))
     blocos.append(_bk_divider())
 
@@ -438,7 +438,7 @@ def _thread_do_relatorio(data, cliente_key, plataforma, d, camps, alts, ant, sho
 
     # ── Msg 2 (thread): resumo em tabela ────────────────────────────────────
     roas_e = roas_emoji(d.get("roas"))
-    invest_imp = round(float(d.get("investimento", 0)) * 1.1215, 2) if plataforma == "meta_ads" else None
+    invest_imp = round(float(d.get("investimento", 0)) * 1.1383, 2) if plataforma == "meta_ads" else None
     resumo_rows = [
         [f"{roas_e} ROAS",       fmt_x(d.get("roas"))],
         ["💰 Investimento",      fmt_brl(d.get("investimento"))],
