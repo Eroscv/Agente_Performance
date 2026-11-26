@@ -143,7 +143,8 @@ def main():
             erros += 1
 
     logger.info("Sync concluído: %d sucesso(s), %d erro(s)", sucessos, erros)
-    sys.exit(1 if erros > 0 and sucessos == 0 else 0)
+    # Qualquer cliente com erro faz a etapa falhar: a carga tenta de novo e avisa por cliente/fonte
+    sys.exit(1 if erros > 0 else 0)
 
 
 if __name__ == "__main__":

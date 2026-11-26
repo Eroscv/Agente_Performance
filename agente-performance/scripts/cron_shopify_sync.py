@@ -138,7 +138,8 @@ def main(dias: int = 8, full: bool = False, cliente: str = None) -> None:
     except Exception as _ck_exc:
         logger.warning("[abandoned] falha silenciosa: %s", _ck_exc)
 
-    if erros > 0 and sucessos == 0:
+    # Qualquer cliente com erro faz a etapa falhar: a carga tenta de novo e avisa por cliente/fonte
+    if erros > 0:
         sys.exit(1)
 
 

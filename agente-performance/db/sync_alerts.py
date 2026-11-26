@@ -81,6 +81,9 @@ def _get_state(db: sqlite3.Connection, cliente_key: str, plataforma: str) -> sql
 
 def _enviar_alerta_slack(cliente_key: str, plataforma: str, erro: str, falhas: int) -> None:
     """Envia mensagem de alerta no Slack."""
+    # Dentro da carga (cron_master_sync.sh) o aviso sai consolidado no fim, por cliente e fonte.
+    if os.getenv("SYNC_ALERT_SLACK", "1") == "0":
+        return
     try:
         import requests as _req
         token   = os.getenv("SLACK_BOT_TOKEN", "")
@@ -92,7 +95,7 @@ def _enviar_alerta_slack(cliente_key: str, plataforma: str, erro: str, falhas: i
             f":warning: *Sync falhou — {cliente_key} / {plataforma}*\n"
             f"*{falhas} {plural} consecutiva(s)*\n"
             f"Erro: `{erro[:300]}`\n"
-            f"_Verifique com_ `journalctl -u agente-performance-sync -n 50`"
+            f"_Verifique com_ `journalctl -u guara-carga-bq -n 50`"
         )
         if not token:
             # Sem bot, usa o mesmo webhook da carga (#alertas-tecnicos).
@@ -197,6 +200,16 @@ def registrar_resultado(
         logger.debug("[SyncAlert] erro interno: %s", exc)
 
 
+def falhas_desde(ts: float) -> list[dict]:
+    """Clientes e fontes que terminaram em erro desde ts (epoch): os que seguem falhando nesta carga."""
+    rows = _get_db().execute(
+        "SELECT cliente_key, plataforma, ultimo_erro FROM sync_alerts "
+        "WHERE ultimo_status='erro' AND atualizado_em >= ? ORDER BY plataforma, cliente_key",
+        (ts,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def status() -> list[dict]:
     """Retorna estado atual de todos os sync monitorados."""
     try:
@@ -205,3 +218,12 @@ def status() -> list[dict]:
         return [dict(r) for r in rows]
     except Exception:
         return []
+
+
+if __name__ == "__main__":
+    # Usado pelo cron_master_sync.sh no aviso de falha: uma linha por cliente/fonte, pronta para o JSON do Slack.
+    import sys
+    desde = float(sys.argv[sys.argv.index("--desde") + 1])
+    for f in falhas_desde(desde):
+        erro = " ".join((f["ultimo_erro"] or "").split())[:150].replace("\\", "/").replace('"', "'")
+        print(f"• {f['cliente_key']} / {f['plataforma']}: {erro}\\n", end="")

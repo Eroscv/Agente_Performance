@@ -366,6 +366,8 @@ def sync_loja(client: bq.Client | None, loja: dict, data_ini: date, data_fim: da
     if client is not None:
         n_bq = salvar_bigquery(client, rows, nome)
         logger.info("[%s] BigQuery: %d pedidos upsert", nome, n_bq)
+        if n_bq == 0:  # salvar_bigquery engole a exceção e devolve 0
+            raise RuntimeError(f"BigQuery não gravou os {len(rows)} pedidos")
 
 
 def main():
@@ -394,8 +396,20 @@ def main():
             logger.error("[BQ] Não foi possível criar client: %s", e)
             raise SystemExit(1)
 
+    from db.sync_alerts import registrar_resultado
+    erros = 0
     for loja in lojas:
-        sync_loja(client, loja, data_ini, data_fim, args.dry_run)
+        try:
+            sync_loja(client, loja, data_ini, data_fim, args.dry_run)
+            if not args.dry_run:
+                registrar_resultado(loja["nome"], "yampi", sucesso=True)
+        except Exception as e:
+            erros += 1
+            logger.error("[%s] ❌ Sync Yampi falhou: %s", loja["nome"], e)
+            if not args.dry_run:
+                registrar_resultado(loja["nome"], "yampi", sucesso=False, erro=str(e))
+    if erros:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
