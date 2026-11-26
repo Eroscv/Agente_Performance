@@ -153,8 +153,10 @@ def test_saude_swap_e_rptn(tmp_path):
     """AUD-05 (swap) e AUD-13 (RPTN parado ou com cliente preso em erro) no post diário."""
     import os, sqlite3, time
     from scripts.saude import montar, rptn
-    texto, prob = montar("17/11", [], [], 551, 38.0, swap_mb=409)
-    assert prob == ["VM usando swap: 409 MB (máximo 300); falta memória para algum serviço"] and "swap 409 MB" in texto
+    texto, prob = montar("17/11", [], [], 551, 38.0, swap_mb=409, swap_total_mb=1023)
+    assert prob == [] and "swap 409 de 1023 MB" in texto   # páginas paradas no swap: normal
+    texto, prob = montar("17/11", [], [], 551, 38.0, swap_mb=800, swap_total_mb=1023)
+    assert prob == ["VM com swap quase cheio: 800 de 1023 MB (mínimo 300 MB livres); falta memória para algum serviço"]
 
     (tmp_path / "reports").mkdir()
     log = tmp_path / "reports" / "sync_loop.log"
