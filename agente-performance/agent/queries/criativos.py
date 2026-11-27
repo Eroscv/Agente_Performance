@@ -132,29 +132,10 @@ def metricas_engajamento(
         cliente_key=cliente_key,
         plataforma=plataforma,
     )
-    return query(f"""
-        SELECT
-            campanha,
-            ROUND(SUM(COALESCE(engajamentos_post, 0)), 0)   AS engajamentos_post,
-            ROUND(SUM(COALESCE(comentarios, 0)), 0)         AS comentarios,
-            ROUND(SUM(COALESCE(compartilhamentos, 0)), 0)   AS compartilhamentos,
-            ROUND(SUM(COALESCE(salvamentos, 0)), 0)         AS salvamentos,
-            ROUND(SUM(COALESCE(reacoes, 0)), 0)             AS reacoes,
-            ROUND(SUM(COALESCE(curtidas_facebook, 0)), 0)   AS curtidas_facebook,
-            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(engajamentos_post, 0)), 0), 2) AS custo_por_engajamento,
-            ROUND(SUM(investimento), 2)                     AS investimento,
-            ROUND(SUM(impressoes), 0)                       AS impressoes,
-            ROUND(
-                CAST(SUM(COALESCE(engajamentos_post, 0)) AS FLOAT)
-                / NULLIF(SUM(impressoes), 0) * 100
-            , 2)                                            AS taxa_engajamento_pct
-        FROM campanhas_unificada
-        {where}
-        GROUP BY campanha
-        HAVING SUM(COALESCE(engajamentos_post, 0)) > 0
-           OR SUM(COALESCE(compartilhamentos, 0)) > 0
-        ORDER BY engajamentos_post DESC
-    """, tuple(params))
+    # A carga da Meta não coleta curtidas, comentários, compartilhamentos e salvamentos: essas colunas não existem em nenhuma
+    # tabela (local ou BigQuery) e a consulta sempre falhava. Sem dado, a resposta é vazia.
+    logger.info("[queries] metricas_engajamento: métrica não coletada pela carga da Meta")
+    return []
 
 
 
@@ -181,22 +162,10 @@ def metricas_mensageria(
         cliente_key=cliente_key,
         plataforma=plataforma,
     )
-    return query(f"""
-        SELECT
-            campanha,
-            ROUND(SUM(COALESCE(conversas_iniciadas, 0)), 0)     AS conversas_iniciadas,
-            ROUND(SUM(COALESCE(conversas_respondidas_7d, 0)), 0) AS conversas_respondidas,
-            ROUND(SUM(COALESCE(msg_boas_vindas, 0)), 0)         AS msg_boas_vindas,
-            ROUND(SUM(COALESCE(msg_inscricoes, 0)), 0)          AS inscricoes,
-            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(conversas_iniciadas, 0)), 0), 2) AS custo_por_conversa,
-            ROUND(SUM(investimento), 2)                         AS investimento,
-            ROUND(SUM(impressoes), 0)                           AS impressoes
-        FROM campanhas_unificada
-        {where}
-        GROUP BY campanha
-        HAVING SUM(COALESCE(conversas_iniciadas, 0)) > 0
-        ORDER BY conversas_iniciadas DESC
-    """, tuple(params))
+    # A carga da Meta não coleta conversas iniciadas e respondidas: essas colunas não existem em nenhuma
+    # tabela (local ou BigQuery) e a consulta sempre falhava. Sem dado, a resposta é vazia.
+    logger.info("[queries] metricas_mensageria: métrica não coletada pela carga da Meta")
+    return []
 
 
 
@@ -211,13 +180,12 @@ def metricas_video(
     Métricas de vídeo por campanha: views, ThruPlays, retenção e custo.
 
     Retorna para cada campanha:
-      - reproducoes_video   : total de reproduções iniciadas
       - video_3s            : visualizações de 3 segundos (métrica padrão Meta)
       - thruplays           : visualizações completas (≥ 15s ou 97% do vídeo)
-      - taxa_retencao_pct   : ThruPlays / reproducoes_video * 100
+      - hook_rate_pct       : video_3s / impressões * 100
+      - taxa_retencao_pct   : ThruPlays / video_3s * 100
       - custo_thruplay      : custo médio por ThruPlay
-      - visualizacoes       : visualizações totais (inclui partilhas)
-      - custo_por_view      : investimento / visualizacoes
+      - custo_por_view      : investimento / video_3s
     """
     base = "campanha = ?" if campanha else None
     extra = [campanha] if campanha else []
@@ -232,21 +200,24 @@ def metricas_video(
     rows = query(f"""
         SELECT
             campanha,
-            ROUND(SUM(COALESCE(reproducoes_video, 0)), 0)   AS reproducoes_video,
             ROUND(SUM(COALESCE(video_3s, 0)), 0)            AS video_3s,
             ROUND(SUM(COALESCE(thruplays, 0)), 0)           AS thruplays,
+            ROUND(SUM(impressoes), 0)                       AS impressoes,
+            ROUND(
+                CAST(SUM(COALESCE(video_3s, 0)) AS FLOAT)
+                / NULLIF(SUM(impressoes), 0) * 100
+            , 2)                                            AS hook_rate_pct,
             ROUND(
                 CAST(SUM(COALESCE(thruplays, 0)) AS FLOAT)
-                / NULLIF(SUM(COALESCE(reproducoes_video, 0)), 0) * 100
+                / NULLIF(SUM(COALESCE(video_3s, 0)), 0) * 100
             , 2)                                            AS taxa_retencao_pct,
             ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(thruplays, 0)), 0), 4) AS custo_thruplay,
-            ROUND(SUM(COALESCE(visualizacoes, 0)), 0)       AS visualizacoes,
-            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(visualizacoes, 0)), 0), 4) AS custo_por_view,
+            ROUND(SUM(investimento) / NULLIF(SUM(COALESCE(video_3s, 0)), 0), 4) AS custo_por_view,
             ROUND(SUM(investimento), 2)                     AS investimento
         FROM campanhas_unificada
         {where}
         GROUP BY campanha
-        HAVING SUM(COALESCE(reproducoes_video, 0)) > 0
+        HAVING SUM(COALESCE(video_3s, 0)) > 0
         ORDER BY thruplays DESC
     """, tuple(params))
     return rows

@@ -71,37 +71,13 @@ def _build_where(
 
 def _meta_ads_union_source(cliente_key: Optional[str] = None) -> str:
     """
-    Retorna a cláusula FROM correta para queries de criativo (ad-level).
-    Usa as tabelas brutas Meta Ads pois a view campanhas_unificada não expõe ad_name/ad_id.
+    Cláusula FROM das consultas de criativo (por anúncio do Meta).
 
-    Com a nova arquitetura federada, as tabelas são acessadas via schemas ATTACHados:
-      sof_meta.source_of_meta_ads_diario
-      pod_meta.pod_kombucha_meta_ads_diario
+    `meta_anuncios` existe nos dois caminhos com as mesmas colunas: no banco local é a união
+    das tabelas Meta de cada cliente (db/duck.py) e no BigQuery é correlacao.v_agente_anuncios.
+    O filtro de cliente fica no WHERE (_meta_ads_where).
     """
-    # Mapeamento cliente_key -> (schema_attach, tabela)
-    _META_TABLES = {
-        "source_of":    ("sof_meta", "source_of_meta_ads_diario"),
-        "pod_kombucha": ("pod_meta", "pod_kombucha_meta_ads_diario"),
-    }
-
-    if cliente_key and cliente_key in _META_TABLES:
-        schema, tabela = _META_TABLES[cliente_key]
-        return f"FROM {schema}.{tabela}"
-
-    # Sem filtro de cliente: UNION de todas as tabelas Meta
-    unions = []
-    for ck, (schema, tabela) in _META_TABLES.items():
-        unions.append(f"""
-        SELECT '{ck}' AS cliente_key, 'meta_ads' AS plataforma,
-               data, campanha, campaign_id, adset_name, adset_id,
-               ad_name, ad_id, objetivo, impressoes, alcance,
-               cliques_link, investimento, compras, valor_compras,
-               frequencia
-        FROM {schema}.{tabela}
-        """)
-    union_sql = " UNION ALL ".join(unions)
-    return f"FROM ({union_sql}) AS meta_ads_union"
-
+    return "FROM meta_anuncios"
 
 
 def _meta_ads_where(
@@ -112,9 +88,7 @@ def _meta_ads_where(
     cliente_key: Optional[str] = None,
 ) -> tuple[str, list]:
     """
-    WHERE builder para queries diretas nas tabelas Meta Ads brutas.
-    Não inclui filtro de plataforma (já é sempre meta_ads aqui).
-    Não inclui cliente_key quando já está resolvido na FROM clause.
+    WHERE das consultas sobre meta_anuncios (só Meta, por anúncio).
     """
     conditions = []
     params = []
@@ -133,9 +107,9 @@ def _meta_ads_where(
         conditions.append("data <= ?")
         params.append(data_fim)
 
-    # cliente_key só é necessário na WHERE quando usamos UNION (FROM com subconsulta)
-    if not cliente_key or cliente_key not in ("source_of", "pod_kombucha"):
-        pass  # não filtra — UNION já inclui todos
+    if cliente_key:
+        conditions.append("cliente_key = ?")
+        params.append(cliente_key)
 
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     return where, params
@@ -247,7 +221,7 @@ def verificar_gap_dados(cliente_key: Optional[str] = None, plataforma: Optional[
 
     try:
         ultimo_dt = date.fromisoformat(str(ultimo)[:10])
-        hoje = hoje_brt()
+        hoje = _hoje_brt()
         ontem = hoje - timedelta(days=1)
         dias_atrasado = (ontem - ultimo_dt).days
 

@@ -34,18 +34,33 @@ ADS_TABLE = f"`{PROJECT}.{DATASET}.ads_diario`"
 V_ALERTAS = f"`{PROJECT}.{DATASET}.v_alertas_campanha`"
 
 
+def _credencial_leitura() -> str:
+    """
+    Credencial usada para LER: BQ_READONLY_CREDENTIALS (conta só de leitura, se configurada)
+    ou, sem ela, GOOGLE_APPLICATION_CREDENTIALS (a mesma conta da carga).
+
+    O agente roda SQL montado a partir de perguntas (inclusive SQL gerado por LLM), então
+    vale ler com uma conta que não consegue gravar: BigQuery Data Viewer nos datasets e
+    BigQuery Job User no projeto.
+    """
+    for var in ("BQ_READONLY_CREDENTIALS", "GOOGLE_APPLICATION_CREDENTIALS"):
+        caminho = os.environ.get(var, "")
+        if caminho and Path(caminho).exists():
+            return caminho
+    return ""
+
+
 def enabled() -> bool:
-    """True se credenciais BQ estão configuradas e o arquivo existe."""
-    creds = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS", "")
-    return bool(creds and Path(creds).exists())
+    """True se há credencial do BigQuery para leitura configurada e o arquivo existe."""
+    return bool(_credencial_leitura())
 
 
 def _client():
-    """Retorna singleton do BigQuery Client."""
+    """Retorna singleton do BigQuery Client (com a credencial de leitura)."""
     global _BQ_CLIENT
     if _BQ_CLIENT is None:
         from google.cloud import bigquery
-        _BQ_CLIENT = bigquery.Client()
+        _BQ_CLIENT = bigquery.Client.from_service_account_json(_credencial_leitura(), project=PROJECT)
     return _BQ_CLIENT
 
 
@@ -69,15 +84,20 @@ def _normalize_row(row: dict) -> dict:
     return result
 
 
-def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
+def query_bq(sql: str, params: Optional[list] = None, raise_on_error: bool = False) -> list[dict]:
     """
     Executa query no BigQuery e retorna lista de dicts.
 
     Suporta parâmetros posicionais via @p0, @p1, ... no SQL.
     Exemplo:
         query_bq("SELECT * FROM t WHERE cliente = @p0", ["source_of"])
+
+    raise_on_error=True propaga o erro em vez de devolver [] (uma consulta que falha
+    não pode parecer "sem dados").
     """
     if not enabled():
+        if raise_on_error:
+            raise RuntimeError("BigQuery não configurado (GOOGLE_APPLICATION_CREDENTIALS)")
         logger.warning("[BQReader] BigQuery não configurado — retornando []")
         return []
     try:
@@ -95,6 +115,8 @@ def query_bq(sql: str, params: Optional[list] = None) -> list[dict]:
         return [_normalize_row(dict(r)) for r in rows]
     except Exception as exc:
         logger.error("[BQReader] Erro na query: %s\nSQL: %.300s", exc, sql)
+        if raise_on_error:
+            raise
         return []
 
 

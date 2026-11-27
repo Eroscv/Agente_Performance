@@ -34,7 +34,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from db.connections import query_fed as _query_fed
+from db.bq_reader import query_bq as _query_bq
 
 logger = logging.getLogger(__name__)
 
@@ -457,7 +457,8 @@ def executar_sql_dinamico(
         }
 
     try:
-        rows = _query_fed(sql, cliente_key=cliente_key)
+        # O SQL gerado já é BigQuery e já filtra o cliente: roda direto, sem tradução.
+        rows = _query_bq(sql, raise_on_error=True)
         logger.info(
             "[SQLGenerator] OK — %d linhas em %dms (modo=%s)",
             len(rows), int((time.time() - t0) * 1000), modo,

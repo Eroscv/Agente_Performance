@@ -488,30 +488,32 @@ async def handle_pod(ack, respond, command, client):
     # /pod status — resposta instantânea sem Claude (item 4)
     if arg.strip().lower() in ("status", "hoje", "agora"):
         try:
-            import sqlite3 as _sq
-            from db.connections import get_federated_conn as _gcc
-            _c = _gcc()
-            _c.row_factory = _sq.Row
-            _last = _c.execute(
-                "SELECT MAX(data) AS ultimo FROM pod_kombucha_gads_diario"
-            ).fetchone()
-            _ultimo = _last["ultimo"] if _last else None
+            # Google Ads da POD, pela mesma view do resto do agente (a tabela local
+            # pod_kombucha_gads_diario não existe sem o prefixo do banco anexado).
+            from db.connections import query_fed as _qf
+            _last = _qf(
+                "SELECT MAX(data) AS ultimo FROM v_performance "
+                "WHERE cliente_key = 'pod_kombucha' AND plataforma = 'google_ads'"
+            )
+            _ultimo = str(_last[0]["ultimo"])[:10] if _last and _last[0].get("ultimo") else None
             if _ultimo:
                 from datetime import date as _d
                 _obj = _d.fromisoformat(_ultimo)
                 _DIAS = ["Segunda","Terça","Quarta","Quinta","Sexta","Sábado","Domingo"]
                 _nome = _DIAS[_obj.weekday()]
-                _row = _c.execute("""
+                _rows = _qf("""
                     SELECT
                         SUM(investimento)   AS invest,
-                        SUM(valor_conversao) AS receita,
+                        SUM(receita)        AS receita,
                         CASE WHEN SUM(investimento)>0
-                             THEN SUM(valor_conversao)/SUM(investimento) END AS roas,
+                             THEN SUM(receita)/SUM(investimento) END AS roas,
                         SUM(conversoes) AS conversoes,
                         CASE WHEN SUM(impressoes)>0
                              THEN CAST(SUM(cliques) AS REAL)/SUM(impressoes)*100 END AS ctr
-                    FROM pod_kombucha_gads_diario WHERE data = ?
-                """, (_ultimo,)).fetchone()
+                    FROM v_performance
+                    WHERE cliente_key = 'pod_kombucha' AND plataforma = 'google_ads' AND data = ?
+                """, (_ultimo,))
+                _row = _rows[0] if _rows else None
                 def _brl(v): return f"R$ {v:,.2f}".replace(",","X").replace(".",",").replace("X",".") if v else "—"
                 def _x(v): return f"{v:.2f}x" if v else "—"
                 msg = (

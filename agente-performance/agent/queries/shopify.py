@@ -41,7 +41,10 @@ def receita_shopify_periodo(
     if _cliente != "source_of":
         # Busca diretamente do BQ (shopify_diario)
         try:
-            rows = query(
+            # shopify_receita_diaria é só da Source Of; os outros clientes vêm do resumo
+            # diário da Shopify na camada tratada do BigQuery.
+            from db.bq_reader import query_bq
+            rows = query_bq(
                 """
                 SELECT
                     SUM(receita)         AS receita_total,
@@ -49,10 +52,11 @@ def receita_shopify_periodo(
                     ROUND(SUM(receita) / NULLIF(SUM(pedidos), 0), 2) AS ticket_medio,
                     SUM(novos_clientes)  AS novos_clientes,
                     SUM(recompradores)   AS recompradores
-                FROM shopify_receita_diaria
-                WHERE data_inicio >= ? AND data_fim <= ? AND cliente_key = ?
+                FROM `guara-db.ingestao.ing_shopify_resumo_diario`
+                WHERE data >= @p0 AND data <= @p1 AND cliente = @p2
                 """,
-                (data_inicio, data_fim, _cliente),
+                [data_inicio, data_fim, _cliente],
+                raise_on_error=True,
             )
             row = rows[0] if rows else {}
             if not row or not row.get("receita_total"):
@@ -89,7 +93,8 @@ def receita_shopify_periodo(
     # Busca investimento Meta no mesmo período
     inv_row = query_one(
         "SELECT ROUND(SUM(investimento), 2) AS investimento "
-        "FROM campanhas_unificada WHERE data_inicio >= ? AND data_fim <= ?",
+        "FROM campanhas_unificada WHERE data_inicio >= ? AND data_fim <= ? "
+        "AND cliente_key = 'source_of' AND plataforma = 'meta_ads'",
         (data_inicio, data_fim),
     )
     invest_meta = (inv_row or {}).get("investimento") or 0.0

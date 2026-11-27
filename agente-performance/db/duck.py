@@ -177,6 +177,23 @@ SELECT
 FROM v_performance
 """
 
+# Meta por anúncio (criativos). campanhas_unificada é por campanha e não tem ad_name/ad_id.
+_META_ANUNCIOS_COLS = """
+    data, campanha, campaign_id, adset_name, adset_id, ad_name, ad_id, objetivo,
+    impressoes, alcance, cliques_link, investimento, compras, valor_compras, frequencia
+"""
+_META_ANUNCIOS_DDL = f"""
+CREATE OR REPLACE VIEW meta_anuncios AS
+SELECT 'source_of' AS cliente_key, 'meta_ads' AS plataforma, {_META_ANUNCIOS_COLS}
+FROM sof_meta.source_of_meta_ads_diario
+UNION ALL
+SELECT 'pod_kombucha', 'meta_ads', {_META_ANUNCIOS_COLS}
+FROM pod_meta.pod_kombucha_meta_ads_diario
+UNION ALL
+SELECT 'botica', 'meta_ads', {_META_ANUNCIOS_COLS}
+FROM botica_meta.botica_meta_ads_diario
+"""
+
 # ── Paths do Data Warehouse (Parquet) ───────────────────────────────────────
 
 WH_DIR = BASE_DIR / "data" / "warehouse"
@@ -254,6 +271,11 @@ def _build_duck_conn() -> duckdb.DuckDBPyConnection:
         logger.debug("[duck] Views v_performance e campanhas_unificada criadas")
     except Exception as e:
         logger.warning("[duck] Erro ao criar views de performance: %s", e)
+
+    try:
+        conn.execute(_META_ANUNCIOS_DDL)
+    except Exception as e:
+        logger.warning("[duck] Erro ao criar view meta_anuncios: %s", e)
 
     try:
         conn.execute(_SHOPIFY_DDL)
