@@ -346,8 +346,9 @@ def main():
     parser.add_argument("--data-fim",    type=str, default=None)
     args = parser.parse_args()
 
-    ontem      = date.today() - timedelta(days=1)
-    date_end   = date.fromisoformat(args.data_fim)   if args.data_fim   else ontem
+    from agent.tz import hoje_brt
+    # Inclui o dia corrente (parcial): cada carga de 3h regrava a janela pelo order_id, como o shopify_diario.
+    date_end   = date.fromisoformat(args.data_fim)   if args.data_fim   else hoje_brt()
     date_start = date.fromisoformat(args.data_inicio) if args.data_inicio else \
                  date_end - timedelta(days=args.dias - 1)
 
